@@ -24,8 +24,8 @@ jobs:
       - name: Install
         run: pip install -e ".[dev]"
 
-      - name: Run tests
+      - name: Run unit + seed tests
         run: python -m pytest tests/ -v
 
       - name: Run e2e smoke test
-        run: bash tests/e2e.sh
+        run: PEERPEDIA=peerpedia bash tests/e2e.sh

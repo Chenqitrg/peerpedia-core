@@ -49,6 +49,7 @@ from peerpedia_core.storage.db.crud_user import create_user, get_user, get_user_
 from peerpedia_core.storage.db.engine import get_engine, get_session, init_db
 from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, get_commit_history, get_diff_between
 from peerpedia_core.sync import is_online, count as pending_count, push as sync_push
+from peerpedia_core.storage.compiler import MarkdownBackend, TypstBackend, detect_format
 
 # ── Rich console with theme ──────────────────────────────────────────────
 
@@ -458,6 +459,47 @@ def _cmd_sync_status(args):
     _print_panel("Sync Status", body)
 
 
+# ── Compile command ──────────────────────────────────────────────────────
+
+
+def _cmd_compile(args):
+    db = _get_db()
+    try:
+        rp = DEFAULT_ARTICLES_DIR / args.id
+        source = None
+        for ext in [".md", ".typ"]:
+            f = rp / f"article{ext}"
+            if f.exists():
+                source = f
+                break
+        if source is None:
+            _die(f"No source file found for article {args.id}")
+
+        fmt = args.format or detect_format(source)
+        out_dir = rp / "compiled"
+        out_dir.mkdir(exist_ok=True)
+
+        if fmt == "typst":
+            backend = TypstBackend()
+            result = backend.compile(source, out_dir, fmt=args.format or "pdf")
+        else:
+            backend = MarkdownBackend()
+            result = backend.compile(source, out_dir)
+
+        if result.success:
+            if result.output_path:
+                _ok(f"Compiled → {result.output_path}")
+                console.print(f"[muted]Format: {result.format}[/]")
+            if result.html_content:
+                console.print(result.html_content[:500])
+        else:
+            _die(result.error or "Compilation failed")
+    except Exception as e:
+        _die(str(e))
+    finally:
+        db.close()
+
+
 def _cmd_sync_push(args):
     server = args.server or os.environ.get("PEERPEDIA_SERVER", "http://localhost:8080")
     if not is_online(server):
@@ -579,6 +621,11 @@ def build_parser() -> argparse.ArgumentParser:
     p = bm_subs.add_parser("add"); p.add_argument("article_id")
     _add_common_args(p); p.set_defaults(func=_cmd_bookmark_add)
     p = bm_subs.add_parser("list"); _add_common_args(p); p.set_defaults(func=_cmd_bookmark_list)
+
+    # compile
+    p = subs.add_parser("compile"); p.add_argument("id")
+    p.add_argument("--format", choices=["pdf", "svg", "png", "html"])
+    _add_common_args(p); p.set_defaults(func=_cmd_compile)
 
     # sync
     sync = subs.add_parser("sync")

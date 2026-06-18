@@ -55,7 +55,7 @@ COMMANDS = [
     "register", "whoami",
     "create", "show", "list", "edit", "publish", "delete",
     "review", "fork", "merge", "bookmark",
-    "search", "sync",
+    "search", "compile", "sync",
     ":help", ":user", ":quit",
 ]
 FLAGS = ["--title", "--format", "--content", "--user", "--json", "--force",
@@ -181,6 +181,7 @@ def _dispatch(cmd_str: str) -> bool:
         "merge": ["merge"],
         "bookmark": ["bookmark"],
         "search": ["search"],
+        "compile": ["compile"],
         "sync": ["sync"],
     }
 

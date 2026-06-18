@@ -53,6 +53,12 @@ def test_fork_article_creates_record(db):
     )
     db.flush()
 
+    from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, init_article_repo, commit_article
+    rp = DEFAULT_ARTICLES_DIR / "art-1"
+    init_article_repo("art-1")
+    (rp / "article.md").write_text("# Test Article\n\nContent.")
+    commit_article(rp, "Initial commit", "Alice", "alice@peerpedia")
+
     result = fork_article(db, "art-1", "bob")
 
     assert result["forked_from"] == "art-1"
@@ -107,6 +113,12 @@ def test_fork_fails_for_duplicate(db):
         scores={"originality": 3, "rigor": 3, "completeness": 3, "pedagogy": 3, "impact": 3},
     )
     db.flush()
+
+    from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, init_article_repo, commit_article
+    rp = DEFAULT_ARTICLES_DIR / "art-1"
+    init_article_repo("art-1")
+    (rp / "article.md").write_text("# Test\n\nContent.")
+    commit_article(rp, "Initial commit", "Alice", "alice@peerpedia")
 
     fork_article(db, "art-1", "bob")
     db.flush()

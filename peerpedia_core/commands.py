@@ -84,10 +84,7 @@ def fork_article(db: Session, article_id: str, user_id: str) -> dict:
     src = DEFAULT_ARTICLES_DIR / article_id
     dst = DEFAULT_ARTICLES_DIR / fork_id
 
-    if (src / ".git").is_dir():
-        shutil.copytree(src, dst, symlinks=True)
-    else:
-        init_article_repo(fork_id)
+    shutil.copytree(src, dst, symlinks=True)
 
     fork = create_article(
         db,

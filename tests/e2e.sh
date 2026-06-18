@@ -27,7 +27,7 @@ _assert() {
     if echo "$1" | grep -q "$2"; then _pass "$3"
     else _fail "$3" "contains '$2'"; fi
 }
-_id() { echo "$1" | grep -o '"id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*: *"//;s/"$//' || true; }
+_id() { echo "$1" | grep -o '"id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*: *"//;s/"$//'; }
 
 # ═════════════════════════════════════════════════════════════════════════
 # Flow 1: Registration & Identity
@@ -147,9 +147,6 @@ _assert "$OUT" "Registered" "F5.0 register Charlie"
 
 OUT=$(_run fork "$FORK_SRC" --user Bob)
 _assert "$OUT" "Forked" "F5.1 fork article"
-FORK_ID=$(_id "$(_run_j fork "$FORK_SRC" --user Bob)")
-
-[ -z "$FORK_ID" ] && FORK_ID="unknown"
 
 # ═════════════════════════════════════════════════════════════════════════
 # Flow 6: Bookmarks
@@ -176,7 +173,7 @@ OUT=$(_run article create --title "X" --format markdown --content "x" --user Nob
 _assert "$OUT" "not found" "E8.2 nonexistent user rejected"
 
 OUT=$(_run article edit "$POOL_ID" --content "# Hacked" --user Bob)
-_assert "$OUT" "Only authors can edit\|not authorized\|NotAuthorized" "E8.3 non-author edit rejected"
+_assert "$OUT" "Only authors can edit" "E8.3 non-author edit rejected"
 
 OUT=$(_run fork "$FORK_SRC" --user Bob 2>&1 || true)
 # Second fork of same article should fail

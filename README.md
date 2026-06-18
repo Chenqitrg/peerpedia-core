@@ -12,6 +12,19 @@ pip install peerpedia-core
 
 依赖：Python 3.11+，Git。不需要数据库服务——SQLite 文件自动创建在 `~/.peerpedia/`。
 
+### 启用 Tab 补全
+
+```bash
+# bash（加到 ~/.bashrc）
+eval "$(register-python-argcomplete peerpedia)"
+
+# zsh（加到 ~/.zshrc）
+autoload -U bashcompinit && bashcompinit
+eval "$(register-python-argcomplete peerpedia)"
+```
+
+然后就可以 `peerpedia <TAB>` 看到所有子命令，`peerpedia article <TAB>` 看到 create/edit/show 等。
+
 ## 5 分钟上手
 
 ### 1. 注册账号

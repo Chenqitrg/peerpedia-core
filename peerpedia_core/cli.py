@@ -593,6 +593,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main():
     parser = build_parser()
+    try:
+        import argcomplete
+        argcomplete.autocomplete(parser)
+    except ImportError:
+        pass
     args = parser.parse_args()
     if hasattr(args, "func"):
         args.func(args)

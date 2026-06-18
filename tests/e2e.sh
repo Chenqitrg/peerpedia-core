@@ -117,22 +117,23 @@ _assert "$OUT" "5" "F4.2 review scores visible"
 echo "=== Flow 5: Fork & Merge ==="
 
 # Need published article for fork. Create+publish via Python to get published status.
-FORK_SRC=$(HOME="$PEERPEDIA_HOME" python -c "
+FORK_SRC=$(.venv/bin/python -c "
+from pathlib import Path
 import os
 from peerpedia_core.storage.db.engine import get_engine, get_session, init_db
 from peerpedia_core.storage.db.crud_article import create_article
 from peerpedia_core.storage.db.crud_user import create_user as cu
 from peerpedia_core.storage.git_backend import init_article_repo, commit_article
 import bcrypt, uuid
-os.environ['HOME'] = os.environ['PEERPEDIA_HOME']
-db_url = f'sqlite:///{os.environ["HOME"]}/.peerpedia/peerpedia.db'
+home = os.environ['PEERPEDIA_HOME']
+db_url = f'sqlite:///{home}/peerpedia.db'
 e = get_engine(db_url); init_db(e); s = get_session(e)
 uid = str(uuid.uuid4())
 cu(s, username='charlie', password_hash=bcrypt.hashpw(b'x', bcrypt.gensalt()).decode(), name='Charlie')
 aid = str(uuid.uuid4())
 a = create_article(s, id=aid, title='Forkable', authors=[uid], status='published')
 rp = init_article_repo(aid)
-(rp / 'article.md').write_text('# Forkable\n\nTest content.')
+(rp / 'article.md').write_text('# Forkable\\n\\nTest content.')
 commit_article(rp, 'Initial commit', 'Charlie', 'charlie@peerpedia')
 s.commit()
 print(a.id)

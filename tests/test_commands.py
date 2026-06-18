@@ -7,7 +7,12 @@ from __future__ import annotations
 
 import pytest
 from peerpedia_core.exceptions import ConflictError, NotAuthorizedError, NotFoundError
-from peerpedia_core.storage.commands import fork_article, rollback_article
+from peerpedia_core.storage.commands import (
+    create_article_with_content,
+    fork_article,
+    rollback_article,
+    update_article_content,
+)
 from peerpedia_core.storage.db.crud_article import get_article
 from peerpedia_core.storage.db.engine import get_session
 from peerpedia_core.storage.db.models import User
@@ -146,3 +151,85 @@ def test_rollback_fails_for_nonexistent_user(db):
 
     with pytest.raises(NotFoundError):
         rollback_article(db, "art-1", "HEAD", "nonexistent")
+
+
+# ── Create tests ─────────────────────────────────────────────────────────
+
+
+def test_create_article_writes_file_and_commits(db):
+    """Create article with content writes file to git and returns metadata."""
+    _create_user(db, "alice", "Alice")
+
+    result = create_article_with_content(
+        db, title="Hello", content="# Test", format="markdown", user_id="alice",
+    )
+
+    assert result["title"] == "Hello"
+    assert result["status"] == "draft"
+    assert "commit_hash" in result
+
+    from peerpedia_core.storage.db.crud_article import get_article
+    article = get_article(db, result["id"])
+    assert article is not None
+    assert article.title == "Hello"
+
+
+def test_create_article_with_publish(db):
+    """Create + publish sets sink_start."""
+    _create_user(db, "alice", "Alice")
+
+    result = create_article_with_content(
+        db, title="Pub", content="# Publish test", user_id="alice",
+        publish=True,
+        self_review={"originality": 3, "rigor": 3, "completeness": 3, "pedagogy": 3, "impact": 3},
+    )
+
+    assert result["status"] == "sedimentation"  # publish sets sink_start -> sedimentation
+    from peerpedia_core.storage.db.crud_article import get_article
+    article = get_article(db, result["id"])
+    assert article.sink_start is not None  # sink timer started
+
+
+def test_create_fails_publish_without_self_review(db):
+    """Publish without self_review raises BadRequestError."""
+    _create_user(db, "alice", "Alice")
+
+    from peerpedia_core.exceptions import BadRequestError
+    with pytest.raises(BadRequestError, match="self_review"):
+        create_article_with_content(
+            db, title="Bad", content="x", user_id="alice", publish=True,
+        )
+
+
+# ── Update tests ─────────────────────────────────────────────────────────
+
+
+def test_update_article_changes_content(db):
+    """Update content creates a new commit."""
+    _create_user(db, "alice", "Alice")
+
+    result = create_article_with_content(
+        db, title="Original", content="# Original", user_id="alice",
+    )
+    aid = result["id"]
+
+    updated = update_article_content(
+        db, aid, content="# Updated", user_id="alice",
+    )
+
+    assert updated["id"] == aid
+    assert updated["commit_hash"] != result["commit_hash"]
+
+
+def test_update_fails_for_non_author(db):
+    """Non-author cannot edit."""
+    _create_user(db, "alice", "Alice")
+    _create_user(db, "bob", "Bob")
+
+    result = create_article_with_content(
+        db, title="Mine", content="# Mine", user_id="alice",
+    )
+
+    from peerpedia_core.exceptions import NotAuthorizedError
+    with pytest.raises(NotAuthorizedError):
+        update_article_content(db, result["id"], content="# Hacked", user_id="bob")

@@ -187,6 +187,9 @@ def create_article_with_content(
         NotFoundError: author not found in DB
         BadRequestError: publish requested without self_review
     """
+    if not title.strip():
+        raise BadRequestError("Title is required")
+
     authors = author_ids or [user_id]
     for aid in authors:
         if get_user(db, aid) is None:

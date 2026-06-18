@@ -64,11 +64,12 @@ def get_articles_by_author(session: Session, author_id: str) -> list[Article]:
 def create_article(
     session: Session,
     authors: list[str],
+    title: str,
     status: str = "draft",
     **kwargs,
 ) -> Article:
     """Create a new article record with author rows in the join table."""
-    a = Article(status=status, **kwargs)
+    a = Article(title=title, status=status, **kwargs)
     session.add(a)
     session.flush()  # ensure a.id is available
     add_article_authors(session, a.id, authors)

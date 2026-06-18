@@ -3,6 +3,8 @@
 
 """Tests for article listing and counting."""
 
+import uuid
+
 from peerpedia_core.storage.db.crud_article import (
     count_articles,
     list_articles,
@@ -14,9 +16,10 @@ from peerpedia_core.storage.db.models import Article, ArticleAuthor, User
 def _user(**kwargs):
     """Create a User with required fields filled in."""
     defaults = {
+        "id": str(uuid.uuid4()),
+        "username": "test_user",
         "password_hash": "",
         "name": "Test User",
-        "anonymous_name": "anon",
         "affiliation": "Test",
     }
     defaults.update(kwargs)
@@ -26,8 +29,8 @@ def _user(**kwargs):
 class TestListArticles:
     def test_empty_status_set_returns_all(self, db_engine):
         s = get_session(db_engine)
-        s.add(Article(id="a-lm1", status="draft", fork_count=0))
-        s.add(Article(id="a-lm2", status="published", fork_count=0))
+        s.add(Article(title="", id="a-lm1", status="draft", fork_count=0))
+        s.add(Article(title="", id="a-lm2", status="published", fork_count=0))
         s.commit()
 
         result = list_articles(s, status=set())
@@ -35,8 +38,8 @@ class TestListArticles:
 
     def test_filters_by_single_status_string(self, db_engine):
         s = get_session(db_engine)
-        s.add(Article(id="a-lm3", status="draft", fork_count=0))
-        s.add(Article(id="a-lm4", status="published", fork_count=0))
+        s.add(Article(title="", id="a-lm3", status="draft", fork_count=0))
+        s.add(Article(title="", id="a-lm4", status="published", fork_count=0))
         s.commit()
 
         result = list_articles(s, status="published")
@@ -44,9 +47,9 @@ class TestListArticles:
 
     def test_filters_by_multiple_statuses(self, db_engine):
         s = get_session(db_engine)
-        s.add(Article(id="a-lm5", status="draft", fork_count=0))
-        s.add(Article(id="a-lm6", status="sedimentation", fork_count=0))
-        s.add(Article(id="a-lm7", status="published", fork_count=0))
+        s.add(Article(title="", id="a-lm5", status="draft", fork_count=0))
+        s.add(Article(title="", id="a-lm6", status="sedimentation", fork_count=0))
+        s.add(Article(title="", id="a-lm7", status="published", fork_count=0))
         s.commit()
 
         result = list_articles(s, status={"draft", "sedimentation"})
@@ -57,8 +60,8 @@ class TestListArticles:
         s = get_session(db_engine)
         u = _user(id="u-lm-auth", username="lm_author")
         s.add(u)
-        s.add(Article(id="a-lm8", status="published", fork_count=0))
-        a2 = Article(id="a-lm9", status="published", fork_count=0)
+        s.add(Article(title="", id="a-lm8", status="published", fork_count=0))
+        a2 = Article(title="", id="a-lm9", status="published", fork_count=0)
         s.add(a2)
         s.flush()
         s.add(ArticleAuthor(article_id="a-lm9", author_id="u-lm-auth", position=0))
@@ -70,7 +73,7 @@ class TestListArticles:
     def test_respects_limit_and_offset(self, db_engine):
         s = get_session(db_engine)
         for i in range(5):
-            s.add(Article(id=f"a-lmo{i}", status="published", fork_count=0))
+            s.add(Article(title="", id=f"a-lmo{i}", status="published", fork_count=0))
         s.commit()
 
         result = list_articles(s, status={"published"}, limit=2, offset=1)
@@ -78,7 +81,7 @@ class TestListArticles:
 
     def test_returns_empty_when_no_match(self, db_engine):
         s = get_session(db_engine)
-        s.add(Article(id="a-lm-empty", status="draft", fork_count=0))
+        s.add(Article(title="", id="a-lm-empty", status="draft", fork_count=0))
         s.commit()
 
         result = list_articles(s, status={"published"})
@@ -88,8 +91,8 @@ class TestListArticles:
 class TestCountArticles:
     def test_counts_matching_statuses(self, db_engine):
         s = get_session(db_engine)
-        s.add(Article(id="a-cm1", status="draft", fork_count=0))
-        s.add(Article(id="a-cm2", status="published", fork_count=0))
+        s.add(Article(title="", id="a-cm1", status="draft", fork_count=0))
+        s.add(Article(title="", id="a-cm2", status="published", fork_count=0))
         s.commit()
 
         assert count_articles(s, status={"published"}) == 1
@@ -98,7 +101,7 @@ class TestCountArticles:
         s = get_session(db_engine)
         u = _user(id="u-cm-auth", username="cm_author")
         s.add(u)
-        s.add(Article(id="a-cm3", status="published", fork_count=0))
+        s.add(Article(title="", id="a-cm3", status="published", fork_count=0))
         s.flush()
         s.add(ArticleAuthor(article_id="a-cm3", author_id="u-cm-auth", position=0))
         s.commit()
@@ -107,15 +110,15 @@ class TestCountArticles:
 
     def test_empty_status_set_counts_all(self, db_engine):
         s = get_session(db_engine)
-        s.add(Article(id="a-cm4", status="draft", fork_count=0))
-        s.add(Article(id="a-cm5", status="published", fork_count=0))
+        s.add(Article(title="", id="a-cm4", status="draft", fork_count=0))
+        s.add(Article(title="", id="a-cm5", status="published", fork_count=0))
         s.commit()
 
         assert count_articles(s, status=set()) == 2
 
     def test_returns_zero_when_no_match(self, db_engine):
         s = get_session(db_engine)
-        s.add(Article(id="a-cm6", status="draft", fork_count=0))
+        s.add(Article(title="", id="a-cm6", status="draft", fork_count=0))
         s.commit()
 
         assert count_articles(s, status={"published"}) == 0

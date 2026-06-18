@@ -43,7 +43,7 @@ class TestComputeAuthorReputation:
 
     def test_no_articles_returns_defaults(self, session):
         """A user with no articles gets all-zero reputation."""
-        user = create_user(session, "alice")
+        user = create_user(session, name="alice", username="alice")
         rep = compute_author_reputation(session, user.id)
 
         assert isinstance(rep, ReputationScores)
@@ -64,9 +64,10 @@ class TestComputeAuthorReputation:
         Blending weight = article_to_author_weight = 0.3.
         Old rep is all zeros, so blended = 0.3 * article_avg.
         """
-        user = create_user(session, "bob")
+        user = create_user(session, name="bob", username="bob")
         create_article(
             session,
+            title="On the Nature of Scientific Inquiry",
             authors=[user.id],
             status="published",
             score=_build_score(originality=4, rigor=3, completeness=5, pedagogy=4, impact=4),
@@ -81,11 +82,12 @@ class TestComputeAuthorReputation:
 
     def test_multiple_articles_averaged_and_blended(self, session):
         """Multiple articles are averaged (weighted by status) then blended."""
-        user = create_user(session, "carol")
+        user = create_user(session, name="carol", username="carol")
 
         # published article with perfect scores
         create_article(
             session,
+            title="On the Nature of Scientific Inquiry",
             authors=[user.id],
             status="published",
             score=_build_score(originality=5, rigor=5, completeness=5, pedagogy=5, impact=5),
@@ -93,6 +95,7 @@ class TestComputeAuthorReputation:
         # sedimentation article with moderate scores
         create_article(
             session,
+            title="On the Nature of Scientific Inquiry",
             authors=[user.id],
             status="sedimentation",
             score=_build_score(originality=1, rigor=1, completeness=1, pedagogy=1, impact=1),
@@ -114,11 +117,12 @@ class TestComputeAuthorReputation:
 
     def test_blends_with_existing_reputation(self, session):
         """Existing reputation is blended with the new article-derived value."""
-        user = create_user(session, "dave")
+        user = create_user(session, name="dave", username="dave")
 
         # First computation (no existing rep) -- sets reputation to blended value
         create_article(
             session,
+            title="On the Nature of Scientific Inquiry",
             authors=[user.id],
             status="published",
             score=_build_score(originality=4, rigor=4, completeness=4, pedagogy=4, impact=4),
@@ -132,6 +136,7 @@ class TestComputeAuthorReputation:
         # Add a second article. Now blending uses the existing reputation (1.2).
         create_article(
             session,
+            title="On the Nature of Scientific Inquiry",
             authors=[user.id],
             status="published",
             score=_build_score(originality=5, rigor=5, completeness=5, pedagogy=5, impact=5),
@@ -147,9 +152,10 @@ class TestComputeAuthorReputation:
 
     def test_article_without_score_skipped(self, session):
         """Articles missing a score dict are skipped in the calculation."""
-        user = create_user(session, "eve")
+        user = create_user(session, name="eve", username="eve")
         create_article(
             session,
+            title="On the Nature of Scientific Inquiry",
             authors=[user.id],
             status="published",
             score=None,  # no score set yet
@@ -162,9 +168,10 @@ class TestComputeAuthorReputation:
 
     def test_persisted_in_db(self, session):
         """After compute_author_reputation, the DB record is updated."""
-        user = create_user(session, "frank")
+        user = create_user(session, name="frank", username="frank")
         create_article(
             session,
+            title="On the Nature of Scientific Inquiry",
             authors=[user.id],
             status="published",
             score=_build_score(originality=5, rigor=5, completeness=5, pedagogy=5, impact=5),
@@ -197,13 +204,13 @@ class TestGetReviewerWeight:
 
     def test_user_without_reputation_returns_default(self, session):
         """A user who has no reputation data gets weight 1.0."""
-        user = create_user(session, "grace")
+        user = create_user(session, name="grace", username="grace")
         rep = get_reviewer_weight(session, user.id)
         assert rep == 1.0
 
     def test_user_with_high_rep_gets_weight_above_one(self, session):
         """Avg reputation > 3.0 gives weight > 1.0."""
-        user = create_user(session, "heidi")
+        user = create_user(session, name="heidi", username="heidi")
         update_user_reputation(
             session,
             user.id,
@@ -215,7 +222,7 @@ class TestGetReviewerWeight:
 
     def test_user_with_low_rep_gets_weight_below_one(self, session):
         """Avg reputation < 3.0 gives weight < 1.0."""
-        user = create_user(session, "ivan")
+        user = create_user(session, name="ivan", username="ivan")
         update_user_reputation(
             session,
             user.id,
@@ -240,10 +247,11 @@ class TestRecalculateAllReputations:
 
     def test_recalculates_all_users(self, session):
         """Every user in the system gets their reputation updated."""
-        u1 = create_user(session, "jill")
-        u2 = create_user(session, "jack")
+        u1 = create_user(session, name="jill", username="jill")
+        u2 = create_user(session, name="jack", username="jack")
         create_article(
             session,
+            title="On the Nature of Scientific Inquiry",
             authors=[u1.id, u2.id],
             status="published",
             score=_build_score(originality=5, rigor=5, completeness=5, pedagogy=5, impact=5),
@@ -261,8 +269,8 @@ class TestRecalculateAllReputations:
 
     def test_returns_count_of_updated_users(self, session):
         """The function returns the number of users processed."""
-        create_user(session, "ken")
-        create_user(session, "laura")
+        create_user(session, name="ken", username="ken")
+        create_user(session, name="laura", username="laura")
         count = recalculate_all_reputations(session)
         assert count == 2
 

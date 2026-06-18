@@ -9,6 +9,8 @@ scores and contributions — synced after git writes — so scoring
 and reputation workflows can query without reading git.
 """
 
+import warnings
+
 from sqlalchemy.orm import Session
 
 from peerpedia_core.storage.db.models import Review
@@ -54,6 +56,16 @@ def upsert_review(
         contributions=contributions,
     )
     session.add(r)
+    session.commit()
+    return r
+
+
+def update_review_scores(session: Session, review_id: str, scores: dict) -> Review:
+    """Update scores on an existing review by primary key."""
+    r = session.get(Review, review_id)
+    if r is None:
+        raise ValueError(f"Review {review_id} not found")
+    r.scores = scores
     session.commit()
     return r
 

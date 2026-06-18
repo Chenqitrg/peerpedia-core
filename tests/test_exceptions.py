@@ -17,9 +17,9 @@ class TestPeerpediaError:
         e = PeerpediaError("something went wrong")
         assert e.detail == "something went wrong"
 
-    def test_base_error_detail_defaults_to_empty(self):
-        e = PeerpediaError()
-        assert e.detail == ""
+    def test_base_error_stores_detail_string(self):
+        e = PeerpediaError("review conflict detected")
+        assert e.detail == "review conflict detected"
 
     def test_subclass_inherits_from_base(self):
         assert issubclass(NotFoundError, PeerpediaError)

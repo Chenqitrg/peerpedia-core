@@ -15,6 +15,8 @@ Contract:
   S5 — Nested begin/commit within the context work as expected (sub-transactions).
 """
 
+import uuid
+
 import pytest
 
 from peerpedia_core.storage.db.models import User
@@ -23,7 +25,7 @@ from peerpedia_core.storage.db.session_utils import db_session_scope
 
 def _make_user(**kwargs):
     """Create a User with required defaults filled in."""
-    defaults = dict(username="u", name="U", anonymous_name="anon", password_hash="")
+    defaults = dict(id=str(uuid.uuid4()), username="u", name="U", password_hash="")
     defaults.update(kwargs)
     return User(**defaults)
 
@@ -38,7 +40,7 @@ class TestSuccessfulCommit:
             u = _make_user(
                 username="commit_test",
                 name="Commit Test",
-                anonymous_name="anon_commit",
+                
             )
             session.add(u)
 
@@ -52,10 +54,10 @@ class TestSuccessfulCommit:
         """Multiple adds/updates within one context are atomic — all or
         nothing (on success)."""
         with db_session_scope(db_url) as session:
-            session.add(_make_user(username="batch_a", name="A", anonymous_name="a"))
-            session.add(_make_user(username="batch_b", name="B", anonymous_name="b"))
+            session.add(_make_user(username="batch_a", name="A"))
+            session.add(_make_user(username="batch_b", name="B"))
             session.flush()
-            session.add(_make_user(username="batch_c", name="C", anonymous_name="c"))
+            session.add(_make_user(username="batch_c", name="C"))
 
         with db_session_scope(db_url) as session:
             count = session.query(User).filter(User.username.in_(["batch_a", "batch_b", "batch_c"])).count()
@@ -68,14 +70,14 @@ class TestRollbackOnException:
     def test_rollback_on_application_error(self, db_url):
         """If application code raises after adding data, nothing is persisted."""
         with db_session_scope(db_url) as session:
-            session.add(_make_user(username="will_rollback", name="RB", anonymous_name="rb"))
+            session.add(_make_user(username="will_rollback", name="RB"))
 
         class AppError(Exception):
             pass
 
         with pytest.raises(AppError):
             with db_session_scope(db_url) as session:
-                session.add(_make_user(username="should_disappear", name="Gone", anonymous_name="gone"))
+                session.add(_make_user(username="should_disappear", name="Gone"))
                 raise AppError("simulated failure")
 
         with db_session_scope(db_url) as session:
@@ -90,11 +92,11 @@ class TestRollbackOnException:
         """An integrity error (e.g., duplicate primary key) triggers rollback
         and does not affect subsequent sessions."""
         with db_session_scope(db_url) as session:
-            session.add(_make_user(id="fixed-id-1", username="u1", name="U1", anonymous_name="a1"))
+            session.add(_make_user(id="fixed-id-1", username="u1", name="U1"))
 
         with pytest.raises(Exception):  # IntegrityError from duplicate PK
             with db_session_scope(db_url) as session:
-                session.add(_make_user(id="fixed-id-1", username="u2", name="U2", anonymous_name="a2"))
+                session.add(_make_user(id="fixed-id-1", username="u2", name="U2"))
 
         # Session should be usable after the error
         with db_session_scope(db_url) as session:
@@ -112,7 +114,7 @@ class TestSessionClosed:
         are detached. Data is still committed."""
         user_id = None
         with db_session_scope(db_url) as session:
-            u = _make_user(username="detach_test", name="DT", anonymous_name="dt")
+            u = _make_user(username="detach_test", name="DT")
             session.add(u)
             session.flush()  # populate u.id before commit expires it
             user_id = u.id
@@ -145,7 +147,7 @@ class TestSessionUsability:
     def test_crud_read_write(self, db_url):
         """Standard CRUD operations work inside the context."""
         with db_session_scope(db_url) as session:
-            u = _make_user(username="crud_user", name="CRUD", anonymous_name="c")
+            u = _make_user(username="crud_user", name="CRUD")
             session.add(u)
             session.flush()
 
@@ -164,8 +166,8 @@ class TestSessionUsability:
     def test_query_filter_works(self, db_url):
         """Query filtering works as expected inside the context."""
         with db_session_scope(db_url) as session:
-            session.add(_make_user(username="q1", name="Q1", anonymous_name="a1"))
-            session.add(_make_user(username="q2", name="Q2", anonymous_name="a2"))
+            session.add(_make_user(username="q1", name="Q1"))
+            session.add(_make_user(username="q2", name="Q2"))
 
             results = session.query(User).filter(User.username.like("q%")).all()
             assert len(results) == 2
@@ -178,12 +180,12 @@ class TestSubTransactions:
         """A savepoint rollback inside the context should not affect the outer
         transaction."""
         with db_session_scope(db_url) as session:
-            session.add(_make_user(username="outer_keep", name="OK", anonymous_name="ok"))
+            session.add(_make_user(username="outer_keep", name="OK"))
 
             # Try a savepoint that rolls back
             try:
                 with session.begin_nested():
-                    session.add(_make_user(username="inner_lose", name="IL", anonymous_name="il"))
+                    session.add(_make_user(username="inner_lose", name="IL"))
                     raise ValueError("rollback savepoint")
             except ValueError:
                 pass  # savepoint rolled back, outer still valid

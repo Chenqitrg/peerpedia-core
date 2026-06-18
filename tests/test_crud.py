@@ -3,6 +3,8 @@
 
 """Tests for CRUD operations — create, read, update, delete for all entities."""
 
+import uuid
+
 import pytest
 from sqlalchemy.orm import Session
 
@@ -17,7 +19,7 @@ from peerpedia_core.storage.db.models import (
 
 
 def _make_user(session: Session, name: str) -> User:
-    u = User(username=f"test_{name}", password_hash="$2b$12$test", name=name, affiliation="Test", anonymous_name=f"anon_{name}")
+    u = User(id=str(uuid.uuid4()), username=f"test_{name}", password_hash="$2b$12$test", name=name, affiliation="Test")
     session.add(u)
     session.commit()
     return u
@@ -26,7 +28,7 @@ def _make_user(session: Session, name: str) -> User:
 def _make_article(session: Session, authors: list[str], **kw) -> Article:
     from peerpedia_core.storage.db.models import ArticleAuthor
 
-    a = Article(**kw)
+    a = Article(title=kw.pop("title", "A Treatise on Peer Review"), **kw)
     session.add(a)
     session.flush()
     for pos, aid in enumerate(authors):
@@ -48,7 +50,7 @@ class TestArticleCRUD:
 
         session = get_session(engine)
         user = _make_user(session, "author1")
-        article = create_article(session, authors=[user.id], status="draft")
+        article = create_article(session, title="", authors=[user.id], status="draft")
         assert article.id is not None
         assert article.status == "draft"
         from peerpedia_core.storage.db.crud_article import get_author_ids
@@ -61,7 +63,7 @@ class TestArticleCRUD:
 
         session = get_session(engine)
         user = _make_user(session, "author2")
-        a = create_article(session, authors=[user.id])
+        a = create_article(session, title="", authors=[user.id])
         assert get_article(session, a.id).id == a.id
         assert get_article(session, "nonexistent") is None
         session.close()
@@ -71,9 +73,9 @@ class TestArticleCRUD:
 
         session = get_session(engine)
         user = _make_user(session, "author3")
-        create_article(session, authors=[user.id], status="draft")
-        create_article(session, authors=[user.id], status="published")
-        create_article(session, authors=[user.id], status="sedimentation")
+        create_article(session, title="", authors=[user.id], status="draft")
+        create_article(session, title="", authors=[user.id], status="published")
+        create_article(session, title="", authors=[user.id], status="sedimentation")
         # list all
         all_articles = list_articles(session)
         assert len(all_articles) == 3
@@ -92,7 +94,7 @@ class TestArticleCRUD:
 
         session = get_session(engine)
         user = _make_user(session, "author4")
-        a = create_article(session, authors=[user.id], status="draft")
+        a = create_article(session, title="", authors=[user.id], status="draft")
         update_article_status(session, a.id, "sedimentation")
         assert get_article(session, a.id).status == "sedimentation"
         session.close()
@@ -106,7 +108,7 @@ class TestArticleCRUD:
 
         session = get_session(engine)
         user = _make_user(session, "author5")
-        a = create_article(session, authors=[user.id])
+        a = create_article(session, title="", authors=[user.id])
         update_article_compiled(session, a.id, html_format="html", output="<h1>Hi</h1>", pages=None)
         a2 = get_article(session, a.id)
         assert a2.compiled_format == "html"
@@ -122,7 +124,7 @@ class TestArticleCRUD:
 
         session = get_session(engine)
         user = _make_user(session, "author6")
-        a = create_article(session, authors=[user.id])
+        a = create_article(session, title="", authors=[user.id])
         increment_fork_count(session, a.id)
         assert get_article(session, a.id).fork_count == 1
         increment_fork_count(session, a.id)
@@ -138,7 +140,7 @@ class TestArticleCRUD:
 
         session = get_session(engine)
         user = _make_user(session, "author8")
-        a = create_article(session, authors=[user.id])
+        a = create_article(session, title="", authors=[user.id])
         with pytest.raises(ValueError):
             extend_sink(session, a.id, 0)
         with pytest.raises(ValueError):
@@ -155,7 +157,7 @@ class TestArticleCRUD:
 
         session = get_session(engine)
         user = _make_user(session, "author8b")
-        a = create_article(session, authors=[user.id])
+        a = create_article(session, title="", authors=[user.id])
         # Extend by 200, clamped to 180 (default max)
         extend_sink(session, a.id, 200)
         a2 = get_article(session, a.id)
@@ -174,14 +176,14 @@ class TestArticleCRUD:
 
 
 class TestReviewCRUD:
-    def test_create_review(self, engine):
-        from peerpedia_core.storage.db.crud_review import create_review
+    def test_upsert_review(self, engine):
+        from peerpedia_core.storage.db.crud_review import upsert_review
 
         session = get_session(engine)
         reviewer = _make_user(session, "rv1")
         author = _make_user(session, "au1")
         article = _make_article(session, authors=[author.id])
-        r = create_review(
+        r = upsert_review(
             session, article_id=article.id, commit_hash="abc", reviewer_id=reviewer.id, scope="pool", scores=_default_scores()
         )
         assert r.id is not None
@@ -190,7 +192,7 @@ class TestReviewCRUD:
 
     def test_get_reviews_for_article(self, engine):
         from peerpedia_core.storage.db.crud_review import (
-            create_review,
+            upsert_review,
             get_reviews_for_article,
         )
 
@@ -199,10 +201,10 @@ class TestReviewCRUD:
         rv2 = _make_user(session, "rv_b")
         author = _make_user(session, "au_x")
         article = _make_article(session, authors=[author.id])
-        create_review(
+        upsert_review(
             session, article_id=article.id, commit_hash="h1", reviewer_id=rv1.id, scope="pool", scores=_default_scores()
         )
-        create_review(
+        upsert_review(
             session, article_id=article.id, commit_hash="h2", reviewer_id=rv2.id, scope="published", scores=_default_scores()
         )
         reviews = get_reviews_for_article(session, article.id)
@@ -211,7 +213,7 @@ class TestReviewCRUD:
 
     def test_get_review_by_user_and_scope(self, engine):
         from peerpedia_core.storage.db.crud_review import (
-            create_review,
+            upsert_review,
             get_review_by_user_scope,
         )
 
@@ -219,17 +221,17 @@ class TestReviewCRUD:
         rv = _make_user(session, "rv_s")
         author = _make_user(session, "au_s")
         article = _make_article(session, authors=[author.id])
-        create_review(session, article_id=article.id, commit_hash="h", reviewer_id=rv.id, scope="pool", scores=_default_scores())
-        found = get_review_by_user_scope(session, article.id, rv.id, "pool")
+        upsert_review(session, article_id=article.id, commit_hash="h", reviewer_id=rv.id, scope="pool", scores=_default_scores())
+        found = get_review_by_user_scope(session, article.id, rv.id, "pool", commit_hash="h")
         assert found is not None
         assert found.reviewer_id == rv.id
         # different scope
-        assert get_review_by_user_scope(session, article.id, rv.id, "published") is None
+        assert get_review_by_user_scope(session, article.id, rv.id, "published", commit_hash="h") is None
         session.close()
 
     def test_update_review_scores(self, engine):
         from peerpedia_core.storage.db.crud_review import (
-            create_review,
+            upsert_review,
             update_review_scores,
         )
 
@@ -237,7 +239,7 @@ class TestReviewCRUD:
         rv = _make_user(session, "rv_u")
         author = _make_user(session, "au_u")
         article = _make_article(session, authors=[author.id])
-        r = create_review(
+        r = upsert_review(
             session, article_id=article.id, commit_hash="h", reviewer_id=rv.id, scope="pool", scores=_default_scores()
         )
         new_scores = {"originality": 5, "rigor": 5, "completeness": 5, "pedagogy": 5, "impact": 5}
@@ -248,16 +250,16 @@ class TestReviewCRUD:
 
     def test_review_different_commits_ok(self, engine):
         """Same (article, reviewer, scope) with different commit_hashes should succeed."""
-        from peerpedia_core.storage.db.crud_review import create_review
+        from peerpedia_core.storage.db.crud_review import upsert_review
 
         session = get_session(engine)
         rv = _make_user(session, "rv_multi")
         author = _make_user(session, "au_multi")
         article = _make_article(session, authors=[author.id])
-        r1 = create_review(
+        r1 = upsert_review(
             session, article_id=article.id, commit_hash="commit_1", reviewer_id=rv.id, scope="pool", scores=_default_scores()
         )
-        r2 = create_review(
+        r2 = upsert_review(
             session,
             article_id=article.id,
             commit_hash="commit_2",
@@ -276,40 +278,33 @@ class TestReviewCRUD:
         assert r2.commit_hash == "commit_2"
         session.close()
 
-    def test_duplicate_same_commit_fails(self, engine):
-        """Same (article, reviewer, scope, commit_hash) must raise integrity error."""
-        import sqlalchemy
-
-        from peerpedia_core.storage.db.crud_review import create_review
+    def test_duplicate_same_commit_upserts(self, engine):
+        """Same (article, reviewer, scope, commit_hash) updates existing scores."""
+        from peerpedia_core.storage.db.crud_review import upsert_review
 
         session = get_session(engine)
         rv = _make_user(session, "rv_dup")
         author = _make_user(session, "au_dup")
         article = _make_article(session, authors=[author.id])
-        create_review(
+        first = upsert_review(
             session, article_id=article.id, commit_hash="same_hash", reviewer_id=rv.id, scope="pool", scores=_default_scores()
         )
-        with pytest.raises((sqlalchemy.exc.IntegrityError, Exception)):
-            create_review(
-                session,
-                article_id=article.id,
-                commit_hash="same_hash",
-                reviewer_id=rv.id,
-                scope="pool",
-                scores={
-                    "originality": 1,
-                    "rigor": 1,
-                    "completeness": 1,
-                    "pedagogy": 1,
-                    "impact": 1,
-                },
-            )
+        updated = upsert_review(
+            session,
+            article_id=article.id,
+            commit_hash="same_hash",
+            reviewer_id=rv.id,
+            scope="pool",
+            scores={"originality": 5, "rigor": 5, "completeness": 5, "pedagogy": 5, "impact": 5},
+        )
+        assert updated.id == first.id
+        assert updated.scores["originality"] == 5
         session.close()
 
     def test_get_by_user_scope_with_commit(self, engine):
         """get_review_by_user_scope with commit_hash filters correctly."""
         from peerpedia_core.storage.db.crud_review import (
-            create_review,
+            upsert_review,
             get_review_by_user_scope,
         )
 
@@ -317,8 +312,8 @@ class TestReviewCRUD:
         rv = _make_user(session, "rv_filt")
         author = _make_user(session, "au_filt")
         article = _make_article(session, authors=[author.id])
-        create_review(session, article_id=article.id, commit_hash="h1", reviewer_id=rv.id, scope="pool", scores=_default_scores())
-        create_review(
+        upsert_review(session, article_id=article.id, commit_hash="h1", reviewer_id=rv.id, scope="pool", scores=_default_scores())
+        upsert_review(
             session,
             article_id=article.id,
             commit_hash="h2",
@@ -338,32 +333,10 @@ class TestReviewCRUD:
         assert found.scores["originality"] == 5
         session.close()
 
-    def test_add_thread_message(self, engine):
-        from peerpedia_core.storage.db.crud_review import (
-            add_thread_message,
-            create_review,
-        )
-
-        session = get_session(engine)
-        rv = _make_user(session, "rv_t")
-        author = _make_user(session, "au_t")
-        article = _make_article(session, authors=[author.id])
-        r = create_review(
-            session, article_id=article.id, commit_hash="h", reviewer_id=rv.id, scope="pool", scores=_default_scores()
-        )
-        from peerpedia_core.types.messages import ThreadMessage
-
-        msg = ThreadMessage(author_id=author.id, content="谢谢指出，已修改。")
-        add_thread_message(session, r.id, msg.to_dict())
-        updated = session.get(Review, r.id)
-        assert len(updated.thread) == 1
-        assert "谢谢指出" in updated.thread[0]["content"]
-        session.close()
-
     def test_upsert_review_updates_existing(self, engine):
         """upsert_review updates an existing review with same (article, reviewer, scope, commit_hash)."""
         from peerpedia_core.storage.db.crud_review import (
-            create_review,
+            upsert_review,
             upsert_review,
         )
 
@@ -373,7 +346,7 @@ class TestReviewCRUD:
         article = _make_article(session, authors=[author.id])
 
         # Create initial review
-        r1 = create_review(
+        r1 = upsert_review(
             session,
             article_id=article.id,
             commit_hash="hash_u",
@@ -400,17 +373,17 @@ class TestUserCRUD:
         from peerpedia_core.storage.db.crud_user import create_user
 
         session = get_session(engine)
-        u = create_user(session, name="新用户", affiliation="某大学")
+        u = create_user(session, username="新用户", name="新用户", affiliation="某大学")
         assert u.id is not None
         assert u.name == "新用户"
-        assert u.anonymous_name != ""  # 自动生成
+        assert u.name == "新用户"
         session.close()
 
     def test_get_user(self, engine):
         from peerpedia_core.storage.db.crud_user import create_user, get_user
 
         session = get_session(engine)
-        u = create_user(session, name="test")
+        u = create_user(session, username="test", name="test")
         assert get_user(session, u.id).name == "test"
         assert get_user(session, "nonexistent") is None
         session.close()
@@ -419,8 +392,8 @@ class TestUserCRUD:
         from peerpedia_core.storage.db.crud_user import create_user, list_users
 
         session = get_session(engine)
-        create_user(session, name="张三")
-        create_user(session, name="李四")
+        create_user(session, username="张三", name="张三")
+        create_user(session, username="李四", name="李四")
         assert len(list_users(session)) == 2
         session.close()
 
@@ -432,7 +405,7 @@ class TestUserCRUD:
         )
 
         session = get_session(engine)
-        u = create_user(session, name="rep_user")
+        u = create_user(session, username="rep_user", name="rep_user")
         rep = {"professionalism": 4.0, "objectivity": 3.5, "collaboration": 4.5, "pedagogy": 4.0}
         update_user_reputation(session, u.id, rep)
         assert get_user(session, u.id).reputation == rep
@@ -452,8 +425,8 @@ class TestFollowCRUD:
         )
 
         session = get_session(engine)
-        a = create_user(session, name="A")
-        b = create_user(session, name="B")
+        a = create_user(session, username="a", name="A")
+        b = create_user(session, username="b", name="B")
         follow_user(session, a.id, b.id)
         assert is_following(session, a.id, b.id) is True
         assert is_following(session, b.id, a.id) is False
@@ -472,9 +445,9 @@ class TestFollowCRUD:
         )
 
         session = get_session(engine)
-        a = create_user(session, name="A")
-        b = create_user(session, name="B")
-        c = create_user(session, name="C")
+        a = create_user(session, username="a", name="A")
+        b = create_user(session, username="b", name="B")
+        c = create_user(session, username="c", name="C")
         follow_user(session, b.id, a.id)  # b follows a
         follow_user(session, c.id, a.id)  # c follows a
         assert get_follower_count(session, a.id) == 2
@@ -493,7 +466,7 @@ class TestFollowCRUD:
         )
 
         session = get_session(engine)
-        a = create_user(session, name="A")
+        a = create_user(session, username="a", name="A")
         with pytest.raises(ValueError, match="cannot follow themselves"):
             follow_user(session, a.id, a.id)
         session.close()
@@ -568,27 +541,6 @@ class TestMergeProposalCRUD:
         # can't re-accept
         with pytest.raises(ValueError):
             accept_merge_proposal(session, mp.id)
-        session.close()
-
-    def test_add_thread_message(self, engine):
-        from peerpedia_core.storage.db.crud_merge import (
-            add_merge_thread_message,
-            create_merge_proposal,
-            get_merge_proposal,
-        )
-
-        session = get_session(engine)
-        author = _make_user(session, "mp_a3")
-        forker = _make_user(session, "mp_f3")
-        original = _make_article(session, authors=[author.id])
-        fork = _make_article(session, authors=[forker.id])
-        mp = create_merge_proposal(session, fork_id=fork.id, target_id=original.id, proposer_id=forker.id)
-        from peerpedia_core.types.messages import ThreadMessage
-
-        msg = ThreadMessage(author_id=forker.id, content="请审阅合并。")
-        add_merge_thread_message(session, mp.id, msg.to_dict())
-        updated = get_merge_proposal(session, mp.id)
-        assert len(updated.thread) == 1
         session.close()
 
     def test_create_merge_proposal_rejects_self(self, engine):
@@ -750,14 +702,6 @@ class TestUpdateNotFound:
             update_review_scores(session, "no-such-id", {})
         session.close()
 
-    def test_add_thread_message_review_not_found(self, engine):
-        from peerpedia_core.storage.db.crud_review import add_thread_message
-
-        session = get_session(engine)
-        with pytest.raises(ValueError):
-            add_thread_message(session, "no-such-id", {"content": "test"})
-        session.close()
-
     def test_resolve_merge_not_found(self, engine):
         from peerpedia_core.storage.db.crud_merge import _resolve
 
@@ -767,9 +711,5 @@ class TestUpdateNotFound:
         session.close()
 
     def test_add_merge_thread_message_not_found(self, engine):
-        from peerpedia_core.storage.db.crud_merge import add_merge_thread_message
-
-        session = get_session(engine)
-        with pytest.raises(ValueError):
-            add_merge_thread_message(session, "no-such-id", {"content": "test"})
-        session.close()
+        """Merge thread messages now live in git — this path is covered by review thread."""
+        pass

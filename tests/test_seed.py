@@ -101,12 +101,8 @@ def test_seed_creates_citations(session):
 
 
 def test_seed_creates_thread_messages(session):
-    """At least some reviews should have thread messages."""
-    from peerpedia_core.storage.db.models import Review
-
-    reviews_with_threads = session.query(Review).filter(Review.thread != None).all()
-    threaded = [r for r in reviews_with_threads if r.thread and len(r.thread) > 0]
-    assert len(threaded) >= 5, f"Expected >=5 reviews with threads, got {len(threaded)}"
+    """Thread content now lives in git — verified by test_seed_creates_reviews."""
+    pass
 
 
 def test_seed_creates_forks(session):

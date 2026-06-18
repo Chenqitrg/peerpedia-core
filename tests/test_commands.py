@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pytest
 from peerpedia_core.exceptions import ConflictError, NotAuthorizedError, NotFoundError
-from peerpedia_core.storage.commands import (
+from peerpedia_core.commands import (
     create_article_with_content,
     fork_article,
     rollback_article,
@@ -20,7 +20,7 @@ from peerpedia_core.storage.db.models import User
 
 def _create_user(db, user_id: str, name: str = "Test Author"):
     """Create a minimal user for testing."""
-    u = User(id=user_id, username=name, password_hash="$2b$12$test", name=name, anonymous_name=f"anon_{name}")
+    u = User(id=user_id, username=name, password_hash="$2b$12$test", name=name)
     db.add(u)
     db.flush()
     return u
@@ -41,12 +41,12 @@ def test_fork_article_creates_record(db):
     _create_user(db, "bob", "Bob")
 
     from peerpedia_core.storage.db.crud_article import create_article
-    from peerpedia_core.storage.db.crud_review import create_review
+    from peerpedia_core.storage.db.crud_review import upsert_review
 
     article = create_article(
         db, id="art-1", title="Test Article", authors=["alice"], status="published",
     )
-    create_review(
+    upsert_review(
         db, article_id="art-1", commit_hash="abc123", reviewer_id="alice",
         scope="pool",
         scores={"originality": 3, "rigor": 3, "completeness": 3, "pedagogy": 3, "impact": 3},
@@ -98,10 +98,10 @@ def test_fork_fails_for_duplicate(db):
     _create_user(db, "alice", "Alice")
     _create_user(db, "bob", "Bob")
     from peerpedia_core.storage.db.crud_article import create_article
-    from peerpedia_core.storage.db.crud_review import create_review
+    from peerpedia_core.storage.db.crud_review import upsert_review
 
     create_article(db, id="art-1", title="Test", authors=["alice"], status="published")
-    create_review(
+    upsert_review(
         db, article_id="art-1", commit_hash="abc", reviewer_id="alice",
         scope="pool",
         scores={"originality": 3, "rigor": 3, "completeness": 3, "pedagogy": 3, "impact": 3},

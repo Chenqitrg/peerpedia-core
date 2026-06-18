@@ -27,7 +27,7 @@ from rich.text import Text
 from rich.theme import Theme
 
 from peerpedia_core.config.params import params
-from peerpedia_core.storage.commands import (
+from peerpedia_core.commands import (
     accept_merge,
     create_article_with_content,
     fork_article,

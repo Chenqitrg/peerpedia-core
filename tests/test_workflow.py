@@ -4,6 +4,7 @@
 """Tests for sedimentation pool workflow and scoring aggregation."""
 
 from datetime import datetime, timedelta, timezone
+import uuid
 
 import pytest
 
@@ -92,7 +93,7 @@ class TestPerCommitScoring:
     def _make_user(self, session, name):
         from peerpedia_core.storage.db.models import User
 
-        u = User(username=f"test_{name}", password_hash="$2b$12$test", name=name, anonymous_name=f"anon_{name}")
+        u = User(id=str(uuid.uuid4()), username=f"test_{name}", password_hash="$2b$12$test", name=name)
         session.add(u)
         session.commit()
         return u
@@ -100,7 +101,7 @@ class TestPerCommitScoring:
     def _make_article(self, session, authors):
         from peerpedia_core.storage.db.models import Article, ArticleAuthor
 
-        a = Article(status="sedimentation")
+        a = Article(title="test", status="sedimentation")
         session.add(a)
         session.flush()
         for pos, aid in enumerate(authors):
@@ -109,9 +110,9 @@ class TestPerCommitScoring:
         return a
 
     def _make_review(self, session, article_id, commit_hash, reviewer_id, scope, scores):
-        from peerpedia_core.storage.db.crud_review import create_review
+        from peerpedia_core.storage.db.crud_review import upsert_review
 
-        return create_review(
+        return upsert_review(
             session, article_id=article_id, commit_hash=commit_hash, reviewer_id=reviewer_id, scope=scope, scores=scores
         )
 

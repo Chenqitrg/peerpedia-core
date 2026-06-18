@@ -29,6 +29,9 @@ dependencies = [
     "rich>=13.0",
 ]
 
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
 [project.scripts]
 peerpedia = "peerpedia_core.cli:main"
 

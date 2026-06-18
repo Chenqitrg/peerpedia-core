@@ -2,7 +2,7 @@
 
 同行评审基础设施。一个自包含的命令行工具 + Python 库，用来写论文、互相评审、公开发布。
 
-**Git 是真相来源，数据库是索引。** 每篇文章是一个独立的 Git 仓库——完整历史、不可篡改、可以 fork。
+**Git 存内容，数据库存状态。** 每篇文章是一个独立的 Git 仓库——正文和评审内容有完整历史、可 diff/fork/merge；元数据（状态、评分、fork 计数）通过 SQLite 查询和聚合。
 
 支持三种写作格式：
 
@@ -285,6 +285,9 @@ print(result["id"])
 ```
 
 ## 参与开发
+
+环境搭建、Review 顺序、测试指南、VS Code 配置见 [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)。
+架构设计见 [docs/architecture.md](docs/architecture.md)。
 
 ```bash
 git clone https://github.com/Chenqitrg/peerpedia-core.git

@@ -29,19 +29,20 @@ from peerpedia_core.storage.db.crud_article import (
     create_article,
     get_article,
     get_author_ids,
-    get_authors_from_git,
     increment_fork_count,
-    rebuild_article_authors,
     set_sink_start,
+)
+from peerpedia_core.storage.db.crud_article_authors import (
+    get_authors_from_git,
+    rebuild_article_authors,
 )
 from peerpedia_core.storage.db.crud_merge import (
     accept_merge_proposal,
     get_merge_proposal,
 )
 from peerpedia_core.storage.db.crud_review import (
-    create_review,
     get_review_by_user_scope,
-    update_review_scores,
+    upsert_review,
 )
 from peerpedia_core.storage.db.crud_user import get_user
 from peerpedia_core.storage.git_backend import (
@@ -143,7 +144,7 @@ def rollback_article(db: Session, article_id: str, target_hash: str, user_id: st
     set_sink_start(db, article_id, params.sink.edit_article_default_days)
 
     author_ids = get_author_ids(db, article_id)
-    create_review(
+    upsert_review(
         db,
         article_id=article_id,
         commit_hash=new_hash,
@@ -234,7 +235,7 @@ def create_article_with_content(
     rebuild_article_authors(db, a.id, set(authors))
 
     if self_review is not None:
-        create_review(
+        upsert_review(
             db, article_id=a.id, commit_hash=commit_hash,
             reviewer_id=authors[0], scope="pool", scores=self_review,
         )
@@ -324,8 +325,6 @@ def update_article_content(
         set_sink_start(db, article_id, sink_days)
 
         if self_review is not None:
-            from peerpedia_core.storage.db.crud_review import upsert_review
-
             upsert_review(
                 db, article_id=a.id, commit_hash=commit_hash,
                 reviewer_id=author, scope="pool", scores=self_review,
@@ -377,18 +376,14 @@ def submit_review(
                 "Pool reviews are frozen after the article leaves the sedimentation pool."
             )
 
-    existing = get_review_by_user_scope(db, article_id, reviewer_id, scope, commit_hash=commit_hash)
     author_ids = get_author_ids(db, article_id)
 
     _write_review_to_git(article_id, reviewer_id, scores, comment, user, article.status)
 
-    if existing:
-        r = update_review_scores(db, existing.id, scores)
-    else:
-        r = create_review(
-            db, article_id=article_id, commit_hash=commit_hash,
-            reviewer_id=reviewer_id, scope=scope, scores=scores,
-        )
+    r = upsert_review(
+        db, article_id=article_id, commit_hash=commit_hash,
+        reviewer_id=reviewer_id, scope=scope, scores=scores,
+    )
 
     rp = DEFAULT_ARTICLES_DIR / article_id
     if (rp / ".git").is_dir():

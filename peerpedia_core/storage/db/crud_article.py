@@ -1,9 +1,7 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""Article CRUD operations."""
-
-from pathlib import Path
+"""Article CRUD operations — database only, no git/filesystem side effects."""
 
 from sqlalchemy.orm import Session
 
@@ -15,34 +13,6 @@ from peerpedia_core.storage.db.models import Article, ArticleAuthor
 def add_article_authors(session: Session, article_id: str, author_ids: list[str]) -> None:
     """Insert ArticleAuthor rows for an article."""
     for pos, author_id in enumerate(author_ids):
-        session.add(
-            ArticleAuthor(
-                article_id=article_id,
-                author_id=author_id,
-                position=pos,
-            )
-        )
-
-
-def replace_article_authors(session: Session, article_id: str, author_ids: set[str]) -> None:
-    """Replace all author rows for an article (delete old + insert new).
-
-    Unlike ``rebuild_article_authors`` which merges (never loses existing
-    authors), this fully replaces the join table to match the given set.
-    """
-    from peerpedia_core.storage.db.models import User
-
-    session.query(ArticleAuthor).filter(ArticleAuthor.article_id == article_id).delete()
-
-    # Sort by username for stable ordering
-    rows = session.query(User).filter(User.id.in_(list(author_ids))).all()
-    row_map = {u.id: u for u in rows}
-    sorted_ids = sorted(
-        [uid for uid in author_ids if uid in row_map],
-        key=lambda uid: row_map[uid].username,
-    )
-
-    for pos, author_id in enumerate(sorted_ids):
         session.add(
             ArticleAuthor(
                 article_id=article_id,
@@ -102,7 +72,7 @@ def create_article(
     session.add(a)
     session.flush()  # ensure a.id is available
     add_article_authors(session, a.id, authors)
-    session.commit()
+    session.commit()  # DB commit, not git
     return a
 
 
@@ -112,14 +82,28 @@ def get_article(session: Session, article_id: str) -> Article | None:
 
 def list_articles(
     session: Session,
-    status: str | None = None,
+    status: str | set[str] | None = None,
     author_id: str | None = None,
     follower_id: str | None = None,
     limit: int | None = None,
     offset: int = 0,
 ) -> list[Article]:
+    """List articles with optional filters, ordered by created_at desc.
+
+    Args:
+        status: Filter by Article.status. Pass a ``str`` for single status
+            (e.g. ``"published"``), a ``set[str]`` for multiple (e.g.
+            ``{"draft", "sedimentation"}``), or ``None`` for no filter.
+        author_id: Filter by author. None = no filter.
+        follower_id: Filter by follower of the author. None = no filter.
+        limit: Max results. None = unlimited.
+        offset: Pagination offset.
+    """
     q = session.query(Article)
-    if status:
+    if isinstance(status, set):
+        if status:
+            q = q.filter(Article.status.in_(list(status)))
+    elif status:
         q = q.filter(Article.status == status)
     if author_id:
         q = q.join(ArticleAuthor, Article.id == ArticleAuthor.article_id).filter(ArticleAuthor.author_id == author_id)
@@ -138,57 +122,13 @@ def list_articles(
     return q.all()
 
 
-def count_articles(session: Session, status: str | None = None, author_id: str | None = None) -> int:
+def count_articles(session: Session, status: str | set[str] | None = None, author_id: str | None = None) -> int:
     q = session.query(Article)
-    if status:
+    if isinstance(status, set):
+        if status:
+            q = q.filter(Article.status.in_(list(status)))
+    elif status:
         q = q.filter(Article.status == status)
-    if author_id:
-        q = q.join(ArticleAuthor, Article.id == ArticleAuthor.article_id).filter(ArticleAuthor.author_id == author_id)
-    return q.count()
-
-
-def list_articles_multi_status(
-    session: Session,
-    statuses: set[str],
-    author_id: str | None = None,
-    follower_id: str | None = None,
-    limit: int | None = None,
-    offset: int = 0,
-) -> list[Article]:
-    """List articles matching any of *statuses* (SQL-level IN filter).
-
-    Used by the policy layer so visibility filtering happens before
-    pagination, avoiding wrong totals / short pages.
-    """
-    from peerpedia_core.storage.db.models import Follow
-
-    q = session.query(Article)
-    if statuses:
-        q = q.filter(Article.status.in_(list(statuses)))
-    if author_id:
-        q = q.join(ArticleAuthor, Article.id == ArticleAuthor.article_id).filter(ArticleAuthor.author_id == author_id)
-    if follower_id:
-        q = (
-            q.join(ArticleAuthor, Article.id == ArticleAuthor.article_id)
-            .join(Follow, ArticleAuthor.author_id == Follow.followed_id)
-            .filter(Follow.follower_id == follower_id)
-            .distinct()
-        )
-    q = q.order_by(Article.created_at.desc())
-    if limit is not None:
-        q = q.limit(limit).offset(offset)
-    return q.all()
-
-
-def count_articles_multi_status(
-    session: Session,
-    statuses: set[str],
-    author_id: str | None = None,
-) -> int:
-    """Count articles matching any of *statuses*."""
-    q = session.query(Article)
-    if statuses:
-        q = q.filter(Article.status.in_(list(statuses)))
     if author_id:
         q = q.join(ArticleAuthor, Article.id == ArticleAuthor.article_id).filter(ArticleAuthor.author_id == author_id)
     return q.count()
@@ -207,7 +147,7 @@ def update_article_compiled(
     a.compiled_format = html_format
     a.compiled_output = output
     a.compiled_pages = pages
-    session.commit()
+    session.commit()  # DB commit, not git
     return a
 
 
@@ -216,7 +156,7 @@ def update_article_status(session: Session, article_id: str, new_status: str) ->
     if a is None:
         raise ValueError(f"Article {article_id} not found")
     a.status = new_status
-    session.commit()
+    session.commit()  # DB commit, not git
     return a
 
 
@@ -225,7 +165,7 @@ def increment_fork_count(session: Session, article_id: str) -> Article:
     if a is None:
         raise ValueError(f"Article {article_id} not found")
     a.fork_count += 1
-    session.commit()
+    session.commit()  # DB commit, not git
     return a
 
 
@@ -238,26 +178,26 @@ def set_sink_start(session: Session, article_id: str, duration_days: int) -> Art
     a.status = "sedimentation"
     a.sink_start = datetime.now(timezone.utc)
     a.sink_duration_days = duration_days
-    session.commit()
+    session.commit()  # DB commit, not git
     return a
 
 
 def delete_article(session: Session, article_id: str) -> None:
-    """Delete an article from the database and remove its git repository.
+    """Delete an article and its related records from the database.
 
-    Cascades to related records: article_authors, reviews, bookmarks,
-    citations, merge_proposals.
+    Cascades to: article_authors, reviews, bookmarks, citations,
+    merge_proposals.  Does NOT touch the git repository — callers
+    should clean up the article's git directory separately via
+    ``git_backend.delete_article_repo()``.
+
     Raises ValueError if the article does not exist.
     """
-    import shutil
-
     from peerpedia_core.storage.db.models import (
         Bookmark,
         Citation,
         MergeProposal,
         Review,
     )
-    from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR
 
     a = session.get(Article, article_id)
     if a is None:
@@ -273,11 +213,7 @@ def delete_article(session: Session, article_id: str) -> None:
     ).delete()
 
     session.delete(a)
-    session.commit()
-
-    repo_path = Path(DEFAULT_ARTICLES_DIR) / article_id
-    if repo_path.exists():
-        shutil.rmtree(str(repo_path))
+    session.commit()  # DB commit, not git
 
 
 def extend_sink(session: Session, article_id: str, extra_days: int, max_days: int = 180) -> Article:
@@ -298,122 +234,8 @@ def extend_sink(session: Session, article_id: str, extra_days: int, max_days: in
     a.sink_duration_days = new_total
     if new_total > old_total:
         a.sink_extended_count += 1
-    session.commit()
+    session.commit()  # DB commit, not git
     return a
-
-
-# ── Multi-author: git-derived authors ──────────────────────────────────────
-
-
-def resolve_user_id_from_git_email(session: Session, email: str) -> str:
-    """Resolve a user ID from a git commit email.
-
-    Only accepts ``{UUID}@peerpedia`` format (User.id lookup).
-    Raises ValueError if the email does not resolve to a known user.
-    """
-    from peerpedia_core.storage.db.models import User
-
-    local = email.split("@", 1)[0].strip()
-    u = session.get(User, local)
-    if u is None:
-        raise ValueError(f"No user found for git email: {email}")
-    return u.id
-
-
-def get_authors_from_git(
-    repo_path,
-    session: Session,
-    since_hash: str | None = None,
-) -> set[str]:
-    """Extract unique author user IDs from git commit log.
-
-    Scans commits reachable from HEAD. Uses git range notation
-    ``since..HEAD`` for incremental scans — handles merge DAGs
-    correctly without missing author chains.
-    """
-    import git
-
-    repo = git.Repo(repo_path)
-    if not repo.head.is_valid():
-        return set()
-
-    user_ids: set[str] = set()
-
-    if since_hash:
-        commits = repo.iter_commits(rev=f"{since_hash}..HEAD")
-    else:
-        commits = repo.iter_commits()
-
-    for commit in commits:
-        email = commit.author.email
-        try:
-            user_id = resolve_user_id_from_git_email(session, email)
-            user_ids.add(user_id)
-        except ValueError:
-            pass
-
-    return user_ids
-
-
-def rebuild_article_authors(
-    session: Session,
-    article_id: str,
-    new_author_ids: set[str],
-) -> None:
-    """Append new authors to article_authors (never delete existing ones).
-
-    Updates ``article.last_author_rebuild_hash`` to current repo HEAD.
-    """
-    from peerpedia_core.storage.db.models import User
-    from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR
-
-    existing = set(get_author_ids(session, article_id))
-    merged = existing | new_author_ids
-
-    # Only rebuild join table when authors actually changed
-    if merged != existing:
-        # Resolve usernames for lexicographic sort
-        rows = session.query(User).filter(User.id.in_(list(merged))).all()
-        row_map = {u.id: u for u in rows}
-        sorted_ids = sorted(
-            [uid for uid in merged if uid in row_map],
-            key=lambda uid: row_map[uid].username,
-        )
-        # Add any IDs that exist in merged but not in DB (shouldn't happen)
-        sorted_ids.extend(uid for uid in merged if uid not in row_map)
-
-        # Rebuild join table
-        session.query(ArticleAuthor).filter(ArticleAuthor.article_id == article_id).delete()
-        add_article_authors(session, article_id, sorted_ids)
-
-    # Update rebuild marker
-    import git
-
-    article = session.get(Article, article_id)
-    if article:
-        rp = DEFAULT_ARTICLES_DIR / article_id
-        if rp.exists() and (rp / ".git").is_dir():
-            repo = git.Repo(rp)
-            if repo.head.is_valid():
-                article.last_author_rebuild_hash = repo.head.commit.hexsha
-
-    session.commit()
-
-
-def validate_article_has_authors(session: Session, article_id: str) -> None:
-    """Raise ValueError if an article has no authors.
-
-    Articles must always have at least one author.  An article without
-    authors indicates a bug in the creation path — never silently repair,
-    always surface the error.
-    """
-    author_ids = get_author_ids(session, article_id)
-    if not author_ids:
-        raise ValueError(
-            f"Article {article_id} has no authors. "
-            "This is a bug — every article must have at least one author. "
-            "Check the creation path (create_article, sync auto-create, or direct DB insert)."
-        )
 
 
 def get_article_by_fork_and_author(
@@ -429,3 +251,5 @@ def get_article_by_fork_and_author(
         .filter(ArticleAuthor.author_id == author_id)
         .first()
     )
+
+

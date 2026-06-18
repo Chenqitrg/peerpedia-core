@@ -1,11 +1,11 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""Tests for multi-status article listing and counting."""
+"""Tests for article listing and counting."""
 
 from peerpedia_core.storage.db.crud_article import (
-    count_articles_multi_status,
-    list_articles_multi_status,
+    count_articles,
+    list_articles,
 )
 from peerpedia_core.storage.db.engine import get_session
 from peerpedia_core.storage.db.models import Article, ArticleAuthor, User
@@ -23,23 +23,23 @@ def _user(**kwargs):
     return User(**defaults)
 
 
-class TestListArticlesMultiStatus:
-    def test_empty_statuses_returns_all(self, db_engine):
+class TestListArticles:
+    def test_empty_status_set_returns_all(self, db_engine):
         s = get_session(db_engine)
         s.add(Article(id="a-lm1", status="draft", fork_count=0))
         s.add(Article(id="a-lm2", status="published", fork_count=0))
         s.commit()
 
-        result = list_articles_multi_status(s, set())
+        result = list_articles(s, status=set())
         assert len(result) == 2
 
-    def test_filters_by_single_status(self, db_engine):
+    def test_filters_by_single_status_string(self, db_engine):
         s = get_session(db_engine)
         s.add(Article(id="a-lm3", status="draft", fork_count=0))
         s.add(Article(id="a-lm4", status="published", fork_count=0))
         s.commit()
 
-        result = list_articles_multi_status(s, {"published"})
+        result = list_articles(s, status="published")
         assert [r.id for r in result] == ["a-lm4"]
 
     def test_filters_by_multiple_statuses(self, db_engine):
@@ -49,7 +49,7 @@ class TestListArticlesMultiStatus:
         s.add(Article(id="a-lm7", status="published", fork_count=0))
         s.commit()
 
-        result = list_articles_multi_status(s, {"draft", "sedimentation"})
+        result = list_articles(s, status={"draft", "sedimentation"})
         ids = {r.id for r in result}
         assert ids == {"a-lm5", "a-lm6"}
 
@@ -64,7 +64,7 @@ class TestListArticlesMultiStatus:
         s.add(ArticleAuthor(article_id="a-lm9", author_id="u-lm-auth", position=0))
         s.commit()
 
-        result = list_articles_multi_status(s, {"published"}, author_id="u-lm-auth")
+        result = list_articles(s, status={"published"}, author_id="u-lm-auth")
         assert [r.id for r in result] == ["a-lm9"]
 
     def test_respects_limit_and_offset(self, db_engine):
@@ -73,7 +73,7 @@ class TestListArticlesMultiStatus:
             s.add(Article(id=f"a-lmo{i}", status="published", fork_count=0))
         s.commit()
 
-        result = list_articles_multi_status(s, {"published"}, limit=2, offset=1)
+        result = list_articles(s, status={"published"}, limit=2, offset=1)
         assert len(result) == 2
 
     def test_returns_empty_when_no_match(self, db_engine):
@@ -81,18 +81,18 @@ class TestListArticlesMultiStatus:
         s.add(Article(id="a-lm-empty", status="draft", fork_count=0))
         s.commit()
 
-        result = list_articles_multi_status(s, {"published"})
+        result = list_articles(s, status={"published"})
         assert result == []
 
 
-class TestCountArticlesMultiStatus:
+class TestCountArticles:
     def test_counts_matching_statuses(self, db_engine):
         s = get_session(db_engine)
         s.add(Article(id="a-cm1", status="draft", fork_count=0))
         s.add(Article(id="a-cm2", status="published", fork_count=0))
         s.commit()
 
-        assert count_articles_multi_status(s, {"published"}) == 1
+        assert count_articles(s, status={"published"}) == 1
 
     def test_counts_with_author_filter(self, db_engine):
         s = get_session(db_engine)
@@ -103,19 +103,19 @@ class TestCountArticlesMultiStatus:
         s.add(ArticleAuthor(article_id="a-cm3", author_id="u-cm-auth", position=0))
         s.commit()
 
-        assert count_articles_multi_status(s, {"published"}, author_id="u-cm-auth") == 1
+        assert count_articles(s, status={"published"}, author_id="u-cm-auth") == 1
 
-    def test_empty_statuses_counts_all(self, db_engine):
+    def test_empty_status_set_counts_all(self, db_engine):
         s = get_session(db_engine)
         s.add(Article(id="a-cm4", status="draft", fork_count=0))
         s.add(Article(id="a-cm5", status="published", fork_count=0))
         s.commit()
 
-        assert count_articles_multi_status(s, set()) == 2
+        assert count_articles(s, status=set()) == 2
 
     def test_returns_zero_when_no_match(self, db_engine):
         s = get_session(db_engine)
         s.add(Article(id="a-cm6", status="draft", fork_count=0))
         s.commit()
 
-        assert count_articles_multi_status(s, {"published"}) == 0
+        assert count_articles(s, status={"published"}) == 0

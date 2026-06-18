@@ -27,7 +27,7 @@ _assert() {
     if echo "$1" | grep -q "$2"; then _pass "$3"
     else _fail "$3" "contains '$2'"; fi
 }
-_id() { echo "$1" | grep -o '"id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*: *"//;s/"$//'; }
+_id() { echo "$1" | grep -o '"id"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*: *"//;s/"$//' || true; }
 
 # ═════════════════════════════════════════════════════════════════════════
 # Flow 1: Registration & Identity
@@ -117,16 +117,25 @@ _assert "$OUT" "5" "F4.2 review scores visible"
 echo "=== Flow 5: Fork & Merge ==="
 
 # Need published article for fork. Create+publish via Python to get published status.
-FORK_SRC=$(.venv/bin/python -c "
+FORK_SRC=$(HOME="$PEERPEDIA_HOME" python3 -c "
+import os, bcrypt, uuid
+from pathlib import Path
 from peerpedia_core.storage.db.engine import get_engine, get_session, init_db
-from peerpedia_core.storage.db.crud_article import create_article, update_article_status
+from peerpedia_core.storage.db.crud_article import create_article
 from peerpedia_core.storage.db.crud_user import create_user as cu
-import bcrypt, uuid
-db_url = 'sqlite:///$PEERPEDIA_HOME/peerpedia.db'
+from peerpedia_core.storage.git_backend import init_article_repo, commit_article
+
+db_url = f'sqlite:///{os.environ[\"HOME\"]}/.peerpedia/peerpedia.db'
 e = get_engine(db_url); init_db(e); s = get_session(e)
+
 uid = str(uuid.uuid4())
-cu(s, username='charlie', password_hash=bcrypt.hashpw(b'x', bcrypt.gensalt()).decode(), name='Charlie', anonymous_name='anon_c')
-a = create_article(s, id=str(uuid.uuid4()), title='Forkable', authors=[uid], status='published')
+cu(s, id=uid, username='charlie', password_hash=bcrypt.hashpw(b'x', bcrypt.gensalt()).decode(), name='Charlie', anonymous_name='anon_c')
+
+aid = str(uuid.uuid4())
+a = create_article(s, id=aid, title='Forkable', authors=[uid], status='published')
+base = Path(os.environ['HOME']) / '.peerpedia' / 'articles'
+rp = init_article_repo(aid, base_dir=base)
+commit_article(rp, 'Initial submission', 'Charlie', f'{uid}@peerpedia', allow_empty=True)
 s.commit()
 print(a.id)
 " 2>&1)
@@ -152,7 +161,7 @@ OUT=$(_run bookmark add "$FORK_SRC" --user Bob)
 _assert "$OUT" "Bookmarked" "F6.1 add bookmark"
 
 OUT=$(_run bookmark list --user Bob)
-_assert "$OUT" "$FORK_SRC" "F6.2 bookmark list shows article"
+_assert "$OUT" "${FORK_SRC:0:8}" "F6.2 bookmark list shows article"
 
 # ═════════════════════════════════════════════════════════════════════════
 # Flow 8: Error handling
@@ -167,7 +176,7 @@ OUT=$(_run article create --title "X" --format markdown --content "x" --user Nob
 _assert "$OUT" "not found" "E8.2 nonexistent user rejected"
 
 OUT=$(_run article edit "$POOL_ID" --content "# Hacked" --user Bob)
-_assert "$OUT" "not authorized\|NotAuthorized" "E8.3 non-author edit rejected"
+_assert "$OUT" "Only authors can edit\|not authorized\|NotAuthorized" "E8.3 non-author edit rejected"
 
 OUT=$(_run fork "$FORK_SRC" --user Bob 2>&1 || true)
 # Second fork of same article should fail

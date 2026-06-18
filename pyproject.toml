@@ -1,0 +1,49 @@
+[project]
+name = "peerpedia-core"
+version = "0.4.0"
+description = "PeerPedia Core — peer review infrastructure. CLI + Python library for academic paper writing, reviewing, and publishing with Git-backed storage."
+requires-python = ">=3.11"
+license = {text = "CC BY-NC-SA 4.0"}
+authors = [
+    {name = "Chenqi Meng", email = "chenqimeng@example.com"},
+]
+readme = "README.md"
+keywords = ["peer-review", "academic", "git", "research", "publishing"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: Free for non-commercial use",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering",
+]
+dependencies = [
+    "sqlalchemy>=2.0",
+    "gitpython>=3.1",
+    "bcrypt>=4.0",
+    "pyjwt>=2.0",
+    "markdown>=3.0",
+    "jinja2>=3.0",
+    "networkx>=3.0",
+    "httpx>=0.24",
+    "rich>=13.0",
+]
+
+[project.scripts]
+peerpedia = "peerpedia_core.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/Chenqitrg/peerpedia-core"
+Issues = "https://github.com/Chenqitrg/peerpedia-core/issues"
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 130
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W"]

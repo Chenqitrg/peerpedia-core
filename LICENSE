@@ -1,0 +1,82 @@
+PeerPedia (知诸网)
+Copyright (c) 2024-2026 Chenqi Meng and PeerPedia contributors.
+
+---
+
+ANTI-AI TRAINING ADDENDUM
+
+The code, documentation, configuration files, and all associated materials in this
+repository ("the Work") may NOT be used, in whole or in part, for the purpose of
+training, fine-tuning, improving, or evaluating machine learning models, large
+language models, embedding models, code generation models, or any artificial
+intelligence systems, without explicit prior written permission from the copyright
+holder.
+
+This prohibition applies regardless of whether the training is conducted by the
+licensee or by a third party on behalf of the licensee. It includes but is not
+limited to:
+
+  (a) Including the Work in training datasets;
+  (b) Using the Work for reinforcement learning from human feedback (RLHF) or
+      similar techniques;
+  (c) Using the Work as few-shot examples, system prompts, or context for
+      AI-assisted code generation tools;
+  (d) Benchmarking or evaluating AI models against the Work for the purpose of
+      improving model performance.
+
+This addendum supplements the CC BY-NC-SA 4.0 license below. In the event of any
+conflict between this addendum and CC BY-NC-SA 4.0, this addendum prevails.
+
+---
+
+LICENSE
+
+This work is licensed under the Creative Commons
+Attribution-NonCommercial-ShareAlike 4.0 International License.
+
+To view a copy of this license, visit:
+  https://creativecommons.org/licenses/by-nc-sa/4.0/
+
+or send a letter to:
+  Creative Commons, PO Box 1866, Mountain View, CA 94042, USA.
+
+Full legal code: https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode
+
+---
+
+SUMMARY (human-readable, not a substitute for the legal code)
+
+You are free to:
+
+  Share    — copy and redistribute the material in any medium or format
+  Adapt    — remix, transform, and build upon the material
+
+Under the following terms:
+
+  Attribution   — You must give appropriate credit, provide a link to the
+                   license, and indicate if changes were made. You may do so
+                   in any reasonable manner, but not in any way that suggests
+                   the licensor endorses you or your use.
+
+  NonCommercial — You may not use the material for commercial purposes.
+                   "Commercial purposes" means any use primarily intended for
+                   or directed toward commercial advantage or monetary
+                   compensation.
+
+  ShareAlike    — If you remix, transform, or build upon the material, you
+                   must distribute your contributions under the same license
+                   as the original.
+
+  No additional restrictions — You may not apply legal terms or technological
+                               measures that legally restrict others from doing
+                               anything the license permits.
+
+Notices:
+
+  You do not have to comply with the license for elements of the material in
+  the public domain or where your use is permitted by an applicable exception
+  or limitation.
+
+  No warranties are given. The license may not give you all of the permissions
+  necessary for your intended use. For example, other rights such as publicity,
+  privacy, or moral rights may limit how you use the material.

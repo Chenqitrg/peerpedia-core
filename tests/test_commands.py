@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pytest
 from peerpedia_core.exceptions import ConflictError, NotAuthorizedError, NotFoundError
-from peerpedia_core.storage.commands import fork_article
+from peerpedia_core.storage.commands import fork_article, rollback_article
 from peerpedia_core.storage.db.crud_article import get_article
 from peerpedia_core.storage.db.engine import get_session
 from peerpedia_core.storage.db.models import User
@@ -108,3 +108,41 @@ def test_fork_fails_for_duplicate(db):
 
     with pytest.raises(ConflictError, match="Already forked"):
         fork_article(db, "art-1", "bob")
+
+
+# ── Rollback tests ───────────────────────────────────────────────────────
+
+
+def test_rollback_creates_revert_commit(db):
+    """Rollback creates a new commit with zero-score review."""
+    _create_user(db, "alice", "Alice")
+    from peerpedia_core.storage.db.crud_article import create_article
+
+    create_article(db, id="art-1", title="Test", authors=["alice"], status="draft")
+    db.flush()
+
+    from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, init_article_repo, commit_article
+
+    rp = DEFAULT_ARTICLES_DIR / "art-1"
+    if not (rp / ".git").is_dir():
+        init_article_repo("art-1")
+    (rp / "article.md").write_text("# Test Content")
+    commit_article(rp, "Initial", "Alice", "alice@peerpedia")
+
+    result = rollback_article(db, "art-1", "HEAD", "alice")
+
+    assert "commit_hash" in result
+    assert result["commit_hash"] != ""
+    assert "Rollback to" in result["message"]
+
+
+def test_rollback_fails_for_nonexistent_user(db):
+    """Rollback by nonexistent user raises NotFoundError."""
+    _create_user(db, "alice", "Alice")
+    from peerpedia_core.storage.db.crud_article import create_article
+
+    create_article(db, id="art-1", title="Test", authors=["alice"], status="draft")
+    db.flush()
+
+    with pytest.raises(NotFoundError):
+        rollback_article(db, "art-1", "HEAD", "nonexistent")

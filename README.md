@@ -4,6 +4,14 @@
 
 **Git 是真相来源，数据库是索引。** 每篇文章是一个独立的 Git 仓库——完整历史、不可篡改、可以 fork。
 
+支持三种写作格式：
+
+| 格式 | 编译方式 | 安装 |
+|------|---------|------|
+| Markdown | 内建（Python markdown 库） | 零依赖，开箱即用 |
+| bTeX | 外部服务器（TypeScript） | `git clone` + `yarn start`，~2MB |
+| Typst | 外部 CLI（Rust） | `brew install typst`，~30MB |
+
 ## 安装
 
 ```bash
@@ -49,7 +57,7 @@ peerpedia article create \
     --user Alice
 ```
 
-`--format` 可以是 `markdown` 或 `typst`。不传 `--content` 的话会打开 `$EDITOR` 让你写。
+`--format` 可以是 `markdown`、`btex` 或 `typst`。不传 `--content` 的话会打开 `$EDITOR` 让你写。
 
 ### 3. 看看写了什么
 
@@ -208,6 +216,12 @@ export PEERPEDIA_SERVER="https://peerpedia.example.com"
 |------|------|
 | `bookmark add <article-id> --user <u>` | 添加书签 |
 | `bookmark list --user <u>` | 列出书签 |
+
+### compile
+
+| 命令 | 说明 |
+|------|------|
+| `compile <id> [--format pdf\|svg\|png\|html]` | 编译文章 |
 
 ### sync
 

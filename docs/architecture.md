@@ -82,7 +82,7 @@ Git 里的数据（权威）           SQLite 里的数据（缓存/索引）
 | 权限 | `policies/articles.py` | "这个用户能做这件事吗？" |
 | 数据库 | `storage/db/` | SQLAlchemy ORM，建表、增删改查 |
 | Git | `storage/git_backend.py` | 创建仓库、提交、查看历史、bundle 同步 |
-| 编译 | `storage/compiler.py` | Markdown/Typst → HTML/PDF |
+| 编译 | `storage/compiler.py` | Markdown/bTeX/Typst → HTML/PDF/SVG |
 | 同步 | `sync/` | Git bundle 推送到远程、离线操作队列 |
 | 工作流 | `workflow/` | 评分聚合、沉淀池、声誉计算 |
 | 配置 | `config/params.py` | 所有可调参数（沉淀天数、评分权重等） |

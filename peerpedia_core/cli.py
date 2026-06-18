@@ -105,7 +105,7 @@ def _stars(score: dict | None, dims: list[str] | None = None) -> str:
         dims = ["originality", "rigor", "completeness", "pedagogy", "impact"]
     lines = []
     for d in dims:
-        v = score.get(d, 0)
+        v = int(score.get(d, 0))
         filled = "★" * v
         empty = "☆" * (5 - v)
         lines.append(f"  {d:<14} [accent]{filled}[/][muted]{empty}[/]  {v}/5")

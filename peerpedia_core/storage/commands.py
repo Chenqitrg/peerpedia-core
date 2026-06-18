@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 
 from peerpedia_core.config.params import params
 
-from peerpedia_core.exceptions import BadRequestError, ConflictError, NotFoundError
+from peerpedia_core.exceptions import BadRequestError, ConflictError, NotAuthorizedError, NotFoundError
 from peerpedia_core.policies.articles import (
     assert_can_edit_article,
     assert_can_fork_article,
@@ -34,13 +34,26 @@ from peerpedia_core.storage.db.crud_article import (
     rebuild_article_authors,
     set_sink_start,
 )
-from peerpedia_core.storage.db.crud_review import create_review
+from peerpedia_core.storage.db.crud_merge import (
+    accept_merge_proposal,
+    get_merge_proposal,
+)
+from peerpedia_core.storage.db.crud_review import (
+    create_review,
+    get_review_by_user_scope,
+    update_review_scores,
+)
 from peerpedia_core.storage.db.crud_user import get_user
 from peerpedia_core.storage.git_backend import (
     DEFAULT_ARTICLES_DIR,
+    MergeConflictError,
     commit_article,
+    get_article_lock,
+    get_commit_history,
     init_article_repo,
+    merge_git_repos,
 )
+from peerpedia_core.workflow.reputation import compute_author_reputation
 from peerpedia_core.workflow.scoring import compute_article_score_for_commit
 
 
@@ -322,3 +335,146 @@ def update_article_content(
         "id": a.id, "title": a.title, "status": a.status,
         "commit_hash": commit_hash,
     }
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Review
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def submit_review(
+    db: Session,
+    article_id: str,
+    reviewer_id: str,
+    scores: dict,
+    scope: str,
+    commit_hash: str,
+    *,
+    comment: str = "",
+) -> dict:
+    """Submit or update a review for an article.
+
+    Git-first: writes review files to git before DB mutation.
+    Recomputes article score and author reputations.
+    """
+    user = get_user(db, reviewer_id)
+    if user is None:
+        raise NotFoundError("Reviewer not found")
+
+    article = get_article(db, article_id)
+    if article is None:
+        raise NotFoundError("Article not found")
+
+    if scope == "pool" and article.status not in ("sedimentation", "draft"):
+        existing_pool = get_review_by_user_scope(
+            db, article_id, reviewer_id, "pool", commit_hash=commit_hash,
+        )
+        if existing_pool:
+            raise ConflictError(
+                "Pool reviews are frozen after the article leaves the sedimentation pool."
+            )
+
+    existing = get_review_by_user_scope(db, article_id, reviewer_id, scope, commit_hash=commit_hash)
+    author_ids = get_author_ids(db, article_id)
+
+    _write_review_to_git(article_id, reviewer_id, scores, comment, user, article.status)
+
+    if existing:
+        r = update_review_scores(db, existing.id, scores)
+    else:
+        r = create_review(
+            db, article_id=article_id, commit_hash=commit_hash,
+            reviewer_id=reviewer_id, scope=scope, scores=scores,
+        )
+
+    rp = DEFAULT_ARTICLES_DIR / article_id
+    if (rp / ".git").is_dir():
+        commits = get_commit_history(rp)
+        if commits:
+            score = compute_article_score_for_commit(db, article_id, commits[0]["hash"])
+            if score is not None:
+                article.score = score
+
+    for aid in author_ids:
+        compute_author_reputation(db, aid)
+
+    return {"review_id": r.id, "scores": r.scores}
+
+
+def _write_review_to_git(
+    article_id: str,
+    reviewer_id: str,
+    scores: dict,
+    comment: str,
+    reviewer,
+    article_status: str,
+) -> None:
+    """Write review files to git repo (git-first principle)."""
+    import json
+    from datetime import datetime, timezone
+
+    rp = DEFAULT_ARTICLES_DIR / article_id
+    if not (rp / ".git").is_dir():
+        return
+
+    review_dir = rp / "reviews" / reviewer_id
+    review_dir.mkdir(parents=True, exist_ok=True)
+    (review_dir / "scores.json").write_text(json.dumps(scores, indent=2))
+
+    if comment:
+        ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        display_name = reviewer.name or reviewer.username
+        thread_path = review_dir / "thread.md"
+        existing = thread_path.read_text() if thread_path.exists() else ""
+        thread_path.write_text(existing + f"### {display_name} ({ts})\n\n{comment}\n\n")
+
+    lock = get_article_lock(article_id)
+    acquired = lock.acquire(timeout=10)
+    if not acquired:
+        raise ConflictError("Article busy — retry later")
+    try:
+        display_name = reviewer.name or reviewer.username
+        commit_article(rp, f"Review by {display_name}", display_name, f"{reviewer_id}@peerpedia")
+    finally:
+        lock.release()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Merge
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def accept_merge(db: Session, article_id: str, proposal_id: str, user_id: str) -> dict:
+    """Accept a merge proposal: git merge fork into target, rebuild authors."""
+    user = get_user(db, user_id)
+    if user is None:
+        raise NotFoundError("User not found")
+
+    mp = get_merge_proposal(db, proposal_id)
+    if mp is None:
+        raise NotFoundError("Merge proposal not found")
+    if mp.target_article_id != article_id:
+        raise BadRequestError("Proposal does not belong to this article")
+    if user_id not in get_author_ids(db, article_id):
+        raise NotAuthorizedError("Only article authors can accept/reject merges")
+
+    target_repo = DEFAULT_ARTICLES_DIR / article_id
+    fork_repo = DEFAULT_ARTICLES_DIR / mp.fork_article_id
+
+    if not (target_repo / ".git").is_dir() or not (fork_repo / ".git").is_dir():
+        mp = accept_merge_proposal(db, proposal_id)
+        return {"id": mp.id, "status": mp.status}
+
+    try:
+        merge_git_repos(target_repo, fork_repo, user.name or user.username)
+    except MergeConflictError:
+        return {
+            "status": "conflict",
+            "message": "Merge conflicts detected.",
+        }
+
+    all_authors = get_authors_from_git(target_repo, db)
+    rebuild_article_authors(db, article_id, all_authors)
+
+    mp = accept_merge_proposal(db, proposal_id)
+    return {"id": mp.id, "status": mp.status}

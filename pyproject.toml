@@ -28,6 +28,7 @@ dependencies = [
     "httpx>=0.24",
     "rich>=13.0",
     "argcomplete>=3.0",
+    "prompt-toolkit>=3.0",
 ]
 
 [project.optional-dependencies]

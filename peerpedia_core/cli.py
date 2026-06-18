@@ -592,6 +592,12 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main():
+    # If no arguments, enter REPL
+    if len(sys.argv) == 1:
+        from peerpedia_core.repl import run
+        run()
+        return
+
     parser = build_parser()
     try:
         import argcomplete

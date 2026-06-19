@@ -170,13 +170,9 @@ def _pull_and_apply(server: str, article_id: str, since_hash: str | None = None)
 
     Returns the new HEAD hash, or None on failure.
     """
-    params = {}
-    if since_hash:
-        params["since"] = since_hash
-
     r = httpx.get(
         f"{_api_url(server, article_id)}/bundle",
-        params=params,
+        params={"since": since_hash} if since_hash else None,
         timeout=60,
     )
     if r.status_code != 200:

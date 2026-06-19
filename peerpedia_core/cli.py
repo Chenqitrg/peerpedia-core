@@ -105,13 +105,11 @@ def _stars(score: dict | None, dims: list[str] | None = None) -> str:
         return "[muted]no score[/]"
     if dims is None:
         dims = ["originality", "rigor", "completeness", "pedagogy", "impact"]
-    lines = []
-    for d in dims:
-        v = int(score.get(d, 0))
-        filled = "★" * v
-        empty = "☆" * (5 - v)
-        lines.append(f"  {d:<14} [accent]{filled}[/][muted]{empty}[/]  {v}/5")
-    return "\n".join(lines)
+    return "\n".join(
+        f"  {d:<14} [accent]{'★'*v}[/][muted]{'☆'*(5-v)}[/]  {v}/5"
+        for d in dims
+        for v in [int(score.get(d, 0))]
+    )
 
 
 def _ok(what: str) -> None:
@@ -528,11 +526,11 @@ def _parse_scores(scores_str: str | None) -> dict | None:
     """Parse 'originality=4,rigor=3,...' into a dict."""
     if not scores_str:
         return None
-    result = {}
-    for part in scores_str.split(","):
-        k, v = part.strip().split("=")
-        result[k.strip()] = int(v.strip())
-    return result
+    return {
+        k.strip(): int(v.strip())
+        for part in scores_str.split(",")
+        for k, v in [part.strip().split("=")]
+    }
 
 
 def _open_editor(initial: str) -> str:

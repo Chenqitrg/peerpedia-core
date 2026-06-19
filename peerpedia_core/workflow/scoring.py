@@ -88,9 +88,6 @@ def compute_article_score_for_commit( # Why not calculating from git repo? This 
         return None
 
     authors = get_author_ids(session, article_id)
-    review_dicts: list[dict] = []
-    reviewer_weights: dict[str, float] = {}
-
     # Batch-load all reviewer users in one query
     reviewer_ids = {r.reviewer_id for r in all_reviews}
     reviewer_users = session.query(User).filter(User.id.in_(reviewer_ids)).all()
@@ -108,14 +105,10 @@ def compute_article_score_for_commit( # Why not calculating from git repo? This 
         else:
             user_weight_map[u.id] = 1.0
 
-    for r in all_reviews:
-        review_dicts.append(
-            {
-                "scores": r.scores,
-                "is_self": r.reviewer_id in authors,
-                "reviewer_id": r.reviewer_id,
-            }
-        )
-        reviewer_weights[r.reviewer_id] = user_weight_map.get(r.reviewer_id, 1.0)
+    review_dicts = [
+        {"scores": r.scores, "is_self": r.reviewer_id in authors, "reviewer_id": r.reviewer_id}
+        for r in all_reviews
+    ]
+    reviewer_weights = {r.reviewer_id: user_weight_map.get(r.reviewer_id, 1.0) for r in all_reviews}
 
     return compute_article_score(review_dicts, reviewer_weights)

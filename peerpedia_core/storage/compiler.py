@@ -257,12 +257,11 @@ class TypstBackend(CompilerBackend):
 
 def _parse_typst_warnings(stderr: str) -> list[str]:
     """Parse warning lines from typst stderr output."""
-    warnings = []
-    for line in stderr.split("\n"):
-        line = line.strip()
-        if line.startswith("warning:"):
-            warnings.append(line)
-    return warnings
+    return [
+        line.strip()
+        for line in stderr.split("\n")
+        if line.strip().startswith("warning:")
+    ]
 
 
 # ── Markdown backend ───────────────────────────────────────────────────────────

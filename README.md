@@ -255,13 +255,16 @@ export PEERPEDIA_SERVER="https://peerpedia.example.com"
 
 ```
 ~/.peerpedia/
-├── peerpedia.db          ← SQLite 数据库
+├── peerpedia.db          ← SQLite 数据库（元数据：状态、评分缓存、作者列表）
 ├── pending_ops.json      ← 离线操作队列
 └── articles/
     └── {article_id}/
-        ├── .git/          ← Git 仓库（完整历史）
-        ├── article.md     ← 文章正文
-        └── reviews/       ← 评审数据
+        ├── .git/          ← Git 仓库（完整内容历史）
+        ├── article.md     ← 文章正文 + 元数据（YAML frontmatter）
+        └── reviews/
+            ├── {reviewer_a}.md   ← 评审人的评审 + 作者回复（Markdown 对话线程）
+            ├── {reviewer_b}.md
+            └── {author}.md      ← 作者自评（和其他评审同格式）
 ```
 
 备份只需要复制整个 `~/.peerpedia/` 目录。迁移到新机器：复制目录 + 安装 peerpedia-core。

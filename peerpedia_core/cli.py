@@ -46,7 +46,7 @@ from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, delete_arti
 from peerpedia_core.storage.db.crud_bookmark import add_bookmark, get_bookmarks_for_user, remove_bookmark
 from peerpedia_core.storage.db.crud_merge import create_merge_proposal
 from peerpedia_core.storage.db.crud_review import get_reviews_for_article
-from peerpedia_core.storage.db.crud_user import create_user, get_user, get_user_by_username
+from peerpedia_core.storage.db.crud_user import create_user, get_user, get_user_by_name
 from peerpedia_core.storage.db.engine import get_engine, get_session, init_db
 from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, get_commit_history
 from peerpedia_core.sync import is_online, count as pending_count, push as sync_push
@@ -131,19 +131,17 @@ def _json_out(data: dict | list) -> None:
 def _cmd_register(args):
     db = _get_db()
     try:
-        from peerpedia_core.storage.db.crud_user import _new_username
         import bcrypt
         user = create_user(
             db,
-            name=args.name,
-            username=args.name or _new_username(),
+            name=args.name or f"u_{uuid.uuid4().hex[:12]}",
             password_hash=bcrypt.hashpw(b"placeholder", bcrypt.gensalt()).decode(),
         )
         db.commit()
         if args.json:
-            _json_out({"id": user.id, "username": user.username, "name": user.name})
+            _json_out({"id": user.id, "name": user.name})
         else:
-            _ok(f"Registered [accent]{user.username}[/] (id: {user.id[:8]})")
+            _ok(f"Registered [accent]{user.name}[/] (id: {user.id[:8]})")
     except Exception as e:
         db.rollback()
         _die(str(e))
@@ -172,7 +170,7 @@ def _resolve_user(db, user_ref: str) -> str:
     u = get_user(db, user_ref)
     if u:
         return u.id
-    u = get_user_by_username(db, user_ref)
+    u = get_user_by_name(db, user_ref)
     if u:
         return u.id
     _die(f"User '{user_ref}' not found. Register first: peerpedia account register --name {user_ref}")
@@ -187,7 +185,8 @@ def _cmd_article_create(args):
             content = _open_editor("")
         result = create_article_with_content(
             db, title=args.title, content=content, format=args.format,
-            user_id=user_id, publish=args.publish,
+            author_ids=[user_id],
+            publish=args.publish,
             self_review=_parse_scores(args.scores) if args.scores else None,
         )
         db.commit()

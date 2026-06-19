@@ -46,7 +46,7 @@ def publish_ready_articles(session: Session) -> int:
     from peerpedia_core.storage.db.crud_article import get_author_ids
     from peerpedia_core.storage.db.crud_review import get_reviews_for_article
     from peerpedia_core.workflow.reputation import compute_author_reputation
-    from peerpedia_core.workflow.scoring import compute_article_score_for_commit
+    from peerpedia_core.workflow.scoring import compute_article_score
 
     articles = session.query(Article).filter(Article.status == "sedimentation").all()
 
@@ -67,7 +67,7 @@ def publish_ready_articles(session: Session) -> int:
             continue
 
         # Compute score by aggregating all reviews across all commits
-        score = compute_article_score_for_commit(session, article.id)
+        score = compute_article_score(session, article.id)
 
         # Check for community reviews and apply penalty if none
         all_reviews = get_reviews_for_article(session, article.id)

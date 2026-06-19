@@ -32,7 +32,6 @@ from peerpedia_core.workflow.sedimentation import (
 def _make_user(session, name):
     u = User(
         id=str(uuid.uuid4()),
-        username=f"sp_{name}",
         password_hash="",
         name=name,
     )

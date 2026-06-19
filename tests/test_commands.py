@@ -20,7 +20,7 @@ from peerpedia_core.storage.db.models import User
 
 def _create_user(db, user_id: str, name: str = "Test Author"):
     """Create a minimal user for testing."""
-    u = User(id=user_id, username=name, password_hash="$2b$12$test", name=name)
+    u = User(id=user_id,  password_hash="$2b$12$test", name=name)
     db.add(u)
     db.flush()
     return u
@@ -173,7 +173,7 @@ def test_create_article_writes_file_and_commits(db):
     _create_user(db, "alice", "Alice")
 
     result = create_article_with_content(
-        db, title="Hello", content="# Test", format="markdown", user_id="alice",
+        db, title="Hello", content="# Test", format="markdown", author_ids=["alice"],
     )
 
     assert result["title"] == "Hello"
@@ -191,7 +191,7 @@ def test_create_article_with_publish(db):
     _create_user(db, "alice", "Alice")
 
     result = create_article_with_content(
-        db, title="Pub", content="# Publish test", user_id="alice",
+        db, title="Pub", content="# Publish test", author_ids=["alice"],
         publish=True,
         self_review={"originality": 3, "rigor": 3, "completeness": 3, "pedagogy": 3, "impact": 3},
     )
@@ -209,7 +209,7 @@ def test_create_fails_publish_without_self_review(db):
     from peerpedia_core.exceptions import BadRequestError
     with pytest.raises(BadRequestError, match="self_review"):
         create_article_with_content(
-            db, title="Bad", content="x", user_id="alice", publish=True,
+            db, title="Bad", content="x", author_ids=["alice"], publish=True,
         )
 
 
@@ -221,7 +221,7 @@ def test_update_article_changes_content(db):
     _create_user(db, "alice", "Alice")
 
     result = create_article_with_content(
-        db, title="Original", content="# Original", user_id="alice",
+        db, title="Original", content="# Original", author_ids=["alice"],
     )
     aid = result["id"]
 
@@ -239,7 +239,7 @@ def test_update_fails_for_non_author(db):
     _create_user(db, "bob", "Bob")
 
     result = create_article_with_content(
-        db, title="Mine", content="# Mine", user_id="alice",
+        db, title="Mine", content="# Mine", author_ids=["alice"],
     )
 
     from peerpedia_core.exceptions import NotAuthorizedError

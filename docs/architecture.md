@@ -93,9 +93,10 @@ tests/
 
 **规则：**
 - CLI 不直接碰 Git，通过 commands.py
-- 正文和评审内容写 Git，元数据写 DB（state 优先查询走 DB）
+- **Git 是内容 SOT**——正文和评审内容存在 Git 仓库中，DB 只存评分缓存
 - commands.py 不主动 commit 事务，由调用方（CLI）commit
 - 模块间不跨调——sync 不直接查 DB，workflow 不直接调 Git
+- **Git 层与 DB 层互相不知道对方存在**，只有 commands.py 知道两边的接口
 
 ## 数据模型
 
@@ -127,12 +128,12 @@ User ──< ArticleAuthor >── Article ──< Citation >── Article
 
 | 函数 | 写入顺序 | 说明 |
 |------|---------|------|
-| `create_article_with_content()` | DB → Git → DB | 先建 DB 行获得 ID，再 init repo + commit 正文 |
-| `update_article_content()` | DB → Git → DB | 先验证权限，写文件 commit 后更新 DB 元数据 |
-| `fork_article()` | DB验证 → copy repo → DB | 先验证原文章，再 copy repo，最后建 DB 行 |
-| `rollback_article()` | Git → DB | 先建 revert commit，再更新 DB |
-| `submit_review()` | Git → DB | **唯一 git-first**：评审文件先落 Git，成功后才写 DB |
-| `accept_merge()` | DB → Git → DB | 先验证权限，再 merge git，最后更新 DB |
+| `create_article_with_content()` | Git → DB | 先 init repo + commit 正文和自评，再建 DB 行 |
+| `update_article_content()` | Git → DB | 先 commit 新内容，再更新 DB 元数据 |
+| `fork_article()` | Git → DB | 先 git clone 原 repo，再从 git 推导作者，最后建 DB 行 |
+| `rollback_article()` | Git → DB | 先 checkout 旧版 + commit，再更新 DB |
+| `submit_review()` | Git → DB | 评审文件先落 Git（reviews/{id}.md），成功后才写 DB 评分缓存 |
+| `accept_merge()` | Git → DB | 先 git merge，再从 git 推导作者，最后更新 DB |
 
 ### DB CRUD (storage/db/)
 
@@ -149,12 +150,15 @@ User ──< ArticleAuthor >── Article ──< Citation >── Article
 
 | 函数 | 职责 |
 |------|------|
-| `init_article_repo(article_id, base_dir)` | 创建裸 Git 仓库 + article.md |
-| `commit_article(repo, message, author, email)` | 提交工作区改动 |
-| `get_commit_history(repo)` | 获取提交历史 |
-| `get_diff_between(repo, hash_a, hash_b)` | 两个 commit 之间的 diff |
-| `create_bundle(repo, since_hash)` | 创建增量 bundle |
-| `apply_bundle(repo, bundle_path)` | 应用远程 bundle |
+| `init_article_repo(repo_path)` | 创建 Git 仓库 + reviews/ 目录 |
+| `commit_article(repo_path, message, author_name, author_email)` | 提交工作区改动 |
+| `get_commit_history(repo_path)` | 获取提交历史 |
+| `get_commit_authors(repo_path)` | 从 git commit email 提取作者列表 |
+| `get_diff_between(repo_path, hash1, hash2)` | 两个 commit 之间的 diff |
+| `create_bundle(repo_path, since_hash)` | 创建增量 bundle |
+| `apply_bundle(repo_path, bundle_bytes)` | 应用远程 bundle |
+| `merge_git_repos(target, fork, author_name)` | Git merge fork 到 target |
+| `delete_article_repo(repo_path)` | 删除文章 Git 仓库 |
 
 ### 权限 (policies/articles.py)
 
@@ -165,6 +169,61 @@ User ──< ArticleAuthor >── Article ──< Citation >── Article
 | `assert_can_fork_article()` | 只有 published 状态 |
 | `assert_can_publish_article()` | 只有作者本人 |
 | `assert_can_download()` | 作者本人 / published |
+
+## Git 仓库结构
+
+每篇文章是一个独立的 Git 仓库：
+
+```
+~/.peerpedia/articles/{article_id}/
+├── .git/
+├── article.md                  # 文章正文 + 元数据（YAML frontmatter）
+└── reviews/
+    ├── {reviewer_a}.md         # 评审人 A 的评审 + 与作者的对话线程
+    ├── {reviewer_b}.md         # 评审人 B 的评审 + 与作者的对话线程
+    └── {author_id}.md          # 作者自评（和其他评审同格式）
+```
+
+### 文章文件格式（`article.md` / `article.typ`）
+
+```markdown
+---
+title: A Note on Tensor Networks
+abstract: Tensor networks provide a powerful framework for...
+keywords: [tensor networks, quantum physics]
+categories: [physics, mathematics]
+---
+
+# Introduction
+
+正文内容...
+```
+
+YAML frontmatter 存 title、abstract、keywords、categories——这些字段在 git 中有版本历史，DB 只是查询缓存。
+
+### 评审文件格式（`reviews/{user_id}.md`）
+
+```markdown
+---
+originality: 4
+rigor: 3
+completeness: 4
+pedagogy: 3
+impact: 5
+---
+
+### 费曼 (2024-03-15T10:30:00Z)
+
+论证结构很好，第三节可以再补充一些引理。
+
+### 爱因斯坦 (2024-03-15T14:20:00Z)
+
+感谢反馈，已补充引理。参见 commit abc123。
+```
+
+- **YAML frontmatter** 存评分，Python `yaml` 库直接解析
+- **Markdown 正文** 是评审对话线程——`### 用户名 (时间戳)` 分隔每条消息
+- **一个 reviewer 一个文件**：多轮对话追加在同一个文件末尾
 
 ## 数据流：一个评审的完整路径
 
@@ -179,12 +238,10 @@ commands.py → submit_review():
   3. get_user(db, reviewer_id) → 确认评审人存在
   4. get_article(db, article_id) → 确认文章存在
   5. _write_review_to_git():
-     a. 检查 .git/ 是否存在（无 → 报错，fail-fast）
-     b. 写 reviews/{reviewer_id}/scores.json
-     c. 写 reviews/{reviewer_id}/thread.md
-     d. git commit
-  6. create_review() 或 update_review_scores() → 写 DB
-  7. compute_article_score_for_commit() → 重新算文章总分
+     a. 写 reviews/{reviewer_id}.md（YAML frontmatter + 评论正文）
+     b. git commit
+  6. upsert_review() → 写 DB 评分缓存
+  7. compute_article_score() → 重新算文章总分
   8. compute_author_reputation() → 更新作者声誉
 
 cli.py:
@@ -209,11 +266,10 @@ cli.py:
 
 ## 设计规则（写代码时遵守）
 
-1. **双存储，各司其职** — Git 存内容（正文、评审文件），DB 存状态（status、score、fork_count）。内容有版本历史，状态可查询聚合。评审内容是 git-first，元数据 DB 先行
-2. **Git 不可篡改** — 正文和评审内容一经 git commit 不可修改。DB 中的元数据（score 等）可由 workflow 重算更新
-3. **Fail fast** — 无 Git → 报错，不静默降级
-4. **编排函数不 commit** — commands.py 只做 add/flush，CLI 调 db.commit()
-5. **模块不跨调** — sync 不直接查 DB，workflow 不直接调 Git
-6. **`_resolve_user()` 支持 username + UUID** — 所有涉及用户的 CLI 参数都用它
-7. **每个 CLI 命令支持 `--json`** — 机器可读输出
-8. **空列表用 `[muted]` 提示** — 带引导文案，不是静默空屏
+1. **Git 存内容，DB 存缓存** — Git 仓库存正文 + 评审文件（SOT），DB 存评分缓存 + 元数据（status、fork_count）。评分缓存从 Git 重新计算，不独立编造
+2. **Git-first，DB 后写** — 所有内容先落 Git（commit），成功后才写 DB。Git 失败 → DB 不写
+3. **Git 与 DB 互不知晓** — 两个存储层不互相 import，只有 commands.py 知道两者
+4. **Fail fast** — 无 Git → 报错，不静默降级
+5. **编排函数不 commit** — commands.py 只做 add/flush，CLI 调 db.commit()
+6. **评审是 Markdown 文件** — `reviews/{user_id}.md`，YAML frontmatter 存评分，正文是对话线程
+7. **自评即评审** — 作者自评存在 `reviews/{author_id}.md`，和其他评审同格式同流程

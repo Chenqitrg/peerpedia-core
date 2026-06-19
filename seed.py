@@ -69,145 +69,122 @@ def seed(db_url: str, articles_dir: Path):
         # Physics — relativity / quantum foundations
         {
             "name": "Albert Einstein",
-            "username": "einstein",
             "affiliation": "Princeton",
             "expertise": ["physics", "relativity", "quantum foundations"],
         },
         {
             "name": "Richard Feynman",
-            "username": "feynman",
             "affiliation": "Caltech",
             "expertise": ["physics", "quantum electrodynamics", "path integrals"],
         },
         {
             "name": "Subrahmanyan Chandrasekhar",
-            "username": "chandra",
             "affiliation": "Chicago",
             "expertise": ["astrophysics", "stellar dynamics", "relativity"],
         },
         # Quantum mechanics — Copenhagen school
         {
             "name": "Niels Bohr",
-            "username": "bohr",
             "affiliation": "Copenhagen",
             "expertise": ["quantum mechanics", "atomic structure", "complementarity"],
         },
         {
             "name": "Werner Heisenberg",
-            "username": "heisenberg",
             "affiliation": "Leipzig",
             "expertise": ["quantum mechanics", "matrix mechanics", "uncertainty principle"],
         },
         {
             "name": "Erwin Schrödinger",
-            "username": "schrodinger",
             "affiliation": "Vienna",
             "expertise": ["quantum mechanics", "wave mechanics", "statistical physics"],
         },
         {
             "name": "Paul Dirac",
-            "username": "dirac",
             "affiliation": "Cambridge",
             "expertise": ["quantum mechanics", "relativistic quantum theory", "mathematical physics"],
         },
         {
             "name": "Max Born",
-            "username": "born",
             "affiliation": "Göttingen",
             "expertise": ["quantum mechanics", "probability interpretation", "lattice dynamics"],
         },
         # Mathematics
         {
             "name": "Emmy Noether",
-            "username": "noether",
             "affiliation": "Bryn Mawr",
             "expertise": ["mathematics", "abstract algebra", "mathematical physics"],
         },
         {
             "name": "Ada Lovelace",
-            "username": "lovelace",
             "affiliation": "London",
             "expertise": ["mathematics", "computing", "philosophy of science"],
         },
         {
             "name": "John von Neumann",
-            "username": "vonneumann",
             "affiliation": "IAS Princeton",
             "expertise": ["mathematics", "game theory", "computing", "quantum foundations"],
         },
         # Computer science
         {
             "name": "Alan Turing",
-            "username": "turing",
             "affiliation": "Manchester",
             "expertise": ["computer science", "cryptography", "mathematical logic"],
         },
         {
             "name": "Claude Shannon",
-            "username": "shannon",
             "affiliation": "MIT",
             "expertise": ["information theory", "electrical engineering"],
         },
         {
             "name": "Grace Hopper",
-            "username": "hopper",
             "affiliation": "US Navy / Harvard",
             "expertise": ["computer science", "compilers", "programming languages"],
         },
         # Chemistry / biology
         {
             "name": "Marie Curie",
-            "username": "curie",
             "affiliation": "Sorbonne",
             "expertise": ["chemistry", "radioactivity", "medical physics"],
         },
         {
             "name": "Rosalind Franklin",
-            "username": "franklin",
             "affiliation": "King's College",
             "expertise": ["biology", "crystallography", "molecular structure"],
         },
         {
             "name": "Dorothy Hodgkin",
-            "username": "hodgkin",
             "affiliation": "Oxford",
             "expertise": ["chemistry", "crystallography", "biology"],
         },
         # Neuroscience / neurophysics
         {
             "name": "Francis Crick",
-            "username": "crick",
             "affiliation": "Salk Institute",
             "expertise": ["neurobiology", "molecular biology", "consciousness"],
         },
         {
             "name": "Santiago Ramón y Cajal",
-            "username": "cajal",
             "affiliation": "Madrid",
             "expertise": ["neuroscience", "neuroanatomy", "histology"],
         },
         {
             "name": "Patricia Goldman-Rakic",
-            "username": "goldmanrakic",
             "affiliation": "Yale",
             "expertise": ["neuroscience", "working memory", "prefrontal cortex"],
         },
         # Philosophy
         {
             "name": "Karl Popper",
-            "username": "popper",
             "affiliation": "LSE",
             "expertise": ["philosophy of science", "epistemology", "falsificationism"],
         },
         {
             "name": "Thomas Kuhn",
-            "username": "kuhn",
             "affiliation": "MIT",
             "expertise": ["philosophy of science", "history of science", "paradigm theory"],
         },
         {
             "name": "Hilary Putnam",
-            "username": "putnam",
             "affiliation": "Harvard",
             "expertise": ["philosophy of mind", "philosophy of language", "philosophy of science"],
         },
@@ -216,16 +193,16 @@ def seed(db_url: str, articles_dir: Path):
     pwd_hash = bcrypt.hashpw(default_password.encode(), bcrypt.gensalt()).decode()
     users = {}
     for u in user_defs:
-        existing = session.query(User).filter(User.username == u["username"]).first()
+        existing = session.query(User).filter(User.name == u["name"]).first()
         if existing:
             users[u["name"]] = existing
-            print(f"  User (existing): {u['name']} ({u['username']})")
+            print(f"  User (existing): {u['name']} ({u['name']})")
         else:
             user = User(
                 id=str(uuid.uuid4()),
-                username=u["username"],
+                
                 password_hash=pwd_hash,
-                email=f"{u['username']}@peerpedia.dev",
+                email=f"{u['name']}@peerpedia.dev",
                 name=u["name"],
                 affiliation=u["affiliation"],
                 expertise=u["expertise"],
@@ -234,7 +211,7 @@ def seed(db_url: str, articles_dir: Path):
             session.add(user)
             session.commit()
             users[u["name"]] = user
-            print(f"  User (new): {u['name']} ({u['username']})")
+            print(f"  User (new): {u['name']} ({u['name']})")
 
     print(f"\n  Default password for all users: {default_password}")
     print(f"  Total users: {len(users)}")

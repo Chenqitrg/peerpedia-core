@@ -27,7 +27,6 @@ from peerpedia_core.types.messages import ThreadMessage
 def _make_user(session: Session, name: str, **kwargs) -> User:
     u = User(
         id=kwargs.pop("id", str(uuid.uuid4())),
-        username=f"test_{name}",
         password_hash="$2b$12$test",
         name=name,
         affiliation=kwargs.pop("affiliation", "Test"),
@@ -285,7 +284,6 @@ class TestUserModel:
         session = get_session(engine)
         u = User(
             id=str(uuid.uuid4()),
-            username="zhangsan",
             password_hash="$2b$12$test",
             name="张三",
             affiliation="清华大学",
@@ -303,7 +301,7 @@ class TestUserModel:
 
     def test_default_reputation(self, engine):
         session = get_session(engine)
-        u = User(id=str(uuid.uuid4()), username="lisi", password_hash="$2b$12$test", name="李四")
+        u = User(id=str(uuid.uuid4()), password_hash="$2b$12$test", name="李四")
         session.add(u)
         session.commit()
         u2 = session.get(User, u.id)

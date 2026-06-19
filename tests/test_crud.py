@@ -19,7 +19,7 @@ from peerpedia_core.storage.db.models import (
 
 
 def _make_user(session: Session, name: str) -> User:
-    u = User(id=str(uuid.uuid4()), username=f"test_{name}", password_hash="$2b$12$test", name=name, affiliation="Test")
+    u = User(id=str(uuid.uuid4()), password_hash="$2b$12$test", name=name, affiliation="Test")
     session.add(u)
     session.commit()
     return u
@@ -373,7 +373,7 @@ class TestUserCRUD:
         from peerpedia_core.storage.db.crud_user import create_user
 
         session = get_session(engine)
-        u = create_user(session, username="新用户", name="新用户", affiliation="某大学")
+        u = create_user(session, name="新用户", affiliation="某大学")
         assert u.id is not None
         assert u.name == "新用户"
         assert u.name == "新用户"
@@ -383,7 +383,7 @@ class TestUserCRUD:
         from peerpedia_core.storage.db.crud_user import create_user, get_user
 
         session = get_session(engine)
-        u = create_user(session, username="test", name="test")
+        u = create_user(session, name="test")
         assert get_user(session, u.id).name == "test"
         assert get_user(session, "nonexistent") is None
         session.close()
@@ -392,8 +392,8 @@ class TestUserCRUD:
         from peerpedia_core.storage.db.crud_user import create_user, list_users
 
         session = get_session(engine)
-        create_user(session, username="张三", name="张三")
-        create_user(session, username="李四", name="李四")
+        create_user(session, name="张三")
+        create_user(session, name="李四")
         assert len(list_users(session)) == 2
         session.close()
 
@@ -405,7 +405,7 @@ class TestUserCRUD:
         )
 
         session = get_session(engine)
-        u = create_user(session, username="rep_user", name="rep_user")
+        u = create_user(session, name="rep_user")
         rep = {"professionalism": 4.0, "objectivity": 3.5, "collaboration": 4.5, "pedagogy": 4.0}
         update_user_reputation(session, u.id, rep)
         assert get_user(session, u.id).reputation == rep
@@ -425,8 +425,8 @@ class TestFollowCRUD:
         )
 
         session = get_session(engine)
-        a = create_user(session, username="a", name="A")
-        b = create_user(session, username="b", name="B")
+        a = create_user(session, name="A")
+        b = create_user(session, name="B")
         follow_user(session, a.id, b.id)
         assert is_following(session, a.id, b.id) is True
         assert is_following(session, b.id, a.id) is False
@@ -445,9 +445,9 @@ class TestFollowCRUD:
         )
 
         session = get_session(engine)
-        a = create_user(session, username="a", name="A")
-        b = create_user(session, username="b", name="B")
-        c = create_user(session, username="c", name="C")
+        a = create_user(session, name="A")
+        b = create_user(session, name="B")
+        c = create_user(session, name="C")
         follow_user(session, b.id, a.id)  # b follows a
         follow_user(session, c.id, a.id)  # c follows a
         assert get_follower_count(session, a.id) == 2
@@ -466,7 +466,7 @@ class TestFollowCRUD:
         )
 
         session = get_session(engine)
-        a = create_user(session, username="a", name="A")
+        a = create_user(session, name="A")
         with pytest.raises(ValueError, match="cannot follow themselves"):
             follow_user(session, a.id, a.id)
         session.close()

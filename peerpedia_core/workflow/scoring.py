@@ -14,7 +14,7 @@ from peerpedia_core.types.scores import ReputationScores
 DIMS = ["originality", "rigor", "completeness", "pedagogy", "impact"]
 
 
-def compute_article_score(
+def _aggregate_review_scores(
     reviews: list[dict],
     reviewer_weights: dict[str, float] | None = None,
 ) -> dict | None:
@@ -66,22 +66,18 @@ def compute_article_score(
     return result
 
 
-def compute_article_score_for_commit( # Why not calculating from git repo? This is not complicated because you only take care of one repo
+def compute_article_score(
     session: Session,
     article_id: str,
-    commit_hash: str | None = None,
 ) -> dict | None:
-    """Compute the score for an article by aggregating all reviews.
-
-    Aggregates reviews across all commits; editing a sedimentation article
-    no longer erases existing review scores. The optional *commit_hash*
-    parameter is kept for backward compatibility but no longer filters.
+    """Compute the article score by aggregating all reviews.
 
     Returns ``None`` if no reviews exist for the article.
+    Raises ValueError if the article does not exist.
     """
     article = get_article(session, article_id)
-    if article is None: # Should be no article error
-        return None
+    if article is None:
+        raise ValueError(f"Article not found: {article_id}")
 
     all_reviews = get_reviews_for_article(session, article_id)
     if not all_reviews:
@@ -111,4 +107,4 @@ def compute_article_score_for_commit( # Why not calculating from git repo? This 
     ]
     reviewer_weights = {r.reviewer_id: user_weight_map.get(r.reviewer_id, 1.0) for r in all_reviews}
 
-    return compute_article_score(review_dicts, reviewer_weights)
+    return _aggregate_review_scores(review_dicts, reviewer_weights)

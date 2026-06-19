@@ -123,10 +123,10 @@ Flags: [muted]--json --user ...  (same as CLI)[/]
 
 def _meta_user(name):
     global _repl_user
-    from peerpedia_core.storage.db.crud_user import get_user, get_user_by_username
+    from peerpedia_core.storage.db.crud_user import get_user, get_user_by_name
 
     db = _ensure_db()
-    u = get_user(db, name) or get_user_by_username(db, name)
+    u = get_user(db, name) or get_user_by_name(db, name)
     if u:
         _repl_user = name
         console.print(f"[success]✓[/] User set to [accent]{name}[/]")

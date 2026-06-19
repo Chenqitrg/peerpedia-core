@@ -90,10 +90,9 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(String, primary_key=True)
-    username = Column(String, unique=True, nullable=False)  # login identifier
+    name = Column(String, unique=True, nullable=False)
     password_hash = Column(String, nullable=False)  # bcrypt hash
     email = Column(String, nullable=True)  # format-validated
-    name = Column(String, nullable=False)
     affiliation = Column(String, nullable=False, default="")
     expertise = Column(JSONList, nullable=False, default=list)
     avatar_url = Column(String, nullable=True)

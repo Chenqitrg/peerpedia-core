@@ -10,9 +10,7 @@ boundary — these functions do NOT call ``db.commit()``.
 
 from __future__ import annotations
 
-import shutil
 import uuid
-from pathlib import Path
 
 import git as gitmod
 from sqlalchemy.orm import Session
@@ -53,26 +51,30 @@ from peerpedia_core.storage.git_backend import (
 )
 from peerpedia_core.storage.locks import get_article_lock
 from peerpedia_core.workflow.reputation import compute_author_reputation
-from peerpedia_core.workflow.scoring import compute_article_score_for_commit
+from peerpedia_core.workflow.scoring import compute_article_score
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 
 def rebuild_article_authors(db: Session, article_id: str, new_author_ids: set[str]) -> None:
-    """Merge *new_author_ids* into the article's author list and record
-    the git HEAD hash so incremental rebuilds skip already-scanned commits.
+    """Merge *new_author_ids* into the article's author list.
+
+    Records the current git HEAD hash so incremental scans can skip
+    already-processed commits on the next rebuild.
     """
+    # Read git first — git is the SOT for the checkpoint hash.
+    rp = DEFAULT_ARTICLES_DIR / article_id
+    head_hash = gitmod.Repo(rp).head.commit.hexsha
+
     existing = set(get_author_ids(db, article_id))
     merged = existing | new_author_ids
     if merged != existing:
         set_article_authors(db, article_id, sorted(merged))
 
-    rp = DEFAULT_ARTICLES_DIR / article_id
-    repo = gitmod.Repo(rp)
     article = get_article(db, article_id)
     if article is not None:
-        article.last_author_rebuild_hash = repo.head.commit.hexsha
+        article.last_author_rebuild_hash = head_hash
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -101,7 +103,7 @@ def fork_article(db: Session, article_id: str, user_id: str) -> dict:
     src = DEFAULT_ARTICLES_DIR / article_id
     dst = DEFAULT_ARTICLES_DIR / fork_id
 
-    shutil.copytree(src, dst, symlinks=True)
+    gitmod.Repo.clone_from(str(src), str(dst))
 
     # Derive authors from git first, then write DB — git is the SOT.
     git_authors = get_commit_authors(dst) | {user_id}
@@ -147,24 +149,15 @@ def rollback_article(db: Session, article_id: str, target_hash: str, user_id: st
         raise NotFoundError("Article repo not found")
 
     repo = gitmod.Repo(rp)
-    repo.commit(target_hash)
     repo.git.checkout(target_hash, "--", ".")
 
+    author_name = user.name
     new_hash = commit_article(
-        rp, f"Rollback to {target_hash[:8]}", "System", "system@peerpedia",
+        rp, f"Rollback to {target_hash[:8]}", author_name, f"{user_id}@peerpedia",
     )
     set_sink_start(db, article_id, params.sink.edit_article_default_days)
 
-    author_ids = get_author_ids(db, article_id)
-    upsert_review(
-        db,
-        article_id=article_id,
-        commit_hash=new_hash,
-        reviewer_id=author_ids[0] if author_ids else "system",
-        scope="pool",
-        scores={"originality": 0, "rigor": 0, "completeness": 0, "pedagogy": 0, "impact": 0},
-    )
-    score = compute_article_score_for_commit(db, article_id, new_hash)
+    score = compute_article_score(db, article_id)
     if score is not None:
         article.score = score
 
@@ -181,15 +174,13 @@ def create_article_with_content(
     *,
     title: str,
     content: str,
+    author_ids: list[str],
     format: str = "markdown",
-    user_id: str,
-    author_ids: list[str] | None = None,
     publish: bool = False,
     self_review: dict | None = None,
     abstract: str | None = None,
     keywords: str | None = None,
     categories: str | None = None,
-    article_id: str | None = None,
 ) -> dict:
     """Create an article with content committed to git.
 
@@ -203,62 +194,60 @@ def create_article_with_content(
     if not title.strip():
         raise BadRequestError("Title is required")
 
-    authors = author_ids or [user_id]
-    for aid in authors:
+    for aid in author_ids:
         if get_user(db, aid) is None:
             raise NotFoundError(f"Author '{aid}' not found")
 
     if publish and self_review is None:
         raise BadRequestError("self_review is required when publishing")
 
-    # Validate client-generated ID if provided
-    if article_id is not None:
-        try:
-            uuid.UUID(article_id)
-        except ValueError:
-            raise BadRequestError(f"Invalid article ID: {article_id}")
-        if get_article(db, article_id) is not None:
-            raise ConflictError(f"Article '{article_id}' already exists")
+    article_id = str(uuid.uuid4())
 
+    # Git first — init repo, write content, write self-review, commit.
+    rp = DEFAULT_ARTICLES_DIR / article_id
+    init_article_repo(rp)
+    ext = ".typ" if format == "typst" else ".md"
+    (rp / f"article{ext}").write_text(content)
+    if self_review is not None:
+        import json
+        review_dir = rp / "reviews" / author_ids[0]
+        review_dir.mkdir(parents=True, exist_ok=True)
+        (review_dir / "scores.json").write_text(json.dumps(self_review, indent=2))
+    author_name = author_ids[0]
+    commit_hash = commit_article(
+        rp, "Initial submission", author_name, f"{author_ids[0]}@peerpedia",
+    )
+
+    # Then DB — git is the SOT.
     a = create_article(
         db,
-        id=article_id or str(uuid.uuid4()),
+        id=article_id,
         title=title,
-        abstract=abstract or "",
-        keywords=keywords or "",
-        categories=categories or "",
-        authors=authors,
+        abstract=abstract,
+        keywords=keywords,
+        categories=categories,
+        authors=author_ids,
         status="draft",
     )
 
-    rp = DEFAULT_ARTICLES_DIR / a.id
-    is_new = not (rp / ".git").is_dir()
-    if is_new:
-        init_article_repo(rp)
-
-    ext = ".typ" if format == "typst" else ".md"
-    (rp / f"article{ext}").write_text(content)
-    author_name = authors[0]
-    commit_hash = commit_article(
-        rp, "Initial submission", author_name, f"{authors[0]}@peerpedia",
-    )
-
-    rebuild_article_authors(db, a.id, set(authors))
+    # Record HEAD hash for future incremental author rebuilds.
+    a.last_author_rebuild_hash = commit_hash
 
     if self_review is not None:
         upsert_review(
-            db, article_id=a.id, commit_hash=commit_hash,
-            reviewer_id=authors[0], scope="pool", scores=self_review,
+            db, article_id=article_id, commit_hash=commit_hash,
+            reviewer_id=author_ids[0], scope="pool", scores=self_review,
         )
-        score = compute_article_score_for_commit(db, a.id, commit_hash)
+        score = compute_article_score(db, article_id)
         if score is not None:
             a.score = score
 
     if publish:
-        set_sink_start(db, a.id, params.sink.new_article_default_days)
+        set_sink_start(db, article_id, params.sink.new_article_default_days)
 
+    status = get_article(db, article_id).status
     return {
-        "id": a.id, "title": a.title, "status": a.status,
+        "id": article_id, "title": title, "status": status,
         "commit_hash": commit_hash,
     }
 
@@ -340,7 +329,7 @@ def update_article_content(
                 db, article_id=a.id, commit_hash=commit_hash,
                 reviewer_id=author, scope="pool", scores=self_review,
             )
-        score = compute_article_score_for_commit(db, a.id, commit_hash)
+        score = compute_article_score(db, a.id)
         if score is not None:
             a.score = score
 
@@ -389,7 +378,7 @@ def submit_review(
 
     author_ids = get_author_ids(db, article_id)
 
-    _write_review_to_git(article_id, reviewer_id, scores, comment, user, article.status)
+    _write_review_to_git(article_id, reviewer_id, scores, comment, user)
 
     r = upsert_review(
         db, article_id=article_id, commit_hash=commit_hash,
@@ -400,7 +389,7 @@ def submit_review(
     if (rp / ".git").is_dir():
         try:
             commits = get_commit_history(rp)
-            score = compute_article_score_for_commit(db, article_id, commits[0]["hash"])
+            score = compute_article_score(db, article_id)
             if score is not None:
                 article.score = score
         except ValueError:
@@ -418,7 +407,6 @@ def _write_review_to_git(
     scores: dict,
     comment: str,
     reviewer,
-    article_status: str,
 ) -> None:
     """Write review files to git repo (git-first principle)."""
     import json
@@ -434,7 +422,7 @@ def _write_review_to_git(
 
     if comment:
         ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        display_name = reviewer.name or reviewer.username
+        display_name = reviewer.name
         thread_path = review_dir / "thread.md"
         existing = thread_path.read_text() if thread_path.exists() else ""
         thread_path.write_text(existing + f"### {display_name} ({ts})\n\n{comment}\n\n")
@@ -444,7 +432,7 @@ def _write_review_to_git(
     if not acquired:
         raise ConflictError("Article busy — retry later")
     try:
-        display_name = reviewer.name or reviewer.username
+        display_name = reviewer.name
         commit_article(rp, f"Review by {display_name}", display_name, f"{reviewer_id}@peerpedia")
     finally:
         lock.release()
@@ -477,7 +465,7 @@ def accept_merge(db: Session, article_id: str, proposal_id: str, user_id: str) -
         return {"id": mp.id, "status": mp.status}
 
     try:
-        merge_git_repos(target_repo, fork_repo, user.name or user.username)
+        merge_git_repos(target_repo, fork_repo, user.name)
     except MergeConflictError:
         return {
             "status": "conflict",

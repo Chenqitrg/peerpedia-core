@@ -63,25 +63,18 @@ def _generate_anonymous_name() -> str:
     return f"{secrets.choice(adjectives)}{secrets.choice(nouns)}"
 
 
-def _new_username() -> str:
-    """Generate a unique default username."""
-    return f"u_{uuid.uuid4().hex[:12]}"
-
-
 def create_user(
     session: Session,
     name: str,
-    username: str,
     affiliation: str = "",
     password_hash: str = "",
     email: str = "",
 ) -> User:
     u = User(
         id=str(uuid.uuid4()),
-        username=username,
+        name=name,
         password_hash=password_hash,
         email=email,
-        name=name,
         affiliation=affiliation,
     )
     session.add(u)
@@ -93,8 +86,8 @@ def get_user(session: Session, user_id: str) -> User | None:
     return session.get(User, user_id)
 
 
-def get_user_by_username(session: Session, username: str) -> User | None:
-    return session.query(User).filter(User.username == username).first()
+def get_user_by_name(session: Session, name: str) -> User | None:
+    return session.query(User).filter(User.name == name).first()
 
 
 def list_users(session: Session) -> list[User]:

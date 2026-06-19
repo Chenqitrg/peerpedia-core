@@ -66,7 +66,7 @@ def compute_article_score(
     return result
 
 
-def compute_article_score_for_commit(
+def compute_article_score_for_commit( # Why not calculating from git repo? This is not complicated because you only take care of one repo
     session: Session,
     article_id: str,
     commit_hash: str | None = None,
@@ -80,7 +80,7 @@ def compute_article_score_for_commit(
     Returns ``None`` if no reviews exist for the article.
     """
     article = get_article(session, article_id)
-    if article is None:
+    if article is None: # Should be no article error
         return None
 
     all_reviews = get_reviews_for_article(session, article_id)

@@ -17,6 +17,7 @@ Contract:
 """
 
 from datetime import datetime, timedelta, timezone
+import uuid
 
 import pytest
 
@@ -30,10 +31,10 @@ from peerpedia_core.workflow.sedimentation import (
 
 def _make_user(session, name):
     u = User(
+        id=str(uuid.uuid4()),
         username=f"sp_{name}",
         password_hash="",
         name=name,
-        anonymous_name=f"anon_{name}",
     )
     session.add(u)
     session.commit()
@@ -41,7 +42,7 @@ def _make_user(session, name):
 
 
 def _make_article(session, authors, **kw):
-    a = Article(**kw)
+    a = Article(title="", **kw)
     session.add(a)
     session.flush()
     for pos, aid in enumerate(authors):

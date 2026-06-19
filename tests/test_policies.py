@@ -3,6 +3,8 @@
 
 """Tests for article permission policy functions."""
 
+import uuid
+
 import pytest
 
 from peerpedia_core.exceptions import ConflictError, NotAuthorizedError, NotFoundError
@@ -27,7 +29,7 @@ from peerpedia_core.storage.db.models import Article, ArticleAuthor, User
 
 def _user(**kwargs):
     """Create a User with required fields filled in."""
-    defaults = {"password_hash": "", "name": "Test User", "anonymous_name": "anon", "affiliation": "Test"}
+    defaults = {"id": str(uuid.uuid4()), "username": f"researcher_{uuid.uuid4().hex[:8]}", "password_hash": "", "name": "Test User", "affiliation": "Test"}
     defaults.update(kwargs)
     return User(**defaults)
 
@@ -52,7 +54,7 @@ class TestVisibilityRules:
 class TestGetArticleOrRaise:
     def test_returns_article_when_exists(self, db_engine):
         s = get_session(db_engine)
-        a = Article(id="a-exists", status="draft", fork_count=0)
+        a = Article(title="", id="a-exists", status="draft", fork_count=0)
         s.add(a)
         s.commit()
 
@@ -70,7 +72,7 @@ class TestGetArticleOrRaise:
 class TestReadPermissions:
     def test_can_read_published_article(self, db_engine):
         s = get_session(db_engine)
-        a = Article(id="a-pub", status="published", fork_count=0)
+        a = Article(title="", id="a-pub", status="published", fork_count=0)
         s.add(a)
         s.commit()
 
@@ -81,7 +83,7 @@ class TestReadPermissions:
         s = get_session(db_engine)
         u = _user(id="u-draft", username="draft_user")
         s.add(u)
-        a = Article(id="a-draft", status="draft", fork_count=0)
+        a = Article(title="", id="a-draft", status="draft", fork_count=0)
         s.add(a)
         s.flush()
         s.add(ArticleAuthor(article_id="a-draft", author_id="u-draft", position=0))
@@ -96,7 +98,7 @@ class TestReadPermissions:
         s = get_session(db_engine)
         u = _user(id="u-other", username="other")
         s.add(u)
-        a = Article(id="a-other-draft", status="draft", fork_count=0)
+        a = Article(title="", id="a-other-draft", status="draft", fork_count=0)
         s.add(a)
         s.commit()
 
@@ -109,7 +111,7 @@ class TestWritePermissions:
         s = get_session(db_engine)
         u = _user(id="u-sync", username="sync_user")
         s.add(u)
-        a = Article(id="a-sync", status="draft", fork_count=0)
+        a = Article(title="", id="a-sync", status="draft", fork_count=0)
         s.add(a)
         s.flush()
         s.add(ArticleAuthor(article_id="a-sync", author_id="u-sync", position=0))
@@ -124,7 +126,7 @@ class TestWritePermissions:
         s = get_session(db_engine)
         u = _user(id="u-nosync", username="no_sync")
         s.add(u)
-        a = Article(id="a-nosync", status="draft", fork_count=0)
+        a = Article(title="", id="a-nosync", status="draft", fork_count=0)
         s.add(a)
         s.commit()
 
@@ -137,7 +139,7 @@ class TestForkPermissions:
         s = get_session(db_engine)
         u = _user(id="u-fork", username="fork_user")
         s.add(u)
-        a = Article(id="a-fork", status="published", fork_count=0)
+        a = Article(title="", id="a-fork", status="published", fork_count=0)
         s.add(a)
         s.commit()
 
@@ -150,7 +152,7 @@ class TestForkPermissions:
         s = get_session(db_engine)
         u = _user(id="u-nofork", username="no_fork")
         s.add(u)
-        a = Article(id="a-nofork", status="draft", fork_count=0)
+        a = Article(title="", id="a-nofork", status="draft", fork_count=0)
         s.add(a)
         s.commit()
 
@@ -163,11 +165,12 @@ class TestForkPermissions:
         s = get_session(db_engine)
         u = _user(id="u-dup", username="dup_fork")
         s.add(u)
-        a = Article(id="a-dup-fork", status="published", fork_count=0)
+        a = Article(title="", id="a-dup-fork", status="published", fork_count=0)
         s.add(a)
         s.flush()
         # Simulate an existing fork by the same user
         fork = Article(
+            title="Fork of General Relativity",
             id="fork-existing",
             status="draft",
             fork_count=0,
@@ -190,7 +193,7 @@ class TestForkPermissions:
 class TestDownloadPermissions:
     def test_anyone_can_download_published(self, db_engine):
         s = get_session(db_engine)
-        a = Article(id="a-dl-pub", status="published", fork_count=0)
+        a = Article(title="", id="a-dl-pub", status="published", fork_count=0)
         s.add(a)
         s.commit()
 
@@ -201,7 +204,7 @@ class TestDownloadPermissions:
         s = get_session(db_engine)
         u = _user(id="u-dl-author", username="dl_author")
         s.add(u)
-        a = Article(id="a-dl-draft", status="draft", fork_count=0)
+        a = Article(title="", id="a-dl-draft", status="draft", fork_count=0)
         s.add(a)
         s.flush()
         s.add(ArticleAuthor(article_id="a-dl-draft", author_id="u-dl-author", position=0))
@@ -214,7 +217,7 @@ class TestDownloadPermissions:
         s = get_session(db_engine)
         u = _user(id="u-dl-nonauth", username="dl_nonauth")
         s.add(u)
-        a = Article(id="a-dl-draft2", status="draft", fork_count=0)
+        a = Article(title="", id="a-dl-draft2", status="draft", fork_count=0)
         s.add(a)
         s.commit()
 
@@ -235,7 +238,7 @@ class TestDownloadPermissions:
 class TestAnonymousRead:
     def test_anonymous_cannot_read_draft(self, db_engine):
         s = get_session(db_engine)
-        a = Article(id="a-anon-draft", status="draft", fork_count=0)
+        a = Article(title="", id="a-anon-draft", status="draft", fork_count=0)
         s.add(a)
         s.commit()
 
@@ -244,7 +247,7 @@ class TestAnonymousRead:
 
     def test_anonymous_can_read_published(self, db_engine):
         s = get_session(db_engine)
-        a = Article(id="a-anon-pub", status="published", fork_count=0)
+        a = Article(title="", id="a-anon-pub", status="published", fork_count=0)
         s.add(a)
         s.commit()
 
@@ -253,7 +256,7 @@ class TestAnonymousRead:
 
     def test_anonymous_can_read_sedimentation(self, db_engine):
         s = get_session(db_engine)
-        a = Article(id="a-anon-sed", status="sedimentation", fork_count=0)
+        a = Article(title="", id="a-anon-sed", status="sedimentation", fork_count=0)
         s.add(a)
         s.commit()
 
@@ -286,7 +289,7 @@ class TestAllAuthorOnlyWrappers:
         s = get_session(db_engine)
         u = _user(id=f"u-{action}", username=f"user_{action}")
         s.add(u)
-        a = Article(id=f"a-{action}", status="draft", fork_count=0)
+        a = Article(title="", id=f"a-{action}", status="draft", fork_count=0)
         s.add(a)
         s.commit()
 
@@ -306,7 +309,7 @@ class TestAllAuthorOnlyWrappers:
         s = get_session(db_engine)
         u = _user(id="u-auth-all", username="auth_all")
         s.add(u)
-        a = Article(id="a-auth-all", status="draft", fork_count=0)
+        a = Article(title="", id="a-auth-all", status="draft", fork_count=0)
         s.add(a)
         s.flush()
         s.add(ArticleAuthor(article_id="a-auth-all", author_id="u-auth-all", position=0))
@@ -320,7 +323,7 @@ class TestAllAuthorOnlyWrappers:
         s = get_session(db_engine)
         u = _user(id="u-ext-sink", username="ext_sink")
         s.add(u)
-        a = Article(id="a-ext-sink", status="sedimentation", fork_count=0)
+        a = Article(title="", id="a-ext-sink", status="sedimentation", fork_count=0)
         s.add(a)
         s.flush()
         s.add(ArticleAuthor(article_id="a-ext-sink", author_id="u-ext-sink", position=0))

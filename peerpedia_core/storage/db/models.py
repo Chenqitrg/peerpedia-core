@@ -32,7 +32,7 @@ class Article(Base):
     __tablename__ = "articles"
 
     id = Column(String, primary_key=True, default=_new_id)
-    title = Column(String, nullable=False, default="")
+    title = Column(String, nullable=False)
     abstract = Column(String, nullable=True)
     keywords = Column(JSONList, nullable=True)
     categories = Column(JSONList, nullable=True)
@@ -66,8 +66,7 @@ class Review(Base):
     reviewer_id = Column(String, ForeignKey("users.id"), nullable=False)
     scope = Column(String, nullable=False)  # "pool" | "published"
     scores = Column(JSONDict, nullable=False)  # FiveDimScores as dict
-    contributions = Column(JSONDict, nullable=True)  # author_id → 5-dim ratios
-    thread = Column(JSONList, nullable=False, default=list)  # list[dict] of ThreadMessage
+    contributions = Column(JSONDict, nullable=True)  # author_id → {novelty, rigor, clarity, impact, reproducibility} ratios; feeds into User.reputation
     created_at = Column(DateTime, nullable=False, default=_utcnow)
     updated_at = Column(DateTime, nullable=False, default=_utcnow, onupdate=_utcnow)
 
@@ -90,12 +89,11 @@ class ArticleAuthor(Base):
 class User(Base):
     __tablename__ = "users"
 
-    id = Column(String, primary_key=True, default=_new_id)
+    id = Column(String, primary_key=True)
     username = Column(String, unique=True, nullable=False)  # login identifier
     password_hash = Column(String, nullable=False)  # bcrypt hash
     email = Column(String, nullable=True)  # format-validated
     name = Column(String, nullable=False)
-    anonymous_name = Column(String, nullable=False, default="")
     affiliation = Column(String, nullable=False, default="")
     expertise = Column(JSONList, nullable=False, default=list)
     avatar_url = Column(String, nullable=True)
@@ -139,7 +137,6 @@ class MergeProposal(Base):
     target_article_id = Column(String, ForeignKey("articles.id"), nullable=False)
     proposer_id = Column(String, ForeignKey("users.id"), nullable=False)
     status = Column(String, nullable=False, default="open")  # open|accepted|rejected
-    thread = Column(JSONList, nullable=False, default=list)  # list[dict] of ThreadMessage
     created_at = Column(DateTime, nullable=False, default=_utcnow)
     resolved_at = Column(DateTime, nullable=True)
 

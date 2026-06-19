@@ -12,7 +12,7 @@ registered in ``peerpedia_api.main``.
 class PeerpediaError(Exception):
     """Base for all PeerPedia business-logic errors."""
 
-    def __init__(self, detail: str = ""):
+    def __init__(self, detail: str):
         self.detail = detail
 
 

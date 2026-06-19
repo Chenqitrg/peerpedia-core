@@ -25,15 +25,14 @@ from pathlib import Path
 
 
 def seed(db_url: str, articles_dir: Path):
+    import uuid
+
     from peerpedia_core.storage.db.crud_article import (
         create_article,
         set_sink_start,
         update_article_status,
     )
-    from peerpedia_core.storage.db.crud_review import (
-        add_thread_message,
-        upsert_review,
-    )
+    from peerpedia_core.storage.db.crud_review import upsert_review
     from peerpedia_core.storage.db.engine import get_engine, init_db
     from peerpedia_core.storage.db.models import (
         Article,
@@ -71,21 +70,18 @@ def seed(db_url: str, articles_dir: Path):
         {
             "name": "Albert Einstein",
             "username": "einstein",
-            "anonymous_name": "Physicist42",
             "affiliation": "Princeton",
             "expertise": ["physics", "relativity", "quantum foundations"],
         },
         {
             "name": "Richard Feynman",
             "username": "feynman",
-            "anonymous_name": "BongoPlayer",
             "affiliation": "Caltech",
             "expertise": ["physics", "quantum electrodynamics", "path integrals"],
         },
         {
             "name": "Subrahmanyan Chandrasekhar",
             "username": "chandra",
-            "anonymous_name": "StarWatcher",
             "affiliation": "Chicago",
             "expertise": ["astrophysics", "stellar dynamics", "relativity"],
         },
@@ -93,35 +89,30 @@ def seed(db_url: str, articles_dir: Path):
         {
             "name": "Niels Bohr",
             "username": "bohr",
-            "anonymous_name": "CopenhagenDan",
             "affiliation": "Copenhagen",
             "expertise": ["quantum mechanics", "atomic structure", "complementarity"],
         },
         {
             "name": "Werner Heisenberg",
             "username": "heisenberg",
-            "anonymous_name": "UncertainMan",
             "affiliation": "Leipzig",
             "expertise": ["quantum mechanics", "matrix mechanics", "uncertainty principle"],
         },
         {
             "name": "Erwin Schrödinger",
             "username": "schrodinger",
-            "anonymous_name": "CatLover",
             "affiliation": "Vienna",
             "expertise": ["quantum mechanics", "wave mechanics", "statistical physics"],
         },
         {
             "name": "Paul Dirac",
             "username": "dirac",
-            "anonymous_name": "AntimatterMan",
             "affiliation": "Cambridge",
             "expertise": ["quantum mechanics", "relativistic quantum theory", "mathematical physics"],
         },
         {
             "name": "Max Born",
             "username": "born",
-            "anonymous_name": "ProbabilityWave",
             "affiliation": "Göttingen",
             "expertise": ["quantum mechanics", "probability interpretation", "lattice dynamics"],
         },
@@ -129,21 +120,18 @@ def seed(db_url: str, articles_dir: Path):
         {
             "name": "Emmy Noether",
             "username": "noether",
-            "anonymous_name": "SymmetrySeeker",
             "affiliation": "Bryn Mawr",
             "expertise": ["mathematics", "abstract algebra", "mathematical physics"],
         },
         {
             "name": "Ada Lovelace",
             "username": "lovelace",
-            "anonymous_name": "FirstProgrammer",
             "affiliation": "London",
             "expertise": ["mathematics", "computing", "philosophy of science"],
         },
         {
             "name": "John von Neumann",
             "username": "vonneumann",
-            "anonymous_name": "GameTheorist",
             "affiliation": "IAS Princeton",
             "expertise": ["mathematics", "game theory", "computing", "quantum foundations"],
         },
@@ -151,21 +139,18 @@ def seed(db_url: str, articles_dir: Path):
         {
             "name": "Alan Turing",
             "username": "turing",
-            "anonymous_name": "CodeBreaker",
             "affiliation": "Manchester",
             "expertise": ["computer science", "cryptography", "mathematical logic"],
         },
         {
             "name": "Claude Shannon",
             "username": "shannon",
-            "anonymous_name": "BitMaster",
             "affiliation": "MIT",
             "expertise": ["information theory", "electrical engineering"],
         },
         {
             "name": "Grace Hopper",
             "username": "hopper",
-            "anonymous_name": "Debugger42",
             "affiliation": "US Navy / Harvard",
             "expertise": ["computer science", "compilers", "programming languages"],
         },
@@ -173,21 +158,18 @@ def seed(db_url: str, articles_dir: Path):
         {
             "name": "Marie Curie",
             "username": "curie",
-            "anonymous_name": "RadiantOne",
             "affiliation": "Sorbonne",
             "expertise": ["chemistry", "radioactivity", "medical physics"],
         },
         {
             "name": "Rosalind Franklin",
             "username": "franklin",
-            "anonymous_name": "DoubleHelix",
             "affiliation": "King's College",
             "expertise": ["biology", "crystallography", "molecular structure"],
         },
         {
             "name": "Dorothy Hodgkin",
             "username": "hodgkin",
-            "anonymous_name": "CrystalQueen",
             "affiliation": "Oxford",
             "expertise": ["chemistry", "crystallography", "biology"],
         },
@@ -195,21 +177,18 @@ def seed(db_url: str, articles_dir: Path):
         {
             "name": "Francis Crick",
             "username": "crick",
-            "anonymous_name": "NeuralCoder",
             "affiliation": "Salk Institute",
             "expertise": ["neurobiology", "molecular biology", "consciousness"],
         },
         {
             "name": "Santiago Ramón y Cajal",
             "username": "cajal",
-            "anonymous_name": "NeuronDrawer",
             "affiliation": "Madrid",
             "expertise": ["neuroscience", "neuroanatomy", "histology"],
         },
         {
             "name": "Patricia Goldman-Rakic",
             "username": "goldmanrakic",
-            "anonymous_name": "PrefrontalCortex",
             "affiliation": "Yale",
             "expertise": ["neuroscience", "working memory", "prefrontal cortex"],
         },
@@ -217,21 +196,18 @@ def seed(db_url: str, articles_dir: Path):
         {
             "name": "Karl Popper",
             "username": "popper",
-            "anonymous_name": "Falsifier42",
             "affiliation": "LSE",
             "expertise": ["philosophy of science", "epistemology", "falsificationism"],
         },
         {
             "name": "Thomas Kuhn",
             "username": "kuhn",
-            "anonymous_name": "ParadigmShift",
             "affiliation": "MIT",
             "expertise": ["philosophy of science", "history of science", "paradigm theory"],
         },
         {
             "name": "Hilary Putnam",
             "username": "putnam",
-            "anonymous_name": "BrainInAVat",
             "affiliation": "Harvard",
             "expertise": ["philosophy of mind", "philosophy of language", "philosophy of science"],
         },
@@ -246,11 +222,11 @@ def seed(db_url: str, articles_dir: Path):
             print(f"  User (existing): {u['name']} ({u['username']})")
         else:
             user = User(
+                id=str(uuid.uuid4()),
                 username=u["username"],
                 password_hash=pwd_hash,
                 email=f"{u['username']}@peerpedia.dev",
                 name=u["name"],
-                anonymous_name=u["anonymous_name"],
                 affiliation=u["affiliation"],
                 expertise=u["expertise"],
                 reputation={"professionalism": 4.0, "objectivity": 4.0, "collaboration": 4.0, "pedagogy": 4.0},
@@ -1898,22 +1874,8 @@ program and data. This is the von Neumann architecture.""",
                 session.flush()
             except Exception:
                 continue
-        # Only add if thread is currently empty
-        if review.thread and len(review.thread) > 0:
-            continue
-        for sender_name, content in messages:
-            sender = users[sender_name]
-            add_thread_message(
-                session,
-                review.id,
-                {
-                    "author_id": sender.id,
-                    "author_name": sender.name,
-                    "content": content,
-                    "created_at": datetime.now(timezone.utc).isoformat(),
-                },
-            )
-            thread_count += 1
+        # Thread messages now live in git (reviews/<reviewer_id>/thread.md).
+        # Skipping DB thread seeding — use git-based review submission instead.
 
     session.commit()
     print(f"  Threads: {thread_count} messages new")

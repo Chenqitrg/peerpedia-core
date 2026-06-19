@@ -4,6 +4,8 @@
 """Tests for cleaned DB models — Article, Review, User, Follow, Bookmark,
 MergeProposal, Citation."""
 
+import uuid
+
 import pytest
 from sqlalchemy.orm import Session
 
@@ -24,13 +26,15 @@ from peerpedia_core.types.messages import ThreadMessage
 
 def _make_user(session: Session, name: str, **kwargs) -> User:
     u = User(
+        id=kwargs.pop("id", str(uuid.uuid4())),
         username=f"test_{name}",
         password_hash="$2b$12$test",
         name=name,
         affiliation=kwargs.pop("affiliation", "Test"),
-        anonymous_name=kwargs.pop("anonymous_name", f"anon_{name}"),
         **kwargs,
     )
+    # Discard deprecated fields silently
+    kwargs.pop("anonymous_name", None)
     session.add(u)
     session.commit()
     return u
@@ -41,6 +45,7 @@ def _make_article(session: Session, **kwargs) -> Article:
 
     author_ids = kwargs.pop("authors", [])
     a = Article(
+        title=kwargs.pop("title", ""),
         status=kwargs.pop("status", "draft"),
         forked_from=kwargs.pop("forked_from", None),
         **kwargs,
@@ -65,7 +70,7 @@ class TestArticle:
 
         session = get_session(engine)
         user = _make_user(session, "testuser")
-        a = Article(status="draft")
+        a = Article(title="", status="draft")
         session.add(a)
         session.flush()
         session.add(ArticleAuthor(article_id=a.id, author_id=user.id, position=0))
@@ -159,7 +164,7 @@ class TestArticle:
 class TestReview:
     """评审 + 对话线程"""
 
-    def test_create_review(self, engine):
+    def test_upsert_review(self, engine):
         session = get_session(engine)
         user = _make_user(session, "reviewer")
         author = _make_user(session, "author")
@@ -178,7 +183,6 @@ class TestReview:
         assert r.commit_hash == "abc123"
         assert r.scope == "pool"
         assert r.scores["originality"] == 4.0
-        assert r.thread == []
         session.close()
 
     def test_both_scopes_for_same_reviewer(self, engine):
@@ -232,28 +236,6 @@ class TestReview:
             session.commit()
         session.close()
 
-    def test_thread_stored_as_dict_list(self, engine):
-        session = get_session(engine)
-        author = _make_user(session, "au2")
-        reviewer = _make_user(session, "rv2")
-        article = _make_article(session, status="published", authors=[author.id])
-        msg = ThreadMessage(author_id=reviewer.id, content="需要补充证明。")
-        review = Review(
-            article_id=article.id,
-            commit_hash="abc",
-            reviewer_id=reviewer.id,
-            scope="published",
-            scores={"originality": 3, "rigor": 3, "completeness": 3, "pedagogy": 3, "impact": 3},
-            thread=[msg.to_dict()],
-        )
-        session.add(review)
-        session.commit()
-        r = session.get(Review, review.id)
-        assert len(r.thread) == 1
-        assert r.thread[0]["author_id"] == reviewer.id
-        assert "证明" in r.thread[0]["content"]
-        session.close()
-
     def test_self_review_is_just_a_review(self, engine):
         session = get_session(engine)
         author = _make_user(session, "self_author")
@@ -302,10 +284,10 @@ class TestUserModel:
     def test_create_user(self, engine):
         session = get_session(engine)
         u = User(
+            id=str(uuid.uuid4()),
             username="zhangsan",
             password_hash="$2b$12$test",
             name="张三",
-            anonymous_name="星云评审员",
             affiliation="清华大学",
             expertise=["理论物理", "数学"],
             reputation={"professionalism": 3.5, "objectivity": 4.0, "collaboration": 2.0, "pedagogy": 4.5},
@@ -314,14 +296,14 @@ class TestUserModel:
         session.commit()
         u2 = session.get(User, u.id)
         assert u2.name == "张三"
-        assert u2.anonymous_name == "星云评审员"
+        assert u2.name == "张三"
         assert u2.expertise == ["理论物理", "数学"]
         assert u2.reputation["objectivity"] == 4.0
         session.close()
 
     def test_default_reputation(self, engine):
         session = get_session(engine)
-        u = User(username="lisi", password_hash="$2b$12$test", name="李四", anonymous_name="anon_li")
+        u = User(id=str(uuid.uuid4()), username="lisi", password_hash="$2b$12$test", name="李四")
         session.add(u)
         session.commit()
         u2 = session.get(User, u.id)
@@ -400,29 +382,6 @@ class TestMergeProposal:
         session.commit()
         assert mp.proposer_id == forker.id
         assert mp.status == "open"
-        assert mp.thread == []
-        session.close()
-
-    def test_merge_thread(self, engine):
-        session = get_session(engine)
-        author = _make_user(session, "oa2")
-        forker = _make_user(session, "fo2")
-        original = _make_article(session, status="published", authors=[author.id])
-        fork = _make_article(session, status="draft", authors=[forker.id], forked_from=original.id)
-        mp = MergeProposal(
-            fork_article_id=fork.id,
-            target_article_id=original.id,
-            proposer_id=forker.id,
-            status="open",
-            thread=[
-                ThreadMessage(author_id=forker.id, content="请求合并，补充了第三章。").to_dict(),
-                ThreadMessage(author_id=author.id, content="收到，我看看。").to_dict(),
-            ],
-        )
-        session.add(mp)
-        session.commit()
-        m2 = session.get(MergeProposal, mp.id)
-        assert len(m2.thread) == 2
         session.close()
 
     def test_valid_statuses(self, engine):

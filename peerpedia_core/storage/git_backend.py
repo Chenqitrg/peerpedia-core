@@ -1,12 +1,14 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""Layer 0: Git storage backend.
+"""Layer 0: Git storage backend for article content and reviews.
 
 Every article is an independent git repository stored under
 ~/.peerpedia/articles/<article-id>/.
 
-This is the immutable storage format — the git object format IS the protocol.
+Git stores content (article body, review files) — the things that need
+version history, diff, and fork/merge.  Metadata (status, scores, fork
+count) lives in the database so it can be queried and aggregated.
 """
 
 import tempfile
@@ -393,3 +395,16 @@ def get_article_lock(article_id: str) -> threading.Lock:
             lock = threading.Lock()
             _locks_dict[article_id] = lock
     return lock
+
+
+def delete_article_repo(article_id: str, base_dir: Path | None = None) -> None:
+    """Delete the git repository for an article (idempotent).
+
+    Called by orchestration layer AFTER the database record has been deleted.
+    """
+    import shutil
+
+    root = base_dir or DEFAULT_ARTICLES_DIR
+    repo_path = root / article_id
+    if repo_path.exists():
+        shutil.rmtree(str(repo_path))

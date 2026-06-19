@@ -93,19 +93,6 @@ def init_db(engine: Engine) -> None:
     Base.metadata.create_all(engine)
 
 
-def migrate_db(engine: Engine) -> None:
-    """Run schema migrations that can't be expressed via create_all (e.g. column additions)."""
-    import sqlalchemy as sa
-
-    with engine.connect() as conn:
-        # Check if last_author_rebuild_hash column exists
-        insp = sa.inspect(conn)
-        columns = [c["name"] for c in insp.get_columns("articles")]
-        if "last_author_rebuild_hash" not in columns:
-            conn.execute(sa.text("ALTER TABLE articles ADD COLUMN last_author_rebuild_hash TEXT"))
-            conn.commit()
-
-
 _factory_cache: dict = {}
 
 

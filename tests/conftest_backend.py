@@ -4,6 +4,7 @@
 """Shared fixtures for backend tests."""
 
 import tempfile
+import uuid
 
 import pytest
 from peerpedia_api.deps import create_token
@@ -15,7 +16,7 @@ from sqlalchemy.orm import Session
 
 def make_article(session: Session, /, *, authors: list | None = None, **kwargs):
     """Create an Article with optional author rows in the join table."""
-    a = Article(**kwargs)
+    a = Article(title="", **kwargs)
     session.add(a)
     session.flush()
     if authors:
@@ -67,7 +68,7 @@ def _make_client_fixture(app, db_engine, db_override_only=False):
     if not db_override_only:
         # Create a default user and override require_user for convenience.
         s = get_session(db_engine)
-        _u = User(username="test_auth_user", password_hash="", name="AuthUser", anonymous_name="anon", affiliation="TestU")
+        _u = User(id=str(uuid.uuid4()), username="test_auth_user", password_hash="", name="AuthUser", affiliation="TestU")
         s.add(_u)
         s.commit()
         _uid = _u.id

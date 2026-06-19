@@ -14,6 +14,7 @@ State assumptions explicitly. If uncertain, ask rather than guess.
 Present multiple interpretations when ambiguity exists.
 Push back when a simpler approach exists.
 Stop when confused. Name what's unclear.
+If you code before thinking, you are IDOIT!
 
 
 ## Goal-Driven Execution

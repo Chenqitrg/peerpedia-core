@@ -117,7 +117,7 @@ _assert "$OUT" "5" "F4.2 review scores visible"
 echo "=== Flow 5: Fork & Merge ==="
 
 # Need published article for fork. Create+publish via Python to get published status.
-FORK_SRC=$(HOME="$PEERPEDIA_HOME" .venv/bin/python -c "
+FORK_SRC=$(HOME="$PEERPEDIA_HOME" python -c "
 import os
 from peerpedia_core.storage.db.engine import get_engine, get_session, init_db
 from peerpedia_core.storage.db.crud_article import create_article

@@ -319,6 +319,148 @@ class TestBundleSync:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# find_common_ancestor — interactive k-exponential + binary refinement
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestFindCommonAncestor:
+    """Interactive common ancestor search with mock probe."""
+
+    def _make_repo_with_n_commits(
+        self, base_dir: Path, article_id: str, n: int,
+    ) -> tuple[Path, list[str]]:
+        """Create a repo with *n* commits. Returns (repo_path, hashes_from_HEAD)."""
+        from peerpedia_core.storage.git_backend import commit_article, init_article_repo
+
+        rp = init_article_repo(base_dir / article_id)
+        hashes = []
+        for i in range(1, n + 1):
+            (rp / "article.md").write_text(f"v{i}")
+            h = commit_article(rp, f"commit {i}", "Author", "a@b.com")
+            hashes.append(h)
+        hashes.reverse()  # index 0 = HEAD, index n-1 = initial commit
+        return rp, hashes
+
+    # ── Happy path tests ──────────────────────────────────────────────────
+
+    def test_fork_at_probe_point(self, articles_dir):
+        """Fork exactly at a probe distance (dist=5)."""
+        from peerpedia_core.storage.git_backend import find_common_ancestor
+
+        rp, hashes = self._make_repo_with_n_commits(articles_dir, "fork-probe", 10)
+
+        # Fork at dist=5: dist 0-4 = False, dist >= 5 = True
+        def probe(h: str) -> bool | None:
+            idx = hashes.index(h)
+            return idx >= 5
+
+        result = find_common_ancestor(rp, probe)
+        assert result == hashes[5]  # exact match at fork point
+
+    def test_fork_between_probe_points(self, articles_dir):
+        """Fork between probe points — binary refinement finds exact match."""
+        from peerpedia_core.storage.git_backend import find_common_ancestor
+
+        rp, hashes = self._make_repo_with_n_commits(articles_dir, "fork-between", 10)
+
+        # Fork at dist=3: 0=False, 1=False, 5=True → binary in (1,5]
+        def probe(h: str) -> bool | None:
+            idx = hashes.index(h)
+            return idx >= 3
+
+        result = find_common_ancestor(rp, probe)
+        assert result == hashes[3]  # binary refinement found exact fork
+
+    def test_head_is_common_ancestor(self, articles_dir):
+        """HEAD is common — remote is ahead or identical."""
+        from peerpedia_core.storage.git_backend import find_common_ancestor
+
+        rp, hashes = self._make_repo_with_n_commits(articles_dir, "head-common", 5)
+
+        def probe(h: str) -> bool | None:
+            return True  # all hashes exist on remote
+
+        result = find_common_ancestor(rp, probe)
+        assert result == hashes[0]  # HEAD
+
+    def test_no_common_ancestor(self, articles_dir):
+        """No common ancestor — all probes return False."""
+        from peerpedia_core.storage.git_backend import find_common_ancestor
+
+        rp, hashes = self._make_repo_with_n_commits(articles_dir, "no-common", 5)
+
+        def probe(h: str) -> bool | None:
+            return False  # none exist on remote
+
+        result = find_common_ancestor(rp, probe)
+        assert result is None
+
+    # ── Error path tests ──────────────────────────────────────────────────
+
+    def test_probe_returns_none_after_retries(self, articles_dir):
+        """Probe returns None (network error) — retries exhausted → None."""
+        from peerpedia_core.storage.git_backend import find_common_ancestor
+
+        rp, hashes = self._make_repo_with_n_commits(articles_dir, "probe-none", 5)
+
+        def probe(h: str) -> bool | None:
+            return None  # network failure
+
+        result = find_common_ancestor(rp, probe)
+        assert result is None
+
+    def test_empty_repo_raises(self, articles_dir):
+        """Empty repo raises ValueError."""
+        from peerpedia_core.storage.git_backend import find_common_ancestor, init_article_repo
+
+        rp = init_article_repo(articles_dir / "empty-fca")
+        with pytest.raises(ValueError, match="no commits"):
+            find_common_ancestor(rp, lambda h: True)
+
+    # ── Boundary tests ────────────────────────────────────────────────────
+
+    def test_shallow_history(self, articles_dir):
+        """Two commits, fork at dist=1 (binary refinement with tiny range)."""
+        from peerpedia_core.storage.git_backend import find_common_ancestor
+
+        rp, hashes = self._make_repo_with_n_commits(articles_dir, "shallow", 2)
+
+        # Fork at dist=1: probe(HEAD)=False, probe(HEAD~1)=True
+        def probe(h: str) -> bool | None:
+            return h == hashes[1]
+
+        result = find_common_ancestor(rp, probe)
+        assert result == hashes[1]
+
+    def test_deep_fork_within_max_depth(self, articles_dir):
+        """Deep fork still within max_depth — found correctly."""
+        from peerpedia_core.storage.git_backend import find_common_ancestor
+
+        n = 200  # enough commits to exercise multiple probe rounds
+        rp, hashes = self._make_repo_with_n_commits(articles_dir, "deep-fork", n)
+
+        # Fork at dist=150
+        def probe(h: str) -> bool | None:
+            idx = hashes.index(h)
+            return idx >= 150
+
+        result = find_common_ancestor(rp, probe)
+        assert result == hashes[150]
+
+    def test_exhausts_max_depth(self, articles_dir):
+        """Phase 1 exhausts all commits with no True → None."""
+        from peerpedia_core.storage.git_backend import find_common_ancestor
+
+        rp, hashes = self._make_repo_with_n_commits(articles_dir, "exhaust", 3)
+
+        def probe(h: str) -> bool | None:
+            return False  # never True
+
+        result = find_common_ancestor(rp, probe, max_depth=3)
+        assert result is None
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # Closed-Loop Tests — full client ↔ server sync lifecycle
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -461,5 +603,5 @@ class TestClosedLoopSync:
         client_bundle = create_bundle(client_rp, h2)
         assert len(client_bundle) > 0
 
-        with pytest.raises(MergeConflictError, match="Fast-forward merge failed"):
+        with pytest.raises(MergeConflictError, match="Merge failed"):
             apply_bundle(server_rp, client_bundle)

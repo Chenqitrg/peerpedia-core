@@ -26,22 +26,26 @@ common ancestor with a remote peer in O(log_k d + log d) rounds.
 
 **Phase 1 — k-exponential probe (k=5):**
 
-Probe local commits at distances `d_i = k^i` from HEAD until the remote
-acknowledges ("yes, I have this commit"):
+Probe HEAD (distance 0) first.  If HEAD is common, return it immediately
+(remote is ahead or identical).
+
+Then probe at distances `d_i = k^i` for i = 0, 1, 2, … (i.e., 1, 5, 25, 125,
+625, 3125, 15625) until the remote acknowledges.  Note: `k^0 = 1`, not 0,
+so we probe HEAD separately.
 
 ```
-i:      0   1   2    3     4      5       6        7
-d_i:    0   1   5   25   125    625    3125    15625
+i:      —   0   1    2     3      4       5        6        7
+d_i:    0   1   5   25   125    625    3125    15625    78125
 ```
 
 Stop when `probe(hash)` returns `True`. Record:
-- `last_no`: the largest distance where probe returned `False` (or 0 if all returned True)
+- `last_no`: the largest distance where probe returned `False`
 - `first_yes`: the smallest distance where probe returned `True`
 
-If `d_0` (HEAD) is `True` → histories are identical (or remote is ahead);
-return HEAD, caller handles the fast-forward case.
-
-If max_depth is exhausted with no `True` → return `None` (no common ancestor).
+If history is exhausted without finding `True`, probe the oldest commit
+in the range.  If it is `True`, the fork lies between `last_no` and the
+end of history — proceed to Phase 2 with `first_yes = len(commits)-1`.
+Otherwise return `None` (no common ancestor within `max_depth`).
 
 **Phase 2 — binary refinement:**
 

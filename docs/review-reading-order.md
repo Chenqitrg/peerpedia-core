@@ -55,19 +55,199 @@
 
 ---
 
-## 第四遍：理解入口（最后读）
+## 第四遍：理解服务器与本地的关系（必读）
+
+### 一句话回答最常被问的问题
+
+**"服务器和本地安装的是同一套代码吗？"**
+
+是的。`peerpedia-core` 就是唯一的代码库。安装后得到 `peerpedia` 命令：
+
+```
+$ pip install peerpedia-core
+$ peerpedia article create --title "量子计算综述"   # 本地操作
+$ peerpedia sync push --server https://peerpedia.example.com  # 推送到服务器
+$ peerpedia serve                                    # 自己就是服务器（未来）
+```
+
+没有"客户端版"和"服务器版"两个包——就像 `git` 命令一样，你既可以 `git commit`（本地），也可以 `git push`（联网），还可以 `git daemon`（充当服务器）。peerpedia 的服务器只是一个恰好挂在公网 IP 上、接受 sync 请求的对等节点。
+
+**"storage 里哪些归服务器？哪些归本地？"**
+
+同一套 `models.py`、同一个 `git_backend.py`、同一个 `crud_*.py`。区别不在代码，在**数据目录的内容**：
+
+```
+服务器 (~/.peerpedia/)                   本地 (~/.peerpedia/)
+├── peerpedia.db                         ├── peerpedia.db
+│   ├── articles (所有用户)              │   ├── articles (自己的 + pull 来的)
+│   ├── users (所有注册用户)             │   ├── users (自己 + 交互过的人)
+│   └── reviews (缓存)                   │   └── reviews (自己的评审缓存)
+│                                        │
+├── articles/                            ├── articles/
+│   ├── <id1>/.git  (全部文章)           │   ├── <id1>/.git  (pull 的子集)
+│   ├── <id2>/.git                       │   └── <id3>/.git
+│   └── ...                              │
+│                                        │
+└── 不需要 compiler 缓存                 └── compiler 缓存
+```
+
+**核心原则**：代码一样，数据不同。服务器的数据库有所有用户的记录，你的本机只有和自己相关的。
+
+### 类比：科学计算中的"本地 vs 服务器"
+
+如果你来自数学/物理背景，用科学计算的思维来理解：
+
+```
+科学计算                                peerpedia
+───────                                 ────────
+.h5 / .npy 数据文件                      git repo (= 带版本历史的 .h5 文件)
+
+ssh 到集群跑 julia simulation           peerpedia serve (= 启动一个接受 sync 的节点)
+
+scp / rsync 传输实验结果                 sync push/pull (= rsync，但只传增量)
+
+Jupyter notebook 在本地跑，数据在本地    peerpedia 在本地跑，repo 在本地
+```
+
+- 服务器不是一个神秘的"后端"——它就是集群上一个开着 `peerpedia serve` 的节点，和其他 peer 运行同一套代码
+- 同步不是"提交表单到服务器"——就是 `rsync` 但只传 git diff，不传全量
+- 离线不是"断网就白屏"——你的数据一直在 `~/.peerpedia/` 里，和 `.h5` 文件一样，网络只是用来同步
+
+peerpedia 是**本地优先（local-first）**架构：所有操作默认在本地完成，sync 是后台行为。
+
+### 安装包、服务器、本地的三角关系
+
+```
+                     peerpedia-core
+                    (pip install 的唯一包)
+                     /                  \
+                    /                    \
+        peerpedia article create     peerpedia serve
+        peerpedia review submit      (接收 sync 请求)
+        peerpedia sync push ────────────►  apply_bundle()
+              (客户端)                    (服务器)
+                    \                    /
+                     \                  /
+                  同一套 git_backend.py
+                  同一套 models.py
+                  同一套 crud_*.py
+```
+
+两端调用的核心函数完全一样，区别只在于**谁调用**和**数据目录里有多少内容**。
+
+### 登录/权限代码：每个人硬盘上都有一份
+
+`peerpedia serve` 作为子命令后，每个人的安装包里都有完整的 API 代码。但代码不会自己运行——只有在收到网络请求时才被触发：
+
+```
+你的笔记本（用户 A）                      课题组服务器（用户 B 在运行）
+───────────────────                      ──────────────────────────
+
+peerpedia article create ...             peerpedia serve
+peerpedia review submit ...                │  等待请求
+peerpedia sync push --server B             │
+  │                                        │  收到 push 请求
+  │  本地跑 assert_can_publish() ✓         │  ─────────────────
+  │  "我是作者，允许"                       │  require_user()
+  │                                        │    → 解析 JWT，确认身份
+  │  不需要登录（你在自己机器上）            │
+  │                                        │  assert_can_sync()
+  └─────────────────────────────────────►  │    → "你是作者吗？"
+                                           │    → 是 ✅，apply_bundle()
+                                           │    → 不是 ❌，403
+```
+
+- **`policies/articles.py`** 在两端都跑，每次都跑——无论你是本地 `publish` 还是远程 `sync`
+- **JWT / `require_user()`** 只在收到 HTTP 请求时才激活——不和网络交互时就是 dead code
+- **`bcrypt` / 密码哈希** 在每台机器上都有——就像 `git` 二进制里包含 `git daemon` 代码一样
+
+类比：`git` 的每个人安装都包含 `git daemon` 代码，但你不执行它时它就是磁盘上的字节。peerpedia 同理——`peerpedia serve` 没运行时，它只是一个你不用的子命令。
+
+### 任何人都能搭建自己的 peerpedia 网络
+
+peerpedia 不依赖"官方服务器"。同一个 `pip install peerpedia-core`，三种用法：
+
+```
+$ peerpedia article create ...    # 1. 单机离线
+$ peerpedia serve                 # 2. 给实验室/课题组当服务器
+$ peerpedia sync push \           # 3. 推到别人或自己的服务器
+    --server https://physics-ucsb.example.com
+```
+
+和 git 一样：GitHub 很大，但 `git init --bare` 你自己随时搭。peerpedia 只是对学术评审流程做了同样的去中心化。
+
+**但离真正的 P2P 还远。** 当前是星形拓扑（每个 client 只和一个 server 通信），不是对等 mesh。缺少的：节点发现（DHT/gossip）、对等冲突合并（当前只允许 fast-forward）、分布式身份（没有"哪张 users 表是对的"）。
+
+### 同步协议：git bundle
+
+每篇文章是一个独立的 git repo（`~/.peerpedia/articles/{id}/`）。同步传递的是 git objects 的增量包，不是数据库行：
+
+```
+本地 A                                  对等节点 B
+───────                                 ──────────
+
+1. GET  /api/v1/articles/{id}/head      ← B 的 HEAD hash
+
+2. 如果 B 有新提交：
+   GET  /api/v1/articles/{id}/bundle?since=<A_head>
+   ← 增量 bundle，本地 apply_bundle()（仅 fast-forward）
+
+3. 如果 A 有新提交：
+   create_bundle(repo, B_head)            → 增量 bundle
+   POST /api/v1/articles/{id}/sync        → B apply_bundle()
+   如果 409（历史分叉）：先 pull 再重试
+
+4. 首次推送（B 没有这篇文章）：
+   tar.gz → base64 → POST /api/v1/articles → B 解包
+```
+
+### 关键设计决策
+
+1. **Fast-forward only。** 拒绝分叉历史（返回 409）。必须先 pull、本地解决冲突、再 push。
+2. **Git 是真相来源（SOT）。** 文章内容、评审、作者信息全在 git 里。数据库是缓存。
+3. **作者邮箱编码用户 ID。** git commit 的 author email = `{uuid}@peerpedia`，可从 git history 反推作者身份。
+4. **sedimentation 文章不可变。** `assert_can_sync_article` 只允许 `draft` 和 `published` 同步。
+5. **离线队列。** `pending_ops.json`（`~/.peerpedia/pending_ops.json`）暂存离线操作。基础设施已存在但**未接入生产代码**。
+
+### 代码层面的分工
+
+| 模块 | 客户端 | 服务器 | 说明 |
+|------|--------|--------|------|
+| `git_backend.py` | 需要 | 需要 | `create_bundle` / `apply_bundle` 两端都用 |
+| `models.py` | 需要 | 需要 | 同一套 ORM |
+| `policies/articles.py` | 需要 | 需要 | `assert_can_sync_article` 两端都用 |
+| `sync/` (整个包) | 需要 | 不需要 | 全是 HTTP client 代码 |
+| `commands.py` | 需要 | 不需要 | 业务编排只在本地 |
+| `cli.py` | 需要 | 不需要 | CLI 入口只在本地 |
+| `workflow/scoring.py` | 需要 | 不需要 | 评分计算只在本地 |
+| HTTP 路由 (`serve` 命令) | 不需要 | 需要 | 未来用 Starlette，调用已有函数 |
+
+### 阅读顺序
+
+| 序号 | 文件 | 读什么 | 关键点 |
+|------|------|--------|--------|
+| 15 | [sync/network.py](../peerpedia_core/sync/network.py) | `is_online(server_url)` — GET `/health` | 5 秒超时 |
+| 16 | [sync/bundle_sync.py](../peerpedia_core/sync/bundle_sync.py) | `push()` / `pull()` | 完整递增 sync 协议，409 重试 |
+| 17 | [sync/pending_queue.py](../peerpedia_core/sync/pending_queue.py) | 文件队列 | 离线操作暂存 |
+| 18 | [cli.py](../peerpedia_core/cli.py#L461-L482) | `_cmd_sync_status` / `_cmd_sync_push` | 遍历队列推送 |
+| 19 | `../peerpedia/backend/peerpedia_api/routes/articles.py` | `GET /head`、`POST /sync`、`GET /bundle` | 服务器端 sync 端点 |
+
+**第四遍的目标：** 你能解释为什么服务器和客户端安装同一个 pip 包、区别只在数据目录和启动命令。
+
+
+## 第五遍：理解入口（最后读）
 
 入口代码是胶水层——理解它之前需要先理解下层。
 
 | 序号 | 文件 | 读什么 |
 |------|------|--------|
-| 15 | [cli.py](../peerpedia_core/cli.py) | argparse 结构、`_resolve_user` 函数、`_parse_scores` 函数、Rich 输出 |
-| 16 | [repl.py](../peerpedia_core/repl.py) | prompt_toolkit 交互式 REPL |
-| 17 | [compiler.py](../peerpedia_core/storage/compiler.py) | Markdown→HTML、Typst→PDF 编译后端 |
+| 21 | [cli.py](../peerpedia_core/cli.py) | argparse 结构、`_resolve_user` 函数、`_parse_scores` 函数、Rich 输出 |
+| 22 | [repl.py](../peerpedia_core/repl.py) | prompt_toolkit 交互式 REPL |
+| 23 | [compiler.py](../peerpedia_core/storage/compiler.py) | Markdown→HTML、Typst→PDF 编译后端 |
 
 ---
 
-## 第五遍：按改动模块定位（日常 Review 用）
+## 第六遍：按改动模块定位（日常 Review 用）
 
 日常 review PR 时不需重读所有文件。根据改动所在的模块，按以下索引定位：
 
@@ -139,6 +319,10 @@
 | Git repo 存在哪里？ | `~/.peerpedia/articles/<id>/` —— [git_backend.py:19](../peerpedia_core/storage/git_backend.py#L19) |
 | DB 存在哪里？ | `~/.peerpedia/peerpedia.db` —— [cli.py:69-70](../peerpedia_core/cli.py#L69-L70) |
 | 沉淀池自动发布逻辑？ | [workflow/sedimentation.py](../peerpedia_core/workflow/sedimentation.py) → `publish_ready_articles()` |
+| 本地如何与服务器同步？ | [sync/bundle_sync.py](../peerpedia_core/sync/bundle_sync.py) → `push()` / `pull()` |
+| sync 协议是什么？push 失败怎么办？ | [sync/bundle_sync.py](../peerpedia_core/sync/bundle_sync.py) — git bundle + fast-forward + 409 重试 |
+| 服务器 sync 端点在哪？ | `../peerpedia/backend/peerpedia_api/routes/articles.py` — `GET /head`、`POST /sync`、`GET /bundle` |
+| 离线时怎么暂存操作？ | [sync/pending_queue.py](../peerpedia_core/sync/pending_queue.py) — `~/.peerpedia/pending_ops.json` |
 | 某个异常什么时候抛？ | [exceptions.py](../peerpedia_core/exceptions.py) + grep 调用点 |
 | 测试怎么写的？ | [tests/conftest.py](../tests/conftest.py) → 临时 SQLite engine 的 fixture |
 
@@ -150,3 +334,4 @@
 - ❌ **从 tests/ 开始读**——测试是验证层，不是解释层。先理解"应该做什么"再看"怎么验证"
 - ❌ **跳过 architecture.md**——没有它你就只能在代码里反推分层规则
 - ❌ **只读 diff 不读上下文**——改动的正确性取决于它所在的函数和模块的契约，diff 本身给不了这些信息
+- ❌ **用 client-server 思维理解 sync**——服务器不是"后端"，是另一个跑同一套代码的节点。sync 是 rsync，不是 form POST

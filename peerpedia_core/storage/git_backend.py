@@ -12,6 +12,7 @@ count) lives in the database so it can be queried and aggregated.
 """
 
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
 
 DEFAULT_ARTICLES_DIR = Path.home() / ".peerpedia" / "articles"
@@ -232,16 +233,14 @@ def merge_git_repos(target: Path, fork: Path, author_name: str) -> str:
 # ── Bundle Sync ─────────────────────────────────────────────────────────────
 
 
-def apply_bundle(repo_path: Path, bundle_bytes: bytes) -> str:
-    """Fetch objects from a git bundle and fast-forward merge.
+def apply_bundle(repo_path: Path, bundle_bytes: bytes, *, ff_only: bool = True) -> str:
+    """Fetch objects from a git bundle and merge.
 
-    Writes bundle to a temp file, fetches into the target repo, and merges
-    with --ff-only. Returns the new HEAD commit hash.
+    When *ff_only* is True (default), does a fast-forward merge — fails with
+    MergeConflictError if histories have diverged.  Set to False for the
+    diverged case (e.g., both sides edited different files).
 
-    Raises:
-        FileNotFoundError: if repo_path/.git doesn't exist.
-        ValueError: if the bundle is empty or malformed.
-        MergeConflictError: if --ff-only fails (history diverged).
+    Returns the new HEAD commit hash.
     """
     import git
 
@@ -254,30 +253,140 @@ def apply_bundle(repo_path: Path, bundle_bytes: bytes) -> str:
         f.write(bundle_bytes)
         f.flush()
 
-        # Verify bundle validity
         try:
             repo.git.bundle("verify", f.name)
         except git.GitCommandError as e:
             raise ValueError(f"Invalid bundle: {e}") from e
 
-        # Fetch objects from bundle
         try:
             repo.git.fetch(f.name, "HEAD")
         except git.GitCommandError as e:
             raise ValueError(f"Bundle fetch failed: {e}") from e
 
-    # Fast-forward merge to FETCH_HEAD
+    merge_args = ["FETCH_HEAD", "--ff-only"] if ff_only else ["FETCH_HEAD"]
     try:
-        repo.git.merge("FETCH_HEAD", "--ff-only")
+        repo.git.merge(*merge_args)
     except git.GitCommandError as e:
-        # Abort merge if in progress
         try:
             repo.git.merge("--abort")
         except git.GitCommandError:
             pass
-        raise MergeConflictError(f"Fast-forward merge failed: {e}") from e
+        raise MergeConflictError(f"Merge failed: {e}") from e
 
     return repo.head.commit.hexsha
+
+
+def is_ancestor(repo_path: Path, maybe_ancestor: str) -> bool:
+    """Check if *maybe_ancestor* exists in the repo and is an ancestor of HEAD."""
+    import git
+
+    if not (repo_path / ".git").is_dir():
+        return False
+    repo = git.Repo(repo_path)
+    try:
+        repo.git.merge_base("--is-ancestor", maybe_ancestor, "HEAD")
+        return True
+    except git.GitCommandError:
+        return False
+
+
+def find_common_ancestor(
+    repo_path: Path,
+    probe: Callable[[str], str | None],
+    k: int = 5,
+    max_depth: int = 20000,
+    retries: int = 3,
+) -> str | None:
+    """Find the most recent common ancestor with a remote peer.
+
+    Uses k-exponential probe + binary refinement.
+    *probe(hash)* must return:
+
+      - ``True``  if the remote has *hash* in its history,
+      - ``False`` if the remote does NOT have *hash*,
+      - ``None``  if the probe failed (network error).
+
+    On ``None``, retries *retries* times per hash.  If all retries
+    return ``None``, returns ``None`` (no common ancestor found).
+
+    Returns the common ancestor hash, or ``None`` if no common ancestor
+    is found within *max_depth*.
+
+    Pure git logic — no HTTP dependency.  The caller injects *probe*.
+    """
+    import git
+
+    repo = git.Repo(repo_path)
+    if not repo.head.is_valid():
+        raise ValueError(f"Repo has no commits: {repo_path}")
+    commits = list(repo.iter_commits(max_count=max_depth + 1))
+
+    def hash_at(dist: int) -> str:
+        return commits[dist].hexsha
+
+    def probe_with_retry(h: str) -> bool | None:
+        """Call probe; retry on None up to *retries* times."""
+        for _ in range(retries + 1):
+            result = probe(h)
+            if result is not None:
+                return result
+        return None
+
+    # ── Phase 1: k-exponential probe ──────────────────────────────────────
+    # Probe HEAD (distance 0) explicitly — k^0 = 1, not 0.
+    result = probe_with_retry(hash_at(0))
+    if result is None:
+        return None
+    if result:
+        return hash_at(0)  # HEAD is common — remote >= local
+
+    last_no = 0       # distance where probe returned False
+    first_yes = -1    # distance where probe returned True
+
+    i = 0
+    while True:
+        dist = k ** i   # k^0 = 1, k^1 = 5, k^2 = 25, ...
+        if dist >= len(commits):
+            break  # exhausted history
+
+        result = probe_with_retry(hash_at(dist))
+        if result is None:
+            return None
+
+        if result:
+            first_yes = dist
+            break
+        last_no = dist
+        i += 1
+
+    # No True found within history — check the oldest commit.
+    # The fork may lie between the last probe and the end of history.
+    if first_yes == -1:
+        deepest = len(commits) - 1
+        if deepest == last_no:
+            return None  # already probed the deepest, still False
+        result = probe_with_retry(hash_at(deepest))
+        if result is None:
+            return None
+        if not result:
+            return None  # no common ancestor at all
+        first_yes = deepest
+
+    # ── Phase 2: binary refinement in (last_no, first_yes] ─────────────────
+    lo = last_no    # exclusive — probe returned False
+    hi = first_yes  # inclusive — probe returned True
+
+    while hi - lo > 1:
+        mid = (lo + hi) // 2
+        result = probe_with_retry(hash_at(mid))
+        if result is None:
+            return None
+        if result:
+            hi = mid
+        else:
+            lo = mid
+
+    return hash_at(hi)
 
 
 def create_bundle(repo_path: Path, since_hash: str) -> bytes:

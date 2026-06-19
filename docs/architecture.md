@@ -6,6 +6,11 @@
 peerpedia_core/
 ├── __init__.py
 ├── cli.py                    # 命令行入口（argparse + Rich）
+│   │                         #   article create/edit/publish/delete
+│   │                         #   review submit/list
+│   │                         #   sync status/push
+│   │                         #   serve              ← 未来：启动 HTTP
+│   │
 ├── repl.py                   # 交互式 REPL（prompt_toolkit）
 ├── commands.py               # 业务编排层（create_article_with_content、fork_article、submit_review...）
 ├── compiler.py               # 编译后端（Markdown→HTML、Typst→PDF/SVG/PNG）
@@ -15,12 +20,21 @@ peerpedia_core/
 │   └── params.py             # 全局可调参数（沉淀天数、评分权重、评论长度限制）
 │
 ├── policies/
-│   └── articles.py           # 权限检查（谁能读/写/fork/publish/下载）
+│   └── articles.py           # 权限检查（谁能读/写/fork/publish/下载/sync）
+│
+├── server/                   # ← 未来：HTTP 服务器（从 peerpedia 项目搬入）
+│   ├── deps.py               #   JWT 签发/验证、password hashing、get_current_user
+│   ├── main.py               #   Starlette/FastAPI app、/health、auto-publish loop
+│   └── routes/
+│       ├── articles.py       #   GET /head、POST /sync、GET /bundle、POST /articles
+│       ├── auth.py           #   POST /register、POST /login
+│       └── reviews.py        #   GET /reviews
 │
 ├── storage/
-│   ├── git_backend.py        # Git 操作（init、commit、history、diff、blame、bundle）
+│   ├── git_backend.py        # Git 操作（init、commit、history、diff、bundle、merge）
+│   ├── locks.py              # 文件锁（并发写保护）
 │   └── db/
-│       ├── engine.py         # SQLAlchemy 引擎 + init_db + migrate
+│       ├── engine.py         # SQLAlchemy 引擎 + init_db
 │       ├── models.py         # ORM 模型（Article、User、Review、Follow、Bookmark...）
 │       ├── session_utils.py  # 事务装饰器（commit/rollback/session 生命周期）
 │       ├── crud_article.py   # Article CRUD
@@ -32,7 +46,7 @@ peerpedia_core/
 │
 ├── sync/
 │   ├── network.py            # 网络检测（is_online）
-│   ├── bundle_sync.py        # Git bundle 同步（create_bundle、apply_bundle）
+│   ├── bundle_sync.py        # Git bundle 同步（push/pull、409 重试）
 │   └── pending_queue.py      # 离线操作队列（add、list、remove、count）
 │
 ├── workflow/
@@ -97,6 +111,70 @@ tests/
 - commands.py 不主动 commit 事务，由调用方（CLI）commit
 - 模块间不跨调——sync 不直接查 DB，workflow 不直接调 Git
 - **Git 层与 DB 层互相不知道对方存在**，只有 commands.py 知道两边的接口
+
+## 服务器架构（peerpedia serve）
+
+`peerpedia serve` 和 `peerpedia article create` 是**同一个包的子命令**，不是两套代码。服务器只是打开 HTTP 端口接收 sync 请求的对等节点。
+
+```
+┌──────────────────────────────────────────────────────────┐
+│  peerpedia_core/                                         │
+│                                                          │
+│  ┌─────────────────────────┐  ┌───────────────────────┐  │
+│  │ CLI (cli.py)            │  │ HTTP (serve 命令)     │  │
+│  │ article create/edit/... │  │                       │  │
+│  │ review submit           │  │ /api/v1/articles/...  │  │
+│  │ sync push               │  │   GET /head           │  │
+│  │ compile                 │  │   POST /sync          │  │
+│  └───────────┬─────────────┘  │   GET /bundle         │  │
+│              │                │   POST /articles      │  │
+│              │                └───────────┬───────────┘  │
+│              │         相同的底层            │            │
+│              └──────────┬──────────────────┘            │
+│                         ▼                                │
+│              ┌──────────────────┐                        │
+│              │  commands.py     │  业务编排层             │
+│              │  policies/       │  权限（两端都跑）        │
+│              └──────┬───────────┘                        │
+│                     │                                    │
+│         ┌───────────┼───────────┐                        │
+│         ▼           ▼           ▼                        │
+│    storage/db/  storage/    workflow/                    │
+│    (SQLite)     git_backend (scoring/reputation)         │
+│                (git repos)                               │
+│                                                          │
+│  ┌────────────────────────────────────────┐              │
+│  │ sync/                                  │              │
+│  │ bundle_sync.py → push()/pull()        │              │
+│  │ pending_queue.py → 离线队列             │              │
+│  └────────────────────────────────────────┘              │
+└──────────────────────────────────────────────────────────┘
+
+服务器端 HTTP 层的职责（薄，只做三件事）：
+
+  请求进来
+    │
+    ├─ 1. require_user()     ← JWT 在此，只在 HTTP 层
+    │     │                    拿到 User 对象后，JWT 使命结束
+    │
+    ├─ 2. assert_can_sync()  ← 和 CLI 用同一套 policies/
+    │     │                    不因为走 HTTP 就绕过权限
+    │
+    └─ 3. apply_bundle()     ← 和本地用同一个 git_backend()
+          update_db_cache()  ← 同一个 crud_*.py
+```
+
+**关键：** HTTP 层不包含业务逻辑。它只是把 HTTP 请求翻译成已有的函数调用。JWT 认证是 HTTP 层唯一的"额外"代码，并且不渗透到下层——`assert_can_sync(db, article, current_user)` 接受的是一个 `User` 对象，不关心它是从 token 解析来的还是从 CLI 参数来的。
+
+**两端调用的是同样的底层函数：**
+
+| 操作 | CLI 调用 | HTTP 端点调用 |
+|------|---------|-------------|
+| 验证身份 | 不需要（本机） | `require_user()` → JWT |
+| 验证权限 | `assert_can_publish()` | `assert_can_sync()` |
+| 创建文章 | `create_article_with_content()` | `POST /api/v1/articles` |
+| 写入 git | `_write_review_to_git()` | `apply_bundle()` |
+| 更新缓存 | `upsert_review()` | `upsert_review()` |
 
 ## 数据模型
 

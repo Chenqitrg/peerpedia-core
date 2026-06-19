@@ -29,7 +29,7 @@ from peerpedia_core.storage.db.models import Article, ArticleAuthor, User
 
 def _user(**kwargs):
     """Create a User with required fields filled in."""
-    defaults = {"id": str(uuid.uuid4()), "username": f"researcher_{uuid.uuid4().hex[:8]}", "password_hash": "", "name": "Test User", "affiliation": "Test"}
+    defaults = {"id": str(uuid.uuid4()), "password_hash": "", "name": "Test User", "affiliation": "Test"}
     defaults.update(kwargs)
     return User(**defaults)
 
@@ -46,7 +46,7 @@ class TestVisibilityRules:
         assert result == {"sedimentation", "published"}
 
     def test_visible_statuses_authenticated(self):
-        u = _user(username="test")
+        u = _user(name="test")
         result = visible_statuses_for_user(u)
         assert result == {"draft", "sedimentation", "published"}
 
@@ -81,7 +81,7 @@ class TestReadPermissions:
 
     def test_can_read_own_draft(self, db_engine):
         s = get_session(db_engine)
-        u = _user(id="u-draft", username="draft_user")
+        u = _user(id="u-draft")
         s.add(u)
         a = Article(title="", id="a-draft", status="draft", fork_count=0)
         s.add(a)
@@ -96,7 +96,7 @@ class TestReadPermissions:
         import pytest
 
         s = get_session(db_engine)
-        u = _user(id="u-other", username="other")
+        u = _user(id="u-other")
         s.add(u)
         a = Article(title="", id="a-other-draft", status="draft", fork_count=0)
         s.add(a)
@@ -109,7 +109,7 @@ class TestReadPermissions:
 class TestWritePermissions:
     def test_author_can_sync(self, db_engine):
         s = get_session(db_engine)
-        u = _user(id="u-sync", username="sync_user")
+        u = _user(id="u-sync")
         s.add(u)
         a = Article(title="", id="a-sync", status="draft", fork_count=0)
         s.add(a)
@@ -124,7 +124,7 @@ class TestWritePermissions:
         import pytest
 
         s = get_session(db_engine)
-        u = _user(id="u-nosync", username="no_sync")
+        u = _user(id="u-nosync")
         s.add(u)
         a = Article(title="", id="a-nosync", status="draft", fork_count=0)
         s.add(a)
@@ -137,7 +137,7 @@ class TestWritePermissions:
 class TestForkPermissions:
     def test_can_fork_published(self, db_engine):
         s = get_session(db_engine)
-        u = _user(id="u-fork", username="fork_user")
+        u = _user(id="u-fork")
         s.add(u)
         a = Article(title="", id="a-fork", status="published", fork_count=0)
         s.add(a)
@@ -150,7 +150,7 @@ class TestForkPermissions:
         import pytest
 
         s = get_session(db_engine)
-        u = _user(id="u-nofork", username="no_fork")
+        u = _user(id="u-nofork")
         s.add(u)
         a = Article(title="", id="a-nofork", status="draft", fork_count=0)
         s.add(a)
@@ -163,7 +163,7 @@ class TestForkPermissions:
         import pytest
 
         s = get_session(db_engine)
-        u = _user(id="u-dup", username="dup_fork")
+        u = _user(id="u-dup")
         s.add(u)
         a = Article(title="", id="a-dup-fork", status="published", fork_count=0)
         s.add(a)
@@ -202,7 +202,7 @@ class TestDownloadPermissions:
 
     def test_author_can_download_draft(self, db_engine):
         s = get_session(db_engine)
-        u = _user(id="u-dl-author", username="dl_author")
+        u = _user(id="u-dl-author")
         s.add(u)
         a = Article(title="", id="a-dl-draft", status="draft", fork_count=0)
         s.add(a)
@@ -215,7 +215,7 @@ class TestDownloadPermissions:
 
     def test_non_author_cannot_download_draft(self, db_engine):
         s = get_session(db_engine)
-        u = _user(id="u-dl-nonauth", username="dl_nonauth")
+        u = _user(id="u-dl-nonauth")
         s.add(u)
         a = Article(title="", id="a-dl-draft2", status="draft", fork_count=0)
         s.add(a)
@@ -287,7 +287,7 @@ class TestAllAuthorOnlyWrappers:
     )
     def test_non_author_raises(self, db_engine, func, action):
         s = get_session(db_engine)
-        u = _user(id=f"u-{action}", username=f"user_{action}")
+        u = _user(id=f"u-{action}", )
         s.add(u)
         a = Article(title="", id=f"a-{action}", status="draft", fork_count=0)
         s.add(a)
@@ -307,7 +307,7 @@ class TestAllAuthorOnlyWrappers:
     )
     def test_author_succeeds(self, db_engine, func):
         s = get_session(db_engine)
-        u = _user(id="u-auth-all", username="auth_all")
+        u = _user(id="u-auth-all")
         s.add(u)
         a = Article(title="", id="a-auth-all", status="draft", fork_count=0)
         s.add(a)
@@ -321,7 +321,7 @@ class TestAllAuthorOnlyWrappers:
     def test_author_can_extend_sink_on_sedimentation(self, db_engine):
         """extend-sink requires sedimentation status (the pool period)."""
         s = get_session(db_engine)
-        u = _user(id="u-ext-sink", username="ext_sink")
+        u = _user(id="u-ext-sink")
         s.add(u)
         a = Article(title="", id="a-ext-sink", status="sedimentation", fork_count=0)
         s.add(a)

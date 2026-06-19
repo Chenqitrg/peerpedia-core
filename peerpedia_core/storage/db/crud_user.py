@@ -11,11 +11,23 @@ from sqlalchemy.orm import Session
 from peerpedia_core.storage.db.models import Follow, User
 
 
-def _generate_anonymous_name() -> str:
-    """Generate a cross-disciplinary anonymous name (100×100 = 10,000 combinations).
+def generate_anonymous_name() -> str:
+    """Generate a random cross-disciplinary anonymous name (100×100 = 10,000 combinations)."""
+    return _pick_anonymous_name(secrets.randbelow(10000))
 
-    10 disciplines, each contributes ~10 adjectives and ~10 nouns.
+
+def derive_anonymous_name(seed: str) -> str:
+    """Derive a stable anonymous name from a seed string.
+
+    Same seed → same name every time.  Use when the directory ID is
+    already deterministic (e.g. ``_derive_anonymous_id``).
     """
+    import hashlib
+    idx = int(hashlib.sha256(seed.encode()).hexdigest()[:4], 16) % 10000
+    return _pick_anonymous_name(idx)
+
+
+def _pick_anonymous_name(idx: int) -> str:
     adjectives = [
         # 天文
         "星云", "极光", "天狼", "猎户", "白矮", "超新", "脉冲", "日冕", "陨石", "银河",
@@ -60,28 +72,23 @@ def _generate_anonymous_name() -> str:
         # 社科
         "博弈论", "共识", "声誉", "信任", "互惠", "规范", "信号", "偏见", "启发", "偏好",
     ]
-    return f"{secrets.choice(adjectives)}{secrets.choice(nouns)}"
-
-
-def _new_username() -> str:
-    """Generate a unique default username."""
-    return f"u_{uuid.uuid4().hex[:12]}"
+    adj = adjectives[idx // 100 % len(adjectives)]
+    noun = nouns[idx % 100 % len(nouns)]
+    return f"{adj}{noun}"
 
 
 def create_user(
     session: Session,
     name: str,
-    username: str,
     affiliation: str = "",
     password_hash: str = "",
     email: str = "",
 ) -> User:
     u = User(
         id=str(uuid.uuid4()),
-        username=username,
+        name=name,
         password_hash=password_hash,
         email=email,
-        name=name,
         affiliation=affiliation,
     )
     session.add(u)
@@ -93,8 +100,8 @@ def get_user(session: Session, user_id: str) -> User | None:
     return session.get(User, user_id)
 
 
-def get_user_by_username(session: Session, username: str) -> User | None:
-    return session.query(User).filter(User.username == username).first()
+def get_user_by_name(session: Session, name: str) -> User | None:
+    return session.query(User).filter(User.name == name).first()
 
 
 def list_users(session: Session) -> list[User]:

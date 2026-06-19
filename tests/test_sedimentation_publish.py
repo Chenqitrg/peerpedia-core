@@ -32,7 +32,6 @@ from peerpedia_core.workflow.sedimentation import (
 def _make_user(session, name):
     u = User(
         id=str(uuid.uuid4()),
-        username=f"sp_{name}",
         password_hash="",
         name=name,
     )
@@ -160,9 +159,9 @@ class TestPublishReadyArticles:
             orig_dir = gb_mod.DEFAULT_ARTICLES_DIR
             try:
                 gb_mod.DEFAULT_ARTICLES_DIR = base
-                rp = init_article_repo(article_id, base_dir=base)
+                rp = init_article_repo(base / article_id)
                 (rp / "article.md").write_text("# Test")
-                commit_article(rp, "init", "A", "a@b.com", allow_empty=True)
+                commit_article(rp, "init", "A", "a@b.com")
 
                 count = publish_ready_articles(session)
                 assert count == 1
@@ -201,7 +200,7 @@ class TestPublishReadyArticles:
             article.id,
             "hash1",
             reviewer.id,
-            "pool",
+            "sedimentation",
             _build_score(4, 4, 4, 4, 4),
         )
         count = publish_ready_articles(session)
@@ -243,7 +242,7 @@ class TestPublishReadyArticles:
             article.id,
             "old_hash",
             reviewer.id,
-            "pool",
+            "sedimentation",
             _build_score(5, 5, 5, 5, 5),
         )
 
@@ -254,7 +253,7 @@ class TestPublishReadyArticles:
             article.id,
             "new_hash",
             reviewer.id,
-            "pool",
+            "sedimentation",
             _build_score(3, 3, 3, 3, 3),
         )
 

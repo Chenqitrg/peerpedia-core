@@ -17,7 +17,6 @@ def _user(**kwargs):
     """Create a User with required fields filled in."""
     defaults = {
         "id": str(uuid.uuid4()),
-        "username": "test_user",
         "password_hash": "",
         "name": "Test User",
         "affiliation": "Test",
@@ -58,7 +57,7 @@ class TestListArticles:
 
     def test_filters_by_author_id(self, db_engine):
         s = get_session(db_engine)
-        u = _user(id="u-lm-auth", username="lm_author")
+        u = _user(id="u-lm-auth")
         s.add(u)
         s.add(Article(title="", id="a-lm8", status="published", fork_count=0))
         a2 = Article(title="", id="a-lm9", status="published", fork_count=0)
@@ -99,7 +98,7 @@ class TestCountArticles:
 
     def test_counts_with_author_filter(self, db_engine):
         s = get_session(db_engine)
-        u = _user(id="u-cm-auth", username="cm_author")
+        u = _user(id="u-cm-auth")
         s.add(u)
         s.add(Article(title="", id="a-cm3", status="published", fork_count=0))
         s.flush()

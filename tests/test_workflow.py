@@ -16,39 +16,39 @@ class TestComputeArticleScore:
     """Score aggregation: weighted average of reviews, with self-review weighting."""
 
     def test_no_reviews_returns_none(self):
-        from peerpedia_core.workflow.scoring import compute_article_score
+        from peerpedia_core.workflow.scoring import compute_article_score, _aggregate_review_scores
 
-        assert compute_article_score([]) is None
+        assert _aggregate_review_scores([]) is None
 
     def test_single_review_equals_that_review(self):
-        from peerpedia_core.workflow.scoring import compute_article_score
+        from peerpedia_core.workflow.scoring import compute_article_score, _aggregate_review_scores
 
         reviews = [{"scores": {"originality": 4, "rigor": 3, "completeness": 5, "pedagogy": 4, "impact": 4}, "is_self": False}]
-        result = compute_article_score(reviews)
+        result = _aggregate_review_scores(reviews)
         assert result["originality"] == 4.0
         assert result["completeness"] == 5.0
 
     def test_self_review_weighted_lower(self):
         """Self-review has smaller weight than community reviews."""
-        from peerpedia_core.workflow.scoring import compute_article_score
+        from peerpedia_core.workflow.scoring import compute_article_score, _aggregate_review_scores
 
         reviews = [
             {"scores": {"originality": 5, "rigor": 5, "completeness": 5, "pedagogy": 5, "impact": 5}, "is_self": True},
             {"scores": {"originality": 3, "rigor": 3, "completeness": 3, "pedagogy": 3, "impact": 3}, "is_self": False},
         ]
-        result = compute_article_score(reviews)
+        result = _aggregate_review_scores(reviews)
         # Self-review (5) weighted 0.15, community (3) weighted 0.85
         # expected ≈ 5*0.15 + 3*0.85 = 0.75 + 2.55 = 3.3
         assert result["originality"] == pytest.approx(3.3, abs=0.1)
 
     def test_multiple_community_reviews_averaged(self):
-        from peerpedia_core.workflow.scoring import compute_article_score
+        from peerpedia_core.workflow.scoring import compute_article_score, _aggregate_review_scores
 
         reviews = [
             {"scores": {"originality": 4, "rigor": 4, "completeness": 4, "pedagogy": 4, "impact": 4}, "is_self": False},
             {"scores": {"originality": 2, "rigor": 2, "completeness": 2, "pedagogy": 2, "impact": 2}, "is_self": False},
         ]
-        result = compute_article_score(reviews)
+        result = _aggregate_review_scores(reviews)
         assert result["originality"] == 3.0
 
 
@@ -93,7 +93,7 @@ class TestPerCommitScoring:
     def _make_user(self, session, name):
         from peerpedia_core.storage.db.models import User
 
-        u = User(id=str(uuid.uuid4()), username=f"test_{name}", password_hash="$2b$12$test", name=name)
+        u = User(id=str(uuid.uuid4()), password_hash="$2b$12$test", name=name)
         session.add(u)
         session.commit()
         return u
@@ -109,11 +109,11 @@ class TestPerCommitScoring:
         session.commit()
         return a
 
-    def _make_review(self, session, article_id, commit_hash, reviewer_id, scope, scores):
+    def _make_review(self, session, article_id, commit_hash, reviewer_id, scores):
         from peerpedia_core.storage.db.crud_review import upsert_review
 
         return upsert_review(
-            session, article_id=article_id, commit_hash=commit_hash, reviewer_id=reviewer_id, scope=scope, scores=scores
+            session, article_id=article_id, commit_hash=commit_hash, reviewer_id=reviewer_id, scores=scores
         )
 
     def test_accumulate_scores_across_commits(self, engine):
@@ -132,7 +132,6 @@ class TestPerCommitScoring:
             article.id,
             "abc",
             rv.id,
-            "pool",
             {"originality": 5, "rigor": 5, "completeness": 5, "pedagogy": 5, "impact": 5},
         )
         # Review for commit "def" with score 1
@@ -141,13 +140,12 @@ class TestPerCommitScoring:
             article.id,
             "def",
             rv.id,
-            "pool",
             {"originality": 1, "rigor": 1, "completeness": 1, "pedagogy": 1, "impact": 1},
         )
 
-        from peerpedia_core.workflow.scoring import compute_article_score_for_commit
+        from peerpedia_core.workflow.scoring import compute_article_score, _aggregate_review_scores
 
-        score = compute_article_score_for_commit(session, article.id)
+        score = compute_article_score(session, article.id)
 
         assert score is not None
         # Two reviews: scores 5 and 1 → average 3.0 per dimension
@@ -163,20 +161,20 @@ class TestPerCommitScoring:
         author = self._make_user(session, "pcs_none")
         article = self._make_article(session, [author.id])
 
-        from peerpedia_core.workflow.scoring import compute_article_score_for_commit
+        from peerpedia_core.workflow.scoring import compute_article_score, _aggregate_review_scores
 
-        result = compute_article_score_for_commit(session, article.id)
+        result = compute_article_score(session, article.id)
         assert result is None
         session.close()
 
-    def test_unknown_article_returns_none(self, engine):
-        """compute_article_score_for_commit for non-existent article returns None."""
+    def test_unknown_article_raises(self, engine):
+        """compute_article_score for non-existent article raises ValueError."""
         from peerpedia_core.storage.db.engine import get_session
-        from peerpedia_core.workflow.scoring import compute_article_score_for_commit
+        from peerpedia_core.workflow.scoring import compute_article_score
 
         session = get_session(engine)
-        result = compute_article_score_for_commit(session, "no-such-article", "abc")
-        assert result is None
+        with pytest.raises(ValueError, match="not found"):
+            compute_article_score(session, "no-such-article")
         session.close()
 
     def test_reviewer_weights_applied(self, engine):
@@ -201,13 +199,12 @@ class TestPerCommitScoring:
             article.id,
             "hash_w",
             rv.id,
-            "pool",
             {"originality": 3, "rigor": 3, "completeness": 3, "pedagogy": 3, "impact": 3},
         )
 
-        from peerpedia_core.workflow.scoring import compute_article_score_for_commit
+        from peerpedia_core.workflow.scoring import compute_article_score, _aggregate_review_scores
 
-        score = compute_article_score_for_commit(session, article.id, "hash_w")
+        score = compute_article_score(session, article.id)
 
         assert score is not None
         assert score["originality"] == 3.0

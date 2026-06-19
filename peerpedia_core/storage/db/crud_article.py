@@ -22,6 +22,12 @@ def add_article_authors(session: Session, article_id: str, author_ids: list[str]
         )
 
 
+def set_article_authors(session: Session, article_id: str, author_ids: list[str]) -> None:
+    """Replace all author rows for an article (delete + re-insert)."""
+    session.query(ArticleAuthor).filter(ArticleAuthor.article_id == article_id).delete()
+    add_article_authors(session, article_id, author_ids)
+
+
 def get_author_ids(session: Session, article_id: str) -> list[str]:
     """Get all author IDs for an article (ordered by position)."""
     rows = session.query(ArticleAuthor).filter(ArticleAuthor.article_id == article_id).order_by(ArticleAuthor.position).all()

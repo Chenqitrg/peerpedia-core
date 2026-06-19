@@ -43,6 +43,7 @@ def seed(db_url: str, articles_dir: Path):
         Review,
         User,
     )
+    from peerpedia_core.storage.compiler import make_article_frontmatter
     from peerpedia_core.storage.git_backend import (
         commit_article,
         init_article_repo,
@@ -69,145 +70,122 @@ def seed(db_url: str, articles_dir: Path):
         # Physics — relativity / quantum foundations
         {
             "name": "Albert Einstein",
-            "username": "einstein",
             "affiliation": "Princeton",
             "expertise": ["physics", "relativity", "quantum foundations"],
         },
         {
             "name": "Richard Feynman",
-            "username": "feynman",
             "affiliation": "Caltech",
             "expertise": ["physics", "quantum electrodynamics", "path integrals"],
         },
         {
             "name": "Subrahmanyan Chandrasekhar",
-            "username": "chandra",
             "affiliation": "Chicago",
             "expertise": ["astrophysics", "stellar dynamics", "relativity"],
         },
         # Quantum mechanics — Copenhagen school
         {
             "name": "Niels Bohr",
-            "username": "bohr",
             "affiliation": "Copenhagen",
             "expertise": ["quantum mechanics", "atomic structure", "complementarity"],
         },
         {
             "name": "Werner Heisenberg",
-            "username": "heisenberg",
             "affiliation": "Leipzig",
             "expertise": ["quantum mechanics", "matrix mechanics", "uncertainty principle"],
         },
         {
             "name": "Erwin Schrödinger",
-            "username": "schrodinger",
             "affiliation": "Vienna",
             "expertise": ["quantum mechanics", "wave mechanics", "statistical physics"],
         },
         {
             "name": "Paul Dirac",
-            "username": "dirac",
             "affiliation": "Cambridge",
             "expertise": ["quantum mechanics", "relativistic quantum theory", "mathematical physics"],
         },
         {
             "name": "Max Born",
-            "username": "born",
             "affiliation": "Göttingen",
             "expertise": ["quantum mechanics", "probability interpretation", "lattice dynamics"],
         },
         # Mathematics
         {
             "name": "Emmy Noether",
-            "username": "noether",
             "affiliation": "Bryn Mawr",
             "expertise": ["mathematics", "abstract algebra", "mathematical physics"],
         },
         {
             "name": "Ada Lovelace",
-            "username": "lovelace",
             "affiliation": "London",
             "expertise": ["mathematics", "computing", "philosophy of science"],
         },
         {
             "name": "John von Neumann",
-            "username": "vonneumann",
             "affiliation": "IAS Princeton",
             "expertise": ["mathematics", "game theory", "computing", "quantum foundations"],
         },
         # Computer science
         {
             "name": "Alan Turing",
-            "username": "turing",
             "affiliation": "Manchester",
             "expertise": ["computer science", "cryptography", "mathematical logic"],
         },
         {
             "name": "Claude Shannon",
-            "username": "shannon",
             "affiliation": "MIT",
             "expertise": ["information theory", "electrical engineering"],
         },
         {
             "name": "Grace Hopper",
-            "username": "hopper",
             "affiliation": "US Navy / Harvard",
             "expertise": ["computer science", "compilers", "programming languages"],
         },
         # Chemistry / biology
         {
             "name": "Marie Curie",
-            "username": "curie",
             "affiliation": "Sorbonne",
             "expertise": ["chemistry", "radioactivity", "medical physics"],
         },
         {
             "name": "Rosalind Franklin",
-            "username": "franklin",
             "affiliation": "King's College",
             "expertise": ["biology", "crystallography", "molecular structure"],
         },
         {
             "name": "Dorothy Hodgkin",
-            "username": "hodgkin",
             "affiliation": "Oxford",
             "expertise": ["chemistry", "crystallography", "biology"],
         },
         # Neuroscience / neurophysics
         {
             "name": "Francis Crick",
-            "username": "crick",
             "affiliation": "Salk Institute",
             "expertise": ["neurobiology", "molecular biology", "consciousness"],
         },
         {
             "name": "Santiago Ramón y Cajal",
-            "username": "cajal",
             "affiliation": "Madrid",
             "expertise": ["neuroscience", "neuroanatomy", "histology"],
         },
         {
             "name": "Patricia Goldman-Rakic",
-            "username": "goldmanrakic",
             "affiliation": "Yale",
             "expertise": ["neuroscience", "working memory", "prefrontal cortex"],
         },
         # Philosophy
         {
             "name": "Karl Popper",
-            "username": "popper",
             "affiliation": "LSE",
             "expertise": ["philosophy of science", "epistemology", "falsificationism"],
         },
         {
             "name": "Thomas Kuhn",
-            "username": "kuhn",
             "affiliation": "MIT",
             "expertise": ["philosophy of science", "history of science", "paradigm theory"],
         },
         {
             "name": "Hilary Putnam",
-            "username": "putnam",
             "affiliation": "Harvard",
             "expertise": ["philosophy of mind", "philosophy of language", "philosophy of science"],
         },
@@ -216,16 +194,16 @@ def seed(db_url: str, articles_dir: Path):
     pwd_hash = bcrypt.hashpw(default_password.encode(), bcrypt.gensalt()).decode()
     users = {}
     for u in user_defs:
-        existing = session.query(User).filter(User.username == u["username"]).first()
+        existing = session.query(User).filter(User.name == u["name"]).first()
         if existing:
             users[u["name"]] = existing
-            print(f"  User (existing): {u['name']} ({u['username']})")
+            print(f"  User (existing): {u['name']} ({u['name']})")
         else:
             user = User(
                 id=str(uuid.uuid4()),
-                username=u["username"],
+                
                 password_hash=pwd_hash,
-                email=f"{u['username']}@peerpedia.dev",
+                email=f"{u['name']}@peerpedia.dev",
                 name=u["name"],
                 affiliation=u["affiliation"],
                 expertise=u["expertise"],
@@ -234,7 +212,7 @@ def seed(db_url: str, articles_dir: Path):
             session.add(user)
             session.commit()
             users[u["name"]] = user
-            print(f"  User (new): {u['name']} ({u['username']})")
+            print(f"  User (new): {u['name']} ({u['name']})")
 
     print(f"\n  Default password for all users: {default_password}")
     print(f"  Total users: {len(users)}")
@@ -918,9 +896,9 @@ $$
         a = create_article(session, authors=all_authors, status="draft", title=ad["title"])
 
         try:
-            rp = init_article_repo(a.id, base_dir=articles_dir)
-            (rp / "article.md").write_text(ad["content"])
-            commit_article(rp, "Initial submission", author.name, f"{author.id}@peerpedia", allow_empty=True)
+            rp = init_article_repo(articles_dir / a.id)
+            (rp / "article.md").write_text(make_article_frontmatter(ad["title"]) + ad["content"])
+            commit_article(rp, "Initial submission", author.name, f"{author.id}@peerpedia")
             # Write co-author attribution commits so git-derived authors
             # can recover the full author list on repair/rebuild.
             for co_author_id in co_author_ids:
@@ -930,7 +908,6 @@ $$
                     f"Co-author: {co.name}",
                     co.name,
                     f"{co.id}@peerpedia",
-                    allow_empty=True,
                 )
         except Exception as e:
             print(f"  Warning: git repo for {ad['title'][:40]} failed: {e}")
@@ -955,14 +932,12 @@ $$
             session.commit()
 
         if ad.get("score"):
-            scope = "pool" if status == "sedimentation" else "published"
             try:
                 upsert_review(
                     session,
                     article_id=a.id,
                     commit_hash="0000000000000000000000000000000000000000",
                     reviewer_id=author.id,
-                    scope=scope,
                     scores=ad["score"],
                 )
             except Exception:
@@ -1040,16 +1015,16 @@ program and data. This is the von Neumann architecture.""",
             session, authors=[forker.id], status="draft", title=f"{parent.title} — Fork by {forker_name}", forked_from=parent.id
         )
         try:
-            rp = init_article_repo(fork.id, base_dir=articles_dir)
-            (rp / "article.md").write_text(content)
-            commit_article(rp, "Fork with extensions", forker.name, f"{forker.id}@peerpedia", allow_empty=True)
+            rp = init_article_repo(articles_dir / fork.id)
+            (rp / "article.md").write_text(make_article_frontmatter(fork.title) + content)
+            commit_article(rp, "Fork with extensions", forker.name, f"{forker.id}@peerpedia")
             # Second commit with improvements
-            (rp / "article.md").write_text(
+            (rp / "article.md").write_text(make_article_frontmatter(fork.title) +
                 content + "\n\n## Further Refinements\n"
                 "Additional improvements based on further analysis and peer feedback.\n"
                 f"\\n*— {forker_name}*"
             )
-            commit_article(rp, "Refinements after review", forker.name, f"{forker.id}@peerpedia", allow_empty=True)
+            commit_article(rp, "Refinements after review", forker.name, f"{forker.id}@peerpedia")
         except Exception as e:
             print(f"  Fork git warning: {e}")
 
@@ -1060,7 +1035,6 @@ program and data. This is the von Neumann architecture.""",
                 article_id=fork.id,
                 commit_hash="0000000000000000000000000000000000000000",
                 reviewer_id=forker.id,
-                scope="self",
                 scores=score,
             )
         except Exception:
@@ -1233,14 +1207,12 @@ program and data. This is the von Neumann architecture.""",
         if not articles:
             continue
         a = articles[0]
-        # For published articles, write published-scope reviews; pool otherwise
-        scope = "pool" if a.status == "sedimentation" else "published"
         existing = (
             session.query(Review)
             .filter(
                 Review.article_id == a.id,
                 Review.reviewer_id == reviewer.id,
-                Review.scope == scope,
+                Review.scope == a.status,
             )
             .first()
         )
@@ -1251,7 +1223,6 @@ program and data. This is the von Neumann architecture.""",
                     article_id=a.id,
                     commit_hash="0000000000000000000000000000000000000000",
                     reviewer_id=reviewer.id,
-                    scope=scope,
                     scores=scores,
                 )
                 review_count += 1
@@ -1849,13 +1820,12 @@ program and data. This is the von Neumann architecture.""",
                 continue
         else:
             a = articles[0]
-        scope = "pool" if a.status == "sedimentation" else "published"
         review = (
             session.query(Review)
             .filter(
                 Review.article_id == a.id,
                 Review.reviewer_id == reviewer.id,
-                Review.scope == scope,
+                Review.scope == a.status,
             )
             .first()
         )
@@ -1868,14 +1838,24 @@ program and data. This is the von Neumann architecture.""",
                     article_id=a.id,
                     commit_hash="0000000000000000000000000000000000000000",
                     reviewer_id=reviewer.id,
-                    scope=scope,
                     scores=default_scores,
                 )
                 session.flush()
             except Exception:
                 continue
-        # Thread messages now live in git (reviews/<reviewer_id>/thread.md).
-        # Skipping DB thread seeding — use git-based review submission instead.
+        # Write review to git: scores.json + threads/
+        import json
+        review_dir = articles_dir / a.id / "reviews" / reviewer.id
+        threads_dir = review_dir / "threads"
+        threads_dir.mkdir(parents=True, exist_ok=True)
+        scores = review.scores if review else {"originality": 4, "rigor": 4, "completeness": 4, "pedagogy": 4, "impact": 4}
+        (review_dir / "scores.json").write_text(json.dumps(scores, indent=2))
+        for i, (speaker, text) in enumerate(messages):
+            speaker_user = users[speaker]
+            ts = (datetime.now(timezone.utc) - timedelta(hours=len(messages) - i)).strftime("%Y-%m-%dT%H:%M:%SZ")
+            thread_path = threads_dir / f"{i+1:03d}.md"
+            thread_path.write_text(f"### {speaker_user.name} ({ts})\n\n{text}\n")
+            thread_count += 1
 
     session.commit()
     print(f"  Threads: {thread_count} messages new")

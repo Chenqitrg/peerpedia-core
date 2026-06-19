@@ -43,7 +43,7 @@ class TestComputeAuthorReputation:
 
     def test_no_articles_returns_defaults(self, session):
         """A user with no articles gets all-zero reputation."""
-        user = create_user(session, name="alice", username="alice")
+        user = create_user(session, name="alice")
         rep = compute_author_reputation(session, user.id)
 
         assert isinstance(rep, ReputationScores)
@@ -64,7 +64,7 @@ class TestComputeAuthorReputation:
         Blending weight = article_to_author_weight = 0.3.
         Old rep is all zeros, so blended = 0.3 * article_avg.
         """
-        user = create_user(session, name="bob", username="bob")
+        user = create_user(session, name="bob")
         create_article(
             session,
             title="On the Nature of Scientific Inquiry",
@@ -82,7 +82,7 @@ class TestComputeAuthorReputation:
 
     def test_multiple_articles_averaged_and_blended(self, session):
         """Multiple articles are averaged (weighted by status) then blended."""
-        user = create_user(session, name="carol", username="carol")
+        user = create_user(session, name="carol")
 
         # published article with perfect scores
         create_article(
@@ -117,7 +117,7 @@ class TestComputeAuthorReputation:
 
     def test_blends_with_existing_reputation(self, session):
         """Existing reputation is blended with the new article-derived value."""
-        user = create_user(session, name="dave", username="dave")
+        user = create_user(session, name="dave")
 
         # First computation (no existing rep) -- sets reputation to blended value
         create_article(
@@ -152,7 +152,7 @@ class TestComputeAuthorReputation:
 
     def test_article_without_score_skipped(self, session):
         """Articles missing a score dict are skipped in the calculation."""
-        user = create_user(session, name="eve", username="eve")
+        user = create_user(session, name="eve")
         create_article(
             session,
             title="On the Nature of Scientific Inquiry",
@@ -168,7 +168,7 @@ class TestComputeAuthorReputation:
 
     def test_persisted_in_db(self, session):
         """After compute_author_reputation, the DB record is updated."""
-        user = create_user(session, name="frank", username="frank")
+        user = create_user(session, name="frank")
         create_article(
             session,
             title="On the Nature of Scientific Inquiry",
@@ -204,13 +204,13 @@ class TestGetReviewerWeight:
 
     def test_user_without_reputation_returns_default(self, session):
         """A user who has no reputation data gets weight 1.0."""
-        user = create_user(session, name="grace", username="grace")
+        user = create_user(session, name="grace")
         rep = get_reviewer_weight(session, user.id)
         assert rep == 1.0
 
     def test_user_with_high_rep_gets_weight_above_one(self, session):
         """Avg reputation > 3.0 gives weight > 1.0."""
-        user = create_user(session, name="heidi", username="heidi")
+        user = create_user(session, name="heidi")
         update_user_reputation(
             session,
             user.id,
@@ -222,7 +222,7 @@ class TestGetReviewerWeight:
 
     def test_user_with_low_rep_gets_weight_below_one(self, session):
         """Avg reputation < 3.0 gives weight < 1.0."""
-        user = create_user(session, name="ivan", username="ivan")
+        user = create_user(session, name="ivan")
         update_user_reputation(
             session,
             user.id,
@@ -247,8 +247,8 @@ class TestRecalculateAllReputations:
 
     def test_recalculates_all_users(self, session):
         """Every user in the system gets their reputation updated."""
-        u1 = create_user(session, name="jill", username="jill")
-        u2 = create_user(session, name="jack", username="jack")
+        u1 = create_user(session, name="jill")
+        u2 = create_user(session, name="jack")
         create_article(
             session,
             title="On the Nature of Scientific Inquiry",
@@ -269,8 +269,8 @@ class TestRecalculateAllReputations:
 
     def test_returns_count_of_updated_users(self, session):
         """The function returns the number of users processed."""
-        create_user(session, name="ken", username="ken")
-        create_user(session, name="laura", username="laura")
+        create_user(session, name="ken")
+        create_user(session, name="laura")
         count = recalculate_all_reputations(session)
         assert count == 2
 
@@ -288,7 +288,7 @@ class TestWeightedArticleScoring:
 
     def test_no_reviewer_weights_unchanged(self):
         """Without reviewer_weights, behaves exactly as before."""
-        from peerpedia_core.workflow.scoring import compute_article_score
+        from peerpedia_core.workflow.scoring import compute_article_score, _aggregate_review_scores
 
         reviews = [
             {
@@ -297,13 +297,13 @@ class TestWeightedArticleScoring:
                 "reviewer_id": "u1",
             },
         ]
-        result = compute_article_score(reviews)
+        result = _aggregate_review_scores(reviews)
         assert result["originality"] == 4.0
         assert result["completeness"] == 5.0
 
     def test_reviewer_weights_applied(self):
         """Reviewer weights multiply the contribution of each review."""
-        from peerpedia_core.workflow.scoring import compute_article_score
+        from peerpedia_core.workflow.scoring import compute_article_score, _aggregate_review_scores
 
         reviews = [
             {
@@ -318,7 +318,7 @@ class TestWeightedArticleScoring:
             },
         ]
         weights = {"trusted": 2.0, "low_rep": 0.5}
-        result = compute_article_score(reviews, reviewer_weights=weights)
+        result = _aggregate_review_scores(reviews, reviewer_weights=weights)
 
         # Both are community reviews (weight = 0.85).
         # With reviewer weights:
@@ -330,7 +330,7 @@ class TestWeightedArticleScoring:
 
     def test_missing_reviewer_id_falls_back_to_one(self):
         """A review without a matching weight entry defaults to 1.0."""
-        from peerpedia_core.workflow.scoring import compute_article_score
+        from peerpedia_core.workflow.scoring import compute_article_score, _aggregate_review_scores
 
         reviews = [
             {
@@ -340,12 +340,12 @@ class TestWeightedArticleScoring:
             },
         ]
         weights = {}
-        result = compute_article_score(reviews, reviewer_weights=weights)
+        result = _aggregate_review_scores(reviews, reviewer_weights=weights)
         assert result["originality"] == 3.0
 
     def test_weights_multiply_with_self_review_weight(self):
         """Reviewer weights also affect self-reviews."""
-        from peerpedia_core.workflow.scoring import compute_article_score
+        from peerpedia_core.workflow.scoring import compute_article_score, _aggregate_review_scores
 
         reviews = [
             {
@@ -356,6 +356,6 @@ class TestWeightedArticleScoring:
         ]
         # Self-review base weight = 0.15, boosted by 2.0 = 0.30
         weights = {"author": 2.0}
-        result = compute_article_score(reviews, reviewer_weights=weights)
+        result = _aggregate_review_scores(reviews, reviewer_weights=weights)
         # Only one review, weight doesn't change the computed value
         assert result["originality"] == 5.0

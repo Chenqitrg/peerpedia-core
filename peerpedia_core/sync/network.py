@@ -15,7 +15,7 @@ def is_online(server_url: str, timeout: float = 5.0) -> bool:
     """Return True if the remote server is reachable.
 
     Args:
-        server_url: Base URL of the PeerPedia server (e.g. "https://peerpedia.example.com").
+        server_url: Base URL of the PeerPedia server (e.g. "https://peerpedia.dev").
         timeout: Request timeout in seconds.
     """
     try:

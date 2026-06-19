@@ -64,9 +64,8 @@ class Review(Base):
     article_id = Column(String, ForeignKey("articles.id"), nullable=False)
     commit_hash = Column(String, nullable=False)
     reviewer_id = Column(String, ForeignKey("users.id"), nullable=False)
-    scope = Column(String, nullable=False)  # "pool" | "published"
+    scope = Column(String, nullable=False)  # "sedimentation" | "published" — matches article.status
     scores = Column(JSONDict, nullable=False)  # FiveDimScores as dict
-    contributions = Column(JSONDict, nullable=True)  # author_id → {novelty, rigor, clarity, impact, reproducibility} ratios; feeds into User.reputation
     created_at = Column(DateTime, nullable=False, default=_utcnow)
     updated_at = Column(DateTime, nullable=False, default=_utcnow, onupdate=_utcnow)
 
@@ -90,10 +89,9 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(String, primary_key=True)
-    username = Column(String, unique=True, nullable=False)  # login identifier
+    name = Column(String, unique=True, nullable=False)
     password_hash = Column(String, nullable=False)  # bcrypt hash
     email = Column(String, nullable=True)  # format-validated
-    name = Column(String, nullable=False)
     affiliation = Column(String, nullable=False, default="")
     expertise = Column(JSONList, nullable=False, default=list)
     avatar_url = Column(String, nullable=True)

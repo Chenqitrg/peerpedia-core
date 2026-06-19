@@ -44,7 +44,7 @@ def test_seed_creates_users(session):
     users = session.query(User).all()
     assert len(users) >= 22, f"Expected >=22 users, got {len(users)}"
 
-    einstein = session.query(User).filter(User.username == "einstein").first()
+    einstein = session.query(User).filter(User.name == "Albert Einstein").first()
     assert einstein is not None
     assert einstein.name == "Albert Einstein"
     assert einstein.affiliation == "Princeton"
@@ -124,7 +124,7 @@ def test_seed_is_idempotent(seeded_db):
     engine = get_engine(db_url)
     init_db(engine)
     s = get_session(engine)
-    users = s.query(User).filter(User.username == "einstein").all()
+    users = s.query(User).filter(User.name == "Albert Einstein").all()
     assert len(users) == 1, f"Einstein should not be duplicated, got {len(users)}"
     s.close()
     engine.dispose()

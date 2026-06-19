@@ -27,7 +27,6 @@ from peerpedia_core.types.messages import ThreadMessage
 def _make_user(session: Session, name: str, **kwargs) -> User:
     u = User(
         id=kwargs.pop("id", str(uuid.uuid4())),
-        username=f"test_{name}",
         password_hash="$2b$12$test",
         name=name,
         affiliation=kwargs.pop("affiliation", "Test"),
@@ -173,7 +172,7 @@ class TestReview:
             article_id=article.id,
             commit_hash="abc123",
             reviewer_id=user.id,
-            scope="pool",
+            scope="sedimentation",
             scores={"originality": 4.0, "rigor": 3.0, "completeness": 4.0, "pedagogy": 3.0, "impact": 3.5},
         )
         session.add(review)
@@ -181,7 +180,7 @@ class TestReview:
         r = session.get(Review, review.id)
         assert r.article_id == article.id
         assert r.commit_hash == "abc123"
-        assert r.scope == "pool"
+        assert r.scope == "sedimentation"
         assert r.scores["originality"] == 4.0
         session.close()
 
@@ -194,7 +193,7 @@ class TestReview:
             article_id=article.id,
             commit_hash="h1",
             reviewer_id=user.id,
-            scope="pool",
+            scope="sedimentation",
             scores={"originality": 1.0, "rigor": 1.0, "completeness": 1.0, "pedagogy": 1.0, "impact": 1.0},
         )
         r2 = Review(
@@ -219,7 +218,7 @@ class TestReview:
             article_id=article.id,
             commit_hash="h",
             reviewer_id=reviewer.id,
-            scope="pool",
+            scope="sedimentation",
             scores={"originality": 1, "rigor": 1, "completeness": 1, "pedagogy": 1, "impact": 1},
         )
         session.add(r1)
@@ -228,7 +227,7 @@ class TestReview:
             article_id=article.id,
             commit_hash="h",
             reviewer_id=reviewer.id,
-            scope="pool",
+            scope="sedimentation",
             scores={"originality": 2, "rigor": 2, "completeness": 2, "pedagogy": 2, "impact": 2},
         )
         session.add(r2)
@@ -244,7 +243,7 @@ class TestReview:
             article_id=article.id,
             commit_hash="init",
             reviewer_id=author.id,
-            scope="pool",
+            scope="sedimentation",
             scores={"originality": 4.5, "rigor": 3.0, "completeness": 4.0, "pedagogy": 5.0, "impact": 4.0},
         )
         session.add(review)
@@ -264,7 +263,7 @@ class TestReview:
             article_id=article.id,
             commit_hash="init",
             reviewer_id=user.id,
-            scope="pool",
+            scope="sedimentation",
             scores={"originality": 3.0, "rigor": 3.0, "completeness": 3.0, "pedagogy": 3.0, "impact": 3.0},
         )
         session.add(review)
@@ -285,7 +284,6 @@ class TestUserModel:
         session = get_session(engine)
         u = User(
             id=str(uuid.uuid4()),
-            username="zhangsan",
             password_hash="$2b$12$test",
             name="张三",
             affiliation="清华大学",
@@ -303,7 +301,7 @@ class TestUserModel:
 
     def test_default_reputation(self, engine):
         session = get_session(engine)
-        u = User(id=str(uuid.uuid4()), username="lisi", password_hash="$2b$12$test", name="李四")
+        u = User(id=str(uuid.uuid4()), password_hash="$2b$12$test", name="李四")
         session.add(u)
         session.commit()
         u2 = session.get(User, u.id)

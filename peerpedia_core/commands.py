@@ -30,11 +30,8 @@ from peerpedia_core.storage.db.crud_article import (
     get_article,
     get_author_ids,
     increment_fork_count,
+    set_article_authors,
     set_sink_start,
-)
-from peerpedia_core.storage.db.crud_article_authors import (
-    get_authors_from_git,
-    rebuild_article_authors,
 )
 from peerpedia_core.storage.db.crud_merge import (
     accept_merge_proposal,
@@ -49,6 +46,7 @@ from peerpedia_core.storage.git_backend import (
     DEFAULT_ARTICLES_DIR,
     MergeConflictError,
     commit_article,
+    get_commit_authors,
     get_commit_history,
     init_article_repo,
     merge_git_repos,
@@ -56,6 +54,25 @@ from peerpedia_core.storage.git_backend import (
 from peerpedia_core.storage.locks import get_article_lock
 from peerpedia_core.workflow.reputation import compute_author_reputation
 from peerpedia_core.workflow.scoring import compute_article_score_for_commit
+
+
+# ── Helpers ──────────────────────────────────────────────────────────────────
+
+
+def rebuild_article_authors(db: Session, article_id: str, new_author_ids: set[str]) -> None:
+    """Merge *new_author_ids* into the article's author list and record
+    the git HEAD hash so incremental rebuilds skip already-scanned commits.
+    """
+    existing = set(get_author_ids(db, article_id))
+    merged = existing | new_author_ids
+    if merged != existing:
+        set_article_authors(db, article_id, sorted(merged))
+
+    rp = DEFAULT_ARTICLES_DIR / article_id
+    repo = gitmod.Repo(rp)
+    article = get_article(db, article_id)
+    if article is not None:
+        article.last_author_rebuild_hash = repo.head.commit.hexsha
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -86,6 +103,9 @@ def fork_article(db: Session, article_id: str, user_id: str) -> dict:
 
     shutil.copytree(src, dst, symlinks=True)
 
+    # Derive authors from git first, then write DB — git is the SOT.
+    git_authors = get_commit_authors(dst) | {user_id}
+
     fork = create_article(
         db,
         id=fork_id,
@@ -93,16 +113,11 @@ def fork_article(db: Session, article_id: str, user_id: str) -> dict:
         abstract=original.abstract,
         keywords=original.keywords,
         categories=original.categories,
-        authors=[user_id],
+        authors=sorted(git_authors),
         status="draft",
         forked_from=article_id,
     )
     increment_fork_count(db, article_id)
-
-    if (dst / ".git").is_dir():
-        git_authors = get_authors_from_git(dst, db)
-        git_authors.add(user_id)
-        rebuild_article_authors(db, fork_id, git_authors)
 
     return {"id": fork.id, "forked_from": article_id, "status": "draft"}
 
@@ -309,7 +324,7 @@ def update_article_content(
         repo = gitmod.Repo(rp)
         commit_hash = repo.head.commit.hexsha if repo.head.is_valid() else None
 
-    git_authors = get_authors_from_git(rp, db, since_hash=a.last_author_rebuild_hash)
+    git_authors = get_commit_authors(rp, since_hash=a.last_author_rebuild_hash)
     rebuild_article_authors(db, article_id, git_authors)
 
     if publish:
@@ -469,7 +484,7 @@ def accept_merge(db: Session, article_id: str, proposal_id: str, user_id: str) -
             "message": "Merge conflicts detected.",
         }
 
-    all_authors = get_authors_from_git(target_repo, db)
+    all_authors = get_commit_authors(target_repo)
     rebuild_article_authors(db, article_id, all_authors)
 
     mp = accept_merge_proposal(db, proposal_id)

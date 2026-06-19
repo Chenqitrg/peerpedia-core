@@ -103,6 +103,25 @@ def _patch_text(d) -> str:
     return str(d)
 
 
+def get_commit_authors(
+    repo_path: Path,
+    since_hash: str | None = None,
+) -> set[str]:
+    """Return the set of user IDs from commit author emails.
+
+    Emails have the form ``{user_id}@peerpedia``, so the user_id is
+    extracted directly from the email without needing a DB lookup.
+    """
+    import git as _git
+
+    repo = _git.Repo(repo_path)
+    rev = f"{since_hash}..HEAD" if since_hash else None
+    return {
+        c.author.email.split("@", 1)[0]
+        for c in repo.iter_commits(rev=rev)
+    }
+
+
 def get_diff_between(repo_path: Path, hash1: str, hash2: str) -> dict:
     """Get the diff between two arbitrary commits.
 

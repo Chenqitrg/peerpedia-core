@@ -116,32 +116,34 @@ _assert "$OUT" "5" "F4.2 review scores visible"
 
 echo "=== Flow 5: Fork & Merge ==="
 
-# Need published article for fork. Create+publish via Python to get published status.
-FORK_SRC=$(HOME="$PEERPEDIA_HOME" python -c "
-import os
-from peerpedia_core.storage.db.engine import get_engine, get_session, init_db
-from peerpedia_core.storage.db.crud_article import create_article
-from peerpedia_core.storage.db.crud_user import create_user as cu
-from peerpedia_core.storage.git_backend import init_article_repo, commit_article
-import bcrypt, uuid
-os.environ['HOME'] = os.environ['PEERPEDIA_HOME']
-db_url = f'sqlite:///{os.environ["HOME"]}/.peerpedia/peerpedia.db'
-e = get_engine(db_url); init_db(e); s = get_session(e)
-uid = str(uuid.uuid4())
-cu(s, username='charlie', password_hash=bcrypt.hashpw(b'x', bcrypt.gensalt()).decode(), name='Charlie')
-aid = str(uuid.uuid4())
-a = create_article(s, id=aid, title='Forkable', authors=[uid], status='published')
-rp = init_article_repo(aid)
-(rp / 'article.md').write_text('# Forkable\n\nTest content.')
-commit_article(rp, 'Initial commit', 'Charlie', 'charlie@peerpedia')
-s.commit()
-print(a.id)
-" 2>&1)
-echo "  Fork source: $FORK_SRC"
-
-# Register Charlie so the CLI can resolve them
+# Register Charlie for fork source
 OUT=$(_run account register --name Charlie 2>&1)
 _assert "$OUT" "Registered" "F5.0 register Charlie"
+
+# Create article via CLI (handles DB dir, git init), then promote to published
+FORK_SRC=$(_id "$(_run_j article create --title "Forkable Paper" --format markdown --content "# Forkable\n\nTest content." --user Charlie)")
+echo "  Fork source draft: $FORK_SRC"
+# Promote to published so it's forkable (CLI publish goes to sedimentation, not published)
+HOME="$PEERPEDIA_HOME" python -c "
+import os; os.environ['HOME'] = os.environ['PEERPEDIA_HOME']
+from peerpedia_core.storage.db.engine import get_engine, get_session
+from peerpedia_core.storage.db.crud_article import update_article_status
+from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, init_article_repo, commit_article
+from pathlib import Path
+db_path = Path(os.environ['HOME']) / '.peerpedia' / 'peerpedia.db'
+db_path.parent.mkdir(parents=True, exist_ok=True)
+e = get_engine(f'sqlite:///{db_path}'); s = get_session(e)
+update_article_status(s, '$FORK_SRC', 'published')
+# Ensure git repo exists with a commit
+rp = DEFAULT_ARTICLES_DIR / '$FORK_SRC'
+if not (rp / '.git').is_dir():
+    init_article_repo('$FORK_SRC')
+if not (rp / 'article.md').exists():
+    (rp / 'article.md').write_text('# Forkable\n\nTest content.')
+    commit_article(rp, 'Initial commit', 'Charlie', 'charlie@peerpedia')
+s.commit()
+" 2>&1
+echo "  Fork source published: $FORK_SRC"
 
 OUT=$(_run fork "$FORK_SRC" --user Bob)
 _assert "$OUT" "Forked" "F5.1 fork article"

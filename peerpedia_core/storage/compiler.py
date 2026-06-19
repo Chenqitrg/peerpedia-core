@@ -40,122 +40,84 @@ class CompileResult:
 
 
 def extract_frontmatter(source: str) -> dict:
-    """Extract YAML-like frontmatter from Typst or Markdown source.
+    """Extract YAML frontmatter from an article or review source.
 
-    Frontmatter is delimited by --- on its own lines at the start of the file.
-    Only simple key: value pairs and list items (with - prefix) are supported
-    for MVP. No PyYAML dependency required.
-
-    Example:
-        ---
-        title: My Article
-        abstract: A summary.
-        categories:
-          - physics
-          - math
-        ---
-
-        = Actual content starts here
+    Delegates to ``parse_frontmatter`` — kept for backward compatibility.
     """
+    return parse_frontmatter(source)
+
+
+# ── Public frontmatter API (PyYAML-backed) ─────────────────────────────────
+
+
+def parse_frontmatter(source: str) -> dict:
+    """Parse ``---``-delimited YAML frontmatter from *source*.
+
+    Requires the first line to be exactly ``---`` (no leading whitespace,
+    no trailing content) and a matching closing ``---`` on its own line.
+    Returns a dict of metadata, or an empty dict on any mismatch.
+    """
+    import yaml
+
     lines = source.split("\n")
     if not lines or lines[0].strip() != "---":
         return {}
 
-    end_idx = None
+    # Find closing --- (must be on its own line)
+    end = None
     for i in range(1, len(lines)):
         if lines[i].strip() == "---":
-            end_idx = i
+            end = i
             break
-
-    if end_idx is None:
+    if end is None:
         return {}
 
-    fm_lines = lines[1:end_idx]
-    return _parse_simple_yaml(fm_lines)
+    yaml_block = "\n".join(lines[1:end]).strip()
+    if not yaml_block:
+        return {}
+    try:
+        result = yaml.safe_load(yaml_block)
+    except yaml.YAMLError:
+        return {}
 
+    if not isinstance(result, dict):
+        return {}
 
-def _parse_simple_yaml(lines: list[str]) -> dict:
-    """Parse a minimal YAML subset: scalar keys and list values.
-
-    Supports:
-        key: value
-        key:
-          - item1
-          - item2
-
-    No nested dicts, no quotes, no anchors. Just enough for article metadata.
-    """
-    result = {}
-    current_key = None
-    current_list = []
-
-    for line in lines:
-        # Skip empty lines
-        if not line.strip():
-            continue
-
-        # List item
-        if line.strip().startswith("- "):
-            item = line.strip()[2:].strip()
-            if current_key is not None:
-                current_list.append(item)
-            continue
-
-        # Key: value — flush any pending list
-        if ":" in line:
-            if current_key is not None and current_list:
-                result[current_key] = current_list
-                current_list = []
-
-            key, _, value = line.partition(":")
-            key = key.strip()
-            value = value.strip()
-
-            if value:
-                # Scalar value: key: value
-                result[key] = _parse_scalar(value)
-                current_key = None
-            else:
-                # List follows: key:
-                current_key = key
-
-    # Flush final list
-    if current_key is not None and current_list:
-        result[current_key] = current_list
-
-    # Chinese alias mapping
-    zh_aliases = {
-        "标题": "title",
-        "摘要": "abstract",
-        "中文摘要": "abstract_zh",
-        "分类": "categories",
-        "关键词": "keywords",
-        "语言": "language",
-        "关于人物": "about_person",
-        "原始著作": "original_works",
-    }
-    for zh_key, en_key in zh_aliases.items():
-        if zh_key in result and en_key not in result:
-            result[en_key] = result.pop(zh_key)
+    # Only known article metadata keys are allowed.
+    allowed = {"title", "abstract", "keywords", "categories"}
+    unknown = set(result.keys()) - allowed
+    if unknown:
+        return {}
 
     return result
 
 
-def _parse_scalar(value: str):
-    """Parse a scalar YAML value. Returns str, bool, int, or float."""
-    if value.lower() == "true":
-        return True
-    if value.lower() == "false":
-        return False
-    try:
-        return int(value)
-    except ValueError:
-        pass
-    try:
-        return float(value)
-    except ValueError:
-        pass
-    return value
+def make_frontmatter(data: dict) -> str:
+    """Serialize *data* to a ``---``-delimited YAML frontmatter block.
+
+    Returns a string suitable for prepending to an article or review body.
+    """
+    import yaml
+
+    yaml_str = yaml.dump(data, default_flow_style=False, allow_unicode=True, sort_keys=False)
+    return f"---\n{yaml_str}---\n"
+
+
+def make_article_frontmatter(
+    title: str,
+    abstract: str | None = None,
+    keywords: list[str] | None = None,
+    categories: list[str] | None = None,
+) -> str:
+    """Build YAML frontmatter for an article file."""
+    data: dict = {"title": title}
+    if abstract:
+        data["abstract"] = abstract
+    if keywords:
+        data["keywords"] = keywords
+    if categories:
+        data["categories"] = categories
+    return make_frontmatter(data)
 
 
 # ── Format detection ───────────────────────────────────────────────────────────

@@ -31,6 +31,7 @@ from peerpedia_core.commands import (
     accept_merge,
     create_article_with_content,
     fork_article,
+    publish_article,
     rollback_article,
     submit_review,
     update_article_content,
@@ -186,9 +187,12 @@ def _cmd_article_create(args):
         result = create_article_with_content(
             db, title=args.title, content=content, format=args.format,
             author_ids=[user_id],
-            publish=args.publish,
-            self_review=_parse_scores(args.scores) if args.scores else None,
         )
+        if args.publish:
+            self_review = _parse_scores(args.scores) if args.scores else None
+            result = publish_article(
+                db, result["id"], user_id, self_review,
+            )
         db.commit()
         if args.json:
             _json_out(result)
@@ -215,21 +219,32 @@ def _cmd_article_show(args):
             _json_out({"id": article.id, "title": article.title, "status": article.status})
             return
 
-        # Read content from git
-        content = ""
+        # Read content + frontmatter from git (SOT for title/abstract/keywords/categories).
+        raw = ""
         rp = DEFAULT_ARTICLES_DIR / article.id
         for ext in [".md", ".typ"]:
             f = rp / f"article{ext}"
             if f.exists():
-                content = f.read_text()[:2000]
+                raw = f.read_text()
                 break
+        content = raw[:2000]
+
+        # Parse frontmatter — override DB values with git when available.
+        try:
+            from peerpedia_core.storage.compiler import parse_frontmatter
+            fm = parse_frontmatter(raw)
+            title = fm.get("title", article.title)
+            abstract = fm.get("abstract", article.abstract)
+        except Exception:
+            title = article.title
+            abstract = article.abstract
 
         scores_str = _stars(article.score) if article.score else "[muted]no scores[/]"
         body = (
-            f"[bold info]{article.title}[/]      {_status_badge(article.status)}\n"
+            f"[bold info]{title}[/]      {_status_badge(article.status)}\n"
             f"Authors: {', '.join(get_author_ids(db, article.id))}\n"
             f"Score:   {scores_str}\n"
-            f"Abstract: {article.abstract or '[muted]none[/]'}\n"
+            f"Abstract: {abstract or '[muted]none[/]'}\n"
             f"\n── Content ──\n[muted]{content}[/]"
         )
         _print_panel("Article", body)
@@ -279,10 +294,9 @@ def _cmd_article_edit(args):
 def _cmd_article_publish(args):
     db = _get_db()
     try:
+        user_id = _resolve_user(db, args.user)
         scores = _parse_scores(args.scores)
-        result = update_article_content(
-            db, args.id, publish=True, self_review=scores, user_id=_resolve_user(db, args.user),
-        )
+        result = publish_article(db, args.id, user_id, scores)
         db.commit()
         if args.json:
             _json_out(result)
@@ -321,7 +335,7 @@ def _cmd_review_submit(args):
         scores = _parse_scores(args.scores)
         result = submit_review(
             db, article_id=args.article_id, reviewer_id=_resolve_user(db, args.user),
-            scores=scores, scope="pool",
+            scores=scores,
             commit_hash=args.commit_hash or "unknown",
             comment=args.comment or "",
         )

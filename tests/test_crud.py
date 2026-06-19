@@ -182,12 +182,12 @@ class TestReviewCRUD:
         session = get_session(engine)
         reviewer = _make_user(session, "rv1")
         author = _make_user(session, "au1")
-        article = _make_article(session, authors=[author.id])
+        article = _make_article(session, authors=[author.id], status="sedimentation")
         r = upsert_review(
-            session, article_id=article.id, commit_hash="abc", reviewer_id=reviewer.id, scope="pool", scores=_default_scores()
+            session, article_id=article.id, commit_hash="abc", reviewer_id=reviewer.id, scores=_default_scores()
         )
         assert r.id is not None
-        assert r.scope == "pool"
+        assert r.scope == "sedimentation"
         session.close()
 
     def test_get_reviews_for_article(self, engine):
@@ -200,71 +200,33 @@ class TestReviewCRUD:
         rv1 = _make_user(session, "rv_a")
         rv2 = _make_user(session, "rv_b")
         author = _make_user(session, "au_x")
-        article = _make_article(session, authors=[author.id])
+        article = _make_article(session, authors=[author.id], status="sedimentation")
         upsert_review(
-            session, article_id=article.id, commit_hash="h1", reviewer_id=rv1.id, scope="pool", scores=_default_scores()
+            session, article_id=article.id, commit_hash="h1", reviewer_id=rv1.id, scores=_default_scores()
         )
         upsert_review(
-            session, article_id=article.id, commit_hash="h2", reviewer_id=rv2.id, scope="published", scores=_default_scores()
+            session, article_id=article.id, commit_hash="h2", reviewer_id=rv2.id, scores=_default_scores()
         )
         reviews = get_reviews_for_article(session, article.id)
         assert len(reviews) == 2
         session.close()
 
-    def test_get_review_by_user_and_scope(self, engine):
-        from peerpedia_core.storage.db.crud_review import (
-            upsert_review,
-            get_review_by_user_scope,
-        )
-
-        session = get_session(engine)
-        rv = _make_user(session, "rv_s")
-        author = _make_user(session, "au_s")
-        article = _make_article(session, authors=[author.id])
-        upsert_review(session, article_id=article.id, commit_hash="h", reviewer_id=rv.id, scope="pool", scores=_default_scores())
-        found = get_review_by_user_scope(session, article.id, rv.id, "pool", commit_hash="h")
-        assert found is not None
-        assert found.reviewer_id == rv.id
-        # different scope
-        assert get_review_by_user_scope(session, article.id, rv.id, "published", commit_hash="h") is None
-        session.close()
-
-    def test_update_review_scores(self, engine):
-        from peerpedia_core.storage.db.crud_review import (
-            upsert_review,
-            update_review_scores,
-        )
-
-        session = get_session(engine)
-        rv = _make_user(session, "rv_u")
-        author = _make_user(session, "au_u")
-        article = _make_article(session, authors=[author.id])
-        r = upsert_review(
-            session, article_id=article.id, commit_hash="h", reviewer_id=rv.id, scope="pool", scores=_default_scores()
-        )
-        new_scores = {"originality": 5, "rigor": 5, "completeness": 5, "pedagogy": 5, "impact": 5}
-        update_review_scores(session, r.id, new_scores)
-        updated = session.get(Review, r.id)
-        assert updated.scores["originality"] == 5
-        session.close()
-
     def test_review_different_commits_ok(self, engine):
-        """Same (article, reviewer, scope) with different commit_hashes should succeed."""
+        """Same (article, reviewer) with different commit_hashes should succeed."""
         from peerpedia_core.storage.db.crud_review import upsert_review
 
         session = get_session(engine)
         rv = _make_user(session, "rv_multi")
         author = _make_user(session, "au_multi")
-        article = _make_article(session, authors=[author.id])
+        article = _make_article(session, authors=[author.id], status="sedimentation")
         r1 = upsert_review(
-            session, article_id=article.id, commit_hash="commit_1", reviewer_id=rv.id, scope="pool", scores=_default_scores()
+            session, article_id=article.id, commit_hash="commit_1", reviewer_id=rv.id, scores=_default_scores()
         )
         r2 = upsert_review(
             session,
             article_id=article.id,
             commit_hash="commit_2",
             reviewer_id=rv.id,
-            scope="pool",
             scores={
                 "originality": 5,
                 "rigor": 5,
@@ -279,62 +241,29 @@ class TestReviewCRUD:
         session.close()
 
     def test_duplicate_same_commit_upserts(self, engine):
-        """Same (article, reviewer, scope, commit_hash) updates existing scores."""
+        """Same (article, reviewer, commit_hash) updates existing scores."""
         from peerpedia_core.storage.db.crud_review import upsert_review
 
         session = get_session(engine)
         rv = _make_user(session, "rv_dup")
         author = _make_user(session, "au_dup")
-        article = _make_article(session, authors=[author.id])
+        article = _make_article(session, authors=[author.id], status="sedimentation")
         first = upsert_review(
-            session, article_id=article.id, commit_hash="same_hash", reviewer_id=rv.id, scope="pool", scores=_default_scores()
+            session, article_id=article.id, commit_hash="same_hash", reviewer_id=rv.id, scores=_default_scores()
         )
         updated = upsert_review(
             session,
             article_id=article.id,
             commit_hash="same_hash",
             reviewer_id=rv.id,
-            scope="pool",
             scores={"originality": 5, "rigor": 5, "completeness": 5, "pedagogy": 5, "impact": 5},
         )
         assert updated.id == first.id
         assert updated.scores["originality"] == 5
         session.close()
 
-    def test_get_by_user_scope_with_commit(self, engine):
-        """get_review_by_user_scope with commit_hash filters correctly."""
-        from peerpedia_core.storage.db.crud_review import (
-            upsert_review,
-            get_review_by_user_scope,
-        )
-
-        session = get_session(engine)
-        rv = _make_user(session, "rv_filt")
-        author = _make_user(session, "au_filt")
-        article = _make_article(session, authors=[author.id])
-        upsert_review(session, article_id=article.id, commit_hash="h1", reviewer_id=rv.id, scope="pool", scores=_default_scores())
-        upsert_review(
-            session,
-            article_id=article.id,
-            commit_hash="h2",
-            reviewer_id=rv.id,
-            scope="pool",
-            scores={
-                "originality": 5,
-                "rigor": 5,
-                "completeness": 5,
-                "pedagogy": 5,
-                "impact": 5,
-            },
-        )
-        found = get_review_by_user_scope(session, article.id, rv.id, "pool", commit_hash="h2")
-        assert found is not None
-        assert found.commit_hash == "h2"
-        assert found.scores["originality"] == 5
-        session.close()
-
     def test_upsert_review_updates_existing(self, engine):
-        """upsert_review updates an existing review with same (article, reviewer, scope, commit_hash)."""
+        """upsert_review updates an existing review with same (article, reviewer, commit_hash)."""
         from peerpedia_core.storage.db.crud_review import (
             upsert_review,
             upsert_review,
@@ -343,7 +272,7 @@ class TestReviewCRUD:
         session = get_session(engine)
         rv = _make_user(session, "rv_upsert")
         author = _make_user(session, "au_upsert")
-        article = _make_article(session, authors=[author.id])
+        article = _make_article(session, authors=[author.id], status="sedimentation")
 
         # Create initial review
         r1 = upsert_review(
@@ -351,14 +280,13 @@ class TestReviewCRUD:
             article_id=article.id,
             commit_hash="hash_u",
             reviewer_id=rv.id,
-            scope="pool",
             scores={"originality": 1, "rigor": 1, "completeness": 1, "pedagogy": 1, "impact": 1},
         )
 
         # Upsert with same keys → should update
         new_scores = {"originality": 5, "rigor": 5, "completeness": 5, "pedagogy": 5, "impact": 5}
         r2 = upsert_review(
-            session, article_id=article.id, commit_hash="hash_u", reviewer_id=rv.id, scope="pool", scores=new_scores
+            session, article_id=article.id, commit_hash="hash_u", reviewer_id=rv.id, scores=new_scores
         )
         assert r2.id == r1.id
         assert r2.scores["originality"] == 5
@@ -692,14 +620,6 @@ class TestUpdateNotFound:
         session = get_session(engine)
         with pytest.raises(ValueError):
             update_user_reputation(session, "no-such-id", {})
-        session.close()
-
-    def test_update_review_scores_not_found(self, engine):
-        from peerpedia_core.storage.db.crud_review import update_review_scores
-
-        session = get_session(engine)
-        with pytest.raises(ValueError):
-            update_review_scores(session, "no-such-id", {})
         session.close()
 
     def test_resolve_merge_not_found(self, engine):

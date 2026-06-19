@@ -43,6 +43,7 @@ def seed(db_url: str, articles_dir: Path):
         Review,
         User,
     )
+    from peerpedia_core.storage.compiler import make_article_frontmatter
     from peerpedia_core.storage.git_backend import (
         commit_article,
         init_article_repo,
@@ -896,7 +897,7 @@ $$
 
         try:
             rp = init_article_repo(articles_dir / a.id)
-            (rp / "article.md").write_text(ad["content"])
+            (rp / "article.md").write_text(make_article_frontmatter(ad["title"]) + ad["content"])
             commit_article(rp, "Initial submission", author.name, f"{author.id}@peerpedia")
             # Write co-author attribution commits so git-derived authors
             # can recover the full author list on repair/rebuild.
@@ -931,14 +932,12 @@ $$
             session.commit()
 
         if ad.get("score"):
-            scope = "pool" if status == "sedimentation" else "published"
             try:
                 upsert_review(
                     session,
                     article_id=a.id,
                     commit_hash="0000000000000000000000000000000000000000",
                     reviewer_id=author.id,
-                    scope=scope,
                     scores=ad["score"],
                 )
             except Exception:
@@ -1017,10 +1016,10 @@ program and data. This is the von Neumann architecture.""",
         )
         try:
             rp = init_article_repo(articles_dir / fork.id)
-            (rp / "article.md").write_text(content)
+            (rp / "article.md").write_text(make_article_frontmatter(fork.title) + content)
             commit_article(rp, "Fork with extensions", forker.name, f"{forker.id}@peerpedia")
             # Second commit with improvements
-            (rp / "article.md").write_text(
+            (rp / "article.md").write_text(make_article_frontmatter(fork.title) +
                 content + "\n\n## Further Refinements\n"
                 "Additional improvements based on further analysis and peer feedback.\n"
                 f"\\n*— {forker_name}*"
@@ -1036,7 +1035,6 @@ program and data. This is the von Neumann architecture.""",
                 article_id=fork.id,
                 commit_hash="0000000000000000000000000000000000000000",
                 reviewer_id=forker.id,
-                scope="self",
                 scores=score,
             )
         except Exception:
@@ -1209,14 +1207,12 @@ program and data. This is the von Neumann architecture.""",
         if not articles:
             continue
         a = articles[0]
-        # For published articles, write published-scope reviews; pool otherwise
-        scope = "pool" if a.status == "sedimentation" else "published"
         existing = (
             session.query(Review)
             .filter(
                 Review.article_id == a.id,
                 Review.reviewer_id == reviewer.id,
-                Review.scope == scope,
+                Review.scope == a.status,
             )
             .first()
         )
@@ -1227,7 +1223,6 @@ program and data. This is the von Neumann architecture.""",
                     article_id=a.id,
                     commit_hash="0000000000000000000000000000000000000000",
                     reviewer_id=reviewer.id,
-                    scope=scope,
                     scores=scores,
                 )
                 review_count += 1
@@ -1825,13 +1820,12 @@ program and data. This is the von Neumann architecture.""",
                 continue
         else:
             a = articles[0]
-        scope = "pool" if a.status == "sedimentation" else "published"
         review = (
             session.query(Review)
             .filter(
                 Review.article_id == a.id,
                 Review.reviewer_id == reviewer.id,
-                Review.scope == scope,
+                Review.scope == a.status,
             )
             .first()
         )
@@ -1844,14 +1838,24 @@ program and data. This is the von Neumann architecture.""",
                     article_id=a.id,
                     commit_hash="0000000000000000000000000000000000000000",
                     reviewer_id=reviewer.id,
-                    scope=scope,
                     scores=default_scores,
                 )
                 session.flush()
             except Exception:
                 continue
-        # Thread messages now live in git (reviews/<reviewer_id>/thread.md).
-        # Skipping DB thread seeding — use git-based review submission instead.
+        # Write review to git: scores.json + threads/
+        import json
+        review_dir = articles_dir / a.id / "reviews" / reviewer.id
+        threads_dir = review_dir / "threads"
+        threads_dir.mkdir(parents=True, exist_ok=True)
+        scores = review.scores if review else {"originality": 4, "rigor": 4, "completeness": 4, "pedagogy": 4, "impact": 4}
+        (review_dir / "scores.json").write_text(json.dumps(scores, indent=2))
+        for i, (speaker, text) in enumerate(messages):
+            speaker_user = users[speaker]
+            ts = (datetime.now(timezone.utc) - timedelta(hours=len(messages) - i)).strftime("%Y-%m-%dT%H:%M:%SZ")
+            thread_path = threads_dir / f"{i+1:03d}.md"
+            thread_path.write_text(f"### {speaker_user.name} ({ts})\n\n{text}\n")
+            thread_count += 1
 
     session.commit()
     print(f"  Threads: {thread_count} messages new")

@@ -262,9 +262,15 @@ export PEERPEDIA_SERVER="https://peerpedia.example.com"
         ├── .git/          ← Git 仓库（完整内容历史）
         ├── article.md     ← 文章正文 + 元数据（YAML frontmatter）
         └── reviews/
-            ├── {reviewer_a}.md   ← 评审人的评审 + 作者回复（Markdown 对话线程）
-            ├── {reviewer_b}.md
-            └── {author}.md      ← 作者自评（和其他评审同格式）
+            ├── {reviewer_a}/
+            │   ├── scores.json       ← 评审评分（JSON）
+            │   └── threads/
+            │       ├── 001.md        ← 评审意见（按时间排序）
+            │       ├── 002.md        ← 作者回复
+            │       └── ...
+            └── {author}/
+                ├── scores.json       ← 作者自评（和评审同格式）
+                └── threads/
 ```
 
 备份只需要复制整个 `~/.peerpedia/` 目录。迁移到新机器：复制目录 + 安装 peerpedia-core。

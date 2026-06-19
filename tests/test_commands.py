@@ -10,6 +10,7 @@ from peerpedia_core.exceptions import ConflictError, NotAuthorizedError, NotFoun
 from peerpedia_core.commands import (
     create_article_with_content,
     fork_article,
+    publish_article,
     rollback_article,
     update_article_content,
 )
@@ -48,7 +49,6 @@ def test_fork_article_creates_record(db):
     )
     upsert_review(
         db, article_id="art-1", commit_hash="abc123", reviewer_id="alice",
-        scope="pool",
         scores={"originality": 3, "rigor": 3, "completeness": 3, "pedagogy": 3, "impact": 3},
     )
     db.flush()
@@ -109,7 +109,6 @@ def test_fork_fails_for_duplicate(db):
     create_article(db, id="art-1", title="Test", authors=["alice"], status="published")
     upsert_review(
         db, article_id="art-1", commit_hash="abc", reviewer_id="alice",
-        scope="pool",
         scores={"originality": 3, "rigor": 3, "completeness": 3, "pedagogy": 3, "impact": 3},
     )
     db.flush()
@@ -192,25 +191,16 @@ def test_create_article_with_publish(db):
 
     result = create_article_with_content(
         db, title="Pub", content="# Publish test", author_ids=["alice"],
-        publish=True,
-        self_review={"originality": 3, "rigor": 3, "completeness": 3, "pedagogy": 3, "impact": 3},
+    )
+    result = publish_article(
+        db, result["id"], "alice",
+        {"originality": 3, "rigor": 3, "completeness": 3, "pedagogy": 3, "impact": 3},
     )
 
-    assert result["status"] == "sedimentation"  # publish sets sink_start -> sedimentation
+    assert result["status"] == "sedimentation"
     from peerpedia_core.storage.db.crud_article import get_article
     article = get_article(db, result["id"])
-    assert article.sink_start is not None  # sink timer started
-
-
-def test_create_fails_publish_without_self_review(db):
-    """Publish without self_review raises BadRequestError."""
-    _create_user(db, "alice", "Alice")
-
-    from peerpedia_core.exceptions import BadRequestError
-    with pytest.raises(BadRequestError, match="self_review"):
-        create_article_with_content(
-            db, title="Bad", content="x", author_ids=["alice"], publish=True,
-        )
+    assert article.sink_start is not None
 
 
 # ── Update tests ─────────────────────────────────────────────────────────
@@ -245,3 +235,71 @@ def test_update_fails_for_non_author(db):
     from peerpedia_core.exceptions import NotAuthorizedError
     with pytest.raises(NotAuthorizedError):
         update_article_content(db, result["id"], content="# Hacked", user_id="bob")
+
+
+# ── Format tests ─────────────────────────────────────────────────────────
+
+
+def test_article_has_frontmatter(db):
+    """New-format article.md starts with YAML frontmatter containing title."""
+    _create_user(db, "alice", "Alice")
+    result = create_article_with_content(
+        db, title="Hello", content="# Test", author_ids=["alice"],
+    )
+    from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR
+    article_text = (DEFAULT_ARTICLES_DIR / result["id"] / "article.md").read_text()
+    assert article_text.startswith("---"), "article.md should start with frontmatter"
+    import yaml
+    parts = article_text.split("---", 2)
+    fm = yaml.safe_load(parts[1])
+    assert fm["title"] == "Hello"
+    assert "# Test" in article_text
+
+
+def test_self_review_creates_file(db):
+    """Self-review creates reviews/{author}/scores.json in git repo."""
+    _create_user(db, "alice", "Alice")
+    result = create_article_with_content(
+        db, title="Pub", content="# Publish test", author_ids=["alice"],
+    )
+    result = publish_article(
+        db, result["id"], "alice",
+        {"originality": 3, "rigor": 3, "completeness": 3, "pedagogy": 3, "impact": 3},
+    )
+    from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR
+    import json
+    scores_path = DEFAULT_ARTICLES_DIR / result["id"] / "reviews" / "alice" / "scores.json"
+    assert scores_path.exists(), "Self-review scores.json should exist in git"
+    scores = json.loads(scores_path.read_text())
+    assert scores["originality"] == 3
+
+
+def test_metadata_only_update_commits(db):
+    """Updating only title (no content change) produces a git commit."""
+    _create_user(db, "alice", "Alice")
+    result = create_article_with_content(
+        db, title="Original", content="# Original", author_ids=["alice"],
+    )
+    aid = result["id"]
+
+    updated = update_article_content(
+        db, aid, title="Updated Title", user_id="alice",
+    )
+    assert updated["commit_hash"] != result["commit_hash"]
+    # Verify frontmatter was updated
+    from peerpedia_core.storage.compiler import parse_frontmatter
+    from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR
+    article_text = (DEFAULT_ARTICLES_DIR / aid / "article.md").read_text()
+    fm = parse_frontmatter(article_text)
+    assert fm["title"] == "Updated Title"
+
+
+def test_frontmatter_roundtrip():
+    """make_article_frontmatter → parse_frontmatter roundtrip preserves data."""
+    from peerpedia_core.storage.compiler import make_article_frontmatter, parse_frontmatter
+    fm = make_article_frontmatter("Test", "Abstract text", ["kw1", "kw2"], ["cat"])
+    parsed = parse_frontmatter(fm + "# Content body")
+    assert parsed["title"] == "Test"
+    assert parsed["abstract"] == "Abstract text"
+    assert parsed["keywords"] == ["kw1", "kw2"]
+    assert parsed["categories"] == ["cat"]

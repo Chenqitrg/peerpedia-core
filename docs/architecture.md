@@ -179,9 +179,15 @@ User ──< ArticleAuthor >── Article ──< Citation >── Article
 ├── .git/
 ├── article.md                  # 文章正文 + 元数据（YAML frontmatter）
 └── reviews/
-    ├── {reviewer_a}.md         # 评审人 A 的评审 + 与作者的对话线程
-    ├── {reviewer_b}.md         # 评审人 B 的评审 + 与作者的对话线程
-    └── {author_id}.md          # 作者自评（和其他评审同格式）
+    ├── {reviewer_a}/
+    │   ├── scores.json         # 评审评分（JSON，机器直接读）
+    │   └── threads/
+    │       ├── 001.md          # 评审意见（按时间排序）
+    │       ├── 002.md          # 作者回复
+    │       └── ...
+    └── {author}/
+        ├── scores.json         # 作者自评（和其他评审同格式）
+        └── threads/
 ```
 
 ### 文章文件格式（`article.md` / `article.typ`）
@@ -201,29 +207,20 @@ categories: [physics, mathematics]
 
 YAML frontmatter 存 title、abstract、keywords、categories——这些字段在 git 中有版本历史，DB 只是查询缓存。
 
-### 评审文件格式（`reviews/{user_id}.md`）
+### 评审存储格式（`reviews/{reviewer_id}/`）
 
-```markdown
----
-originality: 4
-rigor: 3
-completeness: 4
-pedagogy: 3
-impact: 5
----
-
-### 费曼 (2024-03-15T10:30:00Z)
-
-论证结构很好，第三节可以再补充一些引理。
-
-### 爱因斯坦 (2024-03-15T14:20:00Z)
-
-感谢反馈，已补充引理。参见 commit abc123。
+```
+reviews/{reviewer_id}/
+├── scores.json              ← 评分（5 维 JSON），每次提交覆盖
+└── threads/
+    ├── 001.md               ← 首次评审
+    ├── 002.md               ← 作者回复
+    └── ...                  ← 序号递增，按时间追加
 ```
 
-- **YAML frontmatter** 存评分，Python `yaml` 库直接解析
-- **Markdown 正文** 是评审对话线程——`### 用户名 (时间戳)` 分隔每条消息
-- **一个 reviewer 一个文件**：多轮对话追加在同一个文件末尾
+- **`scores.json`**：`{"originality": 4, "rigor": 3, ...}`，机器原生格式，`json.load()` 一行
+- **`threads/`**：每个评论是独立文件，按 `001.md`, `002.md` 排序。Git diff 干净，不需要解析大文件
+- **自评同等**：作者自评存在 `reviews/{author_id}/`，格式完全一样
 
 ## 数据流：一个评审的完整路径
 
@@ -238,8 +235,9 @@ commands.py → submit_review():
   3. get_user(db, reviewer_id) → 确认评审人存在
   4. get_article(db, article_id) → 确认文章存在
   5. _write_review_to_git():
-     a. 写 reviews/{reviewer_id}.md（YAML frontmatter + 评论正文）
-     b. git commit
+     a. 写 reviews/{reviewer_id}/scores.json
+     b. 写 reviews/{reviewer_id}/threads/{nnn}.md
+     c. git commit
   6. upsert_review() → 写 DB 评分缓存
   7. compute_article_score() → 重新算文章总分
   8. compute_author_reputation() → 更新作者声誉
@@ -271,5 +269,5 @@ cli.py:
 3. **Git 与 DB 互不知晓** — 两个存储层不互相 import，只有 commands.py 知道两者
 4. **Fail fast** — 无 Git → 报错，不静默降级
 5. **编排函数不 commit** — commands.py 只做 add/flush，CLI 调 db.commit()
-6. **评审是 Markdown 文件** — `reviews/{user_id}.md`，YAML frontmatter 存评分，正文是对话线程
-7. **自评即评审** — 作者自评存在 `reviews/{author_id}.md`，和其他评审同格式同流程
+6. **评审是文件夹，评分和评论分离** — `reviews/{id}/scores.json` + `threads/` 子目录，每个评论是独立文件
+7. **自评即评审** — 作者自评存在 `reviews/{author_id}/`，和其他评审同格式同流程

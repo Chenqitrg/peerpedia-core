@@ -149,7 +149,31 @@ def assert_can_rollback_article(db: Session, article_id: str, current_user: User
 
 
 def assert_can_publish_article(db: Session, article_id: str, current_user: User) -> Article:
+    # TODO: unanimous consent — all authors must confirm before publishing.
+    # Currently any single author can push a draft into the sedimentation pool,
+    # which is irreversible.  Needs a confirmation mechanism (new table or
+    # in-git sign-off) that gates the publish action on every author's approval.
     return _assert_is_author(db, article_id, current_user, "publish")
+
+
+def assert_can_accept_merge(db: Session, article_id: str, current_user: User) -> Article:
+    # TODO: not every author should be able to accept a merge.  The current
+    # blanket "any author" check in accept_merge is a permission gap — merge
+    # acceptance should require explicit consent (e.g. the fork author is the
+    # only one who can propose a merge, and target authors must individually
+    # approve).  Needs a consent model before tightening.
+    return _assert_is_author(db, article_id, current_user, "accept merge")
+
+
+def assert_can_submit_review(db: Session, article_id: str) -> Article:
+    """Raise if *current_user* cannot submit a review.
+
+    Sedimentation and published articles accept community reviews, including authors.
+    """
+    a = get_article_or_raise(db, article_id)
+    if a.status in ("sedimentation", "published"):
+        return a
+    raise NotAuthorizedError("Cannot review a draft article")
 
 
 def assert_can_extend_sink(db: Session, article_id: str, current_user: User) -> Article:
@@ -205,10 +229,8 @@ def require_self_review_for_publish(
     article_id: str,
     current_user: User,
 ) -> None:
-    """Raise if the current HEAD lacks a pool-scoped self-review
-    by *current_user*.
-    """
-    from peerpedia_core.storage.db.crud_review import get_review_by_user_scope
+    """Raise if the current HEAD lacks a self-review by *current_user*."""
+    from peerpedia_core.storage.db.models import Review
     from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR
 
     rp = DEFAULT_ARTICLES_DIR / article_id
@@ -223,13 +245,20 @@ def require_self_review_for_publish(
             "self_review is required before publishing — no commits yet",
         )
 
+    article = get_article(db, article_id)
+    if article is None:
+        raise BadRequestError("Article not found")
+
     head = repo.head.commit.hexsha
-    existing = get_review_by_user_scope(
-        db,
-        article_id,
-        current_user.id,
-        "pool",
-        commit_hash=head,
+    existing = (
+        db.query(Review)
+        .filter(
+            Review.article_id == article_id,
+            Review.reviewer_id == current_user.id,
+            Review.scope == article.status,
+            Review.commit_hash == head,
+        )
+        .first()
     )
     if existing is None:
         raise BadRequestError("self_review is required before publishing")

@@ -64,9 +64,8 @@ class Review(Base):
     article_id = Column(String, ForeignKey("articles.id"), nullable=False)
     commit_hash = Column(String, nullable=False)
     reviewer_id = Column(String, ForeignKey("users.id"), nullable=False)
-    scope = Column(String, nullable=False)  # "pool" | "published"
+    scope = Column(String, nullable=False)  # "sedimentation" | "published" — matches article.status
     scores = Column(JSONDict, nullable=False)  # FiveDimScores as dict
-    contributions = Column(JSONDict, nullable=True)  # author_id → {novelty, rigor, clarity, impact, reproducibility} ratios; feeds into User.reputation
     created_at = Column(DateTime, nullable=False, default=_utcnow)
     updated_at = Column(DateTime, nullable=False, default=_utcnow, onupdate=_utcnow)
 

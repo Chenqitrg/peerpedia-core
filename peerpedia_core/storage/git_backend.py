@@ -22,6 +22,11 @@ def init_article_repo(repo_path: Path) -> Path:
 
     Creates the repo directory, initializes .git/, and sets up the
     reviews/ subdirectory.  Returns repo_path.
+
+    **Do not call this function in isolation.**  An empty repo without
+    content and an initial commit is invalid.  This function exists
+    only as a building block for ``create_article_with_content``
+    (and for tests that need a bare git repo).
     """
     import git
 

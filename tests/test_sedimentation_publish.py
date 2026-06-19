@@ -200,7 +200,7 @@ class TestPublishReadyArticles:
             article.id,
             "hash1",
             reviewer.id,
-            "pool",
+            "sedimentation",
             _build_score(4, 4, 4, 4, 4),
         )
         count = publish_ready_articles(session)
@@ -242,7 +242,7 @@ class TestPublishReadyArticles:
             article.id,
             "old_hash",
             reviewer.id,
-            "pool",
+            "sedimentation",
             _build_score(5, 5, 5, 5, 5),
         )
 
@@ -253,7 +253,7 @@ class TestPublishReadyArticles:
             article.id,
             "new_hash",
             reviewer.id,
-            "pool",
+            "sedimentation",
             _build_score(3, 3, 3, 3, 3),
         )
 

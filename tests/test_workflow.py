@@ -109,11 +109,11 @@ class TestPerCommitScoring:
         session.commit()
         return a
 
-    def _make_review(self, session, article_id, commit_hash, reviewer_id, scope, scores):
+    def _make_review(self, session, article_id, commit_hash, reviewer_id, scores):
         from peerpedia_core.storage.db.crud_review import upsert_review
 
         return upsert_review(
-            session, article_id=article_id, commit_hash=commit_hash, reviewer_id=reviewer_id, scope=scope, scores=scores
+            session, article_id=article_id, commit_hash=commit_hash, reviewer_id=reviewer_id, scores=scores
         )
 
     def test_accumulate_scores_across_commits(self, engine):
@@ -132,7 +132,6 @@ class TestPerCommitScoring:
             article.id,
             "abc",
             rv.id,
-            "pool",
             {"originality": 5, "rigor": 5, "completeness": 5, "pedagogy": 5, "impact": 5},
         )
         # Review for commit "def" with score 1
@@ -141,7 +140,6 @@ class TestPerCommitScoring:
             article.id,
             "def",
             rv.id,
-            "pool",
             {"originality": 1, "rigor": 1, "completeness": 1, "pedagogy": 1, "impact": 1},
         )
 
@@ -201,7 +199,6 @@ class TestPerCommitScoring:
             article.id,
             "hash_w",
             rv.id,
-            "pool",
             {"originality": 3, "rigor": 3, "completeness": 3, "pedagogy": 3, "impact": 3},
         )
 

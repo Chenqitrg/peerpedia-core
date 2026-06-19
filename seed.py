@@ -918,7 +918,7 @@ $$
         a = create_article(session, authors=all_authors, status="draft", title=ad["title"])
 
         try:
-            rp = init_article_repo(a.id, base_dir=articles_dir)
+            rp = init_article_repo(articles_dir / a.id)
             (rp / "article.md").write_text(ad["content"])
             commit_article(rp, "Initial submission", author.name, f"{author.id}@peerpedia", allow_empty=True)
             # Write co-author attribution commits so git-derived authors
@@ -1040,7 +1040,7 @@ program and data. This is the von Neumann architecture.""",
             session, authors=[forker.id], status="draft", title=f"{parent.title} — Fork by {forker_name}", forked_from=parent.id
         )
         try:
-            rp = init_article_repo(fork.id, base_dir=articles_dir)
+            rp = init_article_repo(articles_dir / fork.id)
             (rp / "article.md").write_text(content)
             commit_article(rp, "Fork with extensions", forker.name, f"{forker.id}@peerpedia", allow_empty=True)
             # Second commit with improvements

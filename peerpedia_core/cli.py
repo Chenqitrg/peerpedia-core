@@ -42,7 +42,7 @@ from peerpedia_core.storage.db.crud_article import (
     get_author_ids,
     list_articles,
 )
-from peerpedia_core.storage.git_backend import delete_article_repo
+from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, delete_article_repo
 from peerpedia_core.storage.db.crud_bookmark import add_bookmark, get_bookmarks_for_user, remove_bookmark
 from peerpedia_core.storage.db.crud_merge import create_merge_proposal
 from peerpedia_core.storage.db.crud_review import get_reviews_for_article
@@ -306,7 +306,7 @@ def _cmd_article_delete(args):
             console.print("[warning]Use --force to confirm deletion[/]")
             return
         delete_article(db, args.id)  # DB clean-up (commits internally)
-        delete_article_repo(args.id)  # git repo clean-up
+        delete_article_repo(DEFAULT_ARTICLES_DIR / args.id)  # git repo clean-up
         _ok(f"Deleted [accent]{args.id[:8]}[/]")
     except Exception as e:
         db.rollback()

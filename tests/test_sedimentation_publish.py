@@ -160,7 +160,7 @@ class TestPublishReadyArticles:
             orig_dir = gb_mod.DEFAULT_ARTICLES_DIR
             try:
                 gb_mod.DEFAULT_ARTICLES_DIR = base
-                rp = init_article_repo(article_id, base_dir=base)
+                rp = init_article_repo(base / article_id)
                 (rp / "article.md").write_text("# Test")
                 commit_article(rp, "init", "A", "a@b.com", allow_empty=True)
 

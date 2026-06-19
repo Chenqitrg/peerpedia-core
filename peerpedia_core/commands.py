@@ -49,11 +49,11 @@ from peerpedia_core.storage.git_backend import (
     DEFAULT_ARTICLES_DIR,
     MergeConflictError,
     commit_article,
-    get_article_lock,
     get_commit_history,
     init_article_repo,
     merge_git_repos,
 )
+from peerpedia_core.storage.locks import get_article_lock
 from peerpedia_core.workflow.reputation import compute_author_reputation
 from peerpedia_core.workflow.scoring import compute_article_score_for_commit
 
@@ -219,7 +219,7 @@ def create_article_with_content(
     rp = DEFAULT_ARTICLES_DIR / a.id
     is_new = not (rp / ".git").is_dir()
     if is_new:
-        init_article_repo(a.id)
+        init_article_repo(rp)
 
     ext = ".typ" if format == "typst" else ".md"
     (rp / f"article{ext}").write_text(content)

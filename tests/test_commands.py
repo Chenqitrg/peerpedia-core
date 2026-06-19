@@ -55,7 +55,7 @@ def test_fork_article_creates_record(db):
 
     from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, init_article_repo, commit_article
     rp = DEFAULT_ARTICLES_DIR / "art-1"
-    init_article_repo("art-1")
+    init_article_repo(rp)
     (rp / "article.md").write_text("# Test Article\n\nContent.")
     commit_article(rp, "Initial commit", "Alice", "alice@peerpedia")
 
@@ -116,7 +116,7 @@ def test_fork_fails_for_duplicate(db):
 
     from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, init_article_repo, commit_article
     rp = DEFAULT_ARTICLES_DIR / "art-1"
-    init_article_repo("art-1")
+    init_article_repo(rp)
     (rp / "article.md").write_text("# Test\n\nContent.")
     commit_article(rp, "Initial commit", "Alice", "alice@peerpedia")
 
@@ -142,7 +142,7 @@ def test_rollback_creates_revert_commit(db):
 
     rp = DEFAULT_ARTICLES_DIR / "art-1"
     if not (rp / ".git").is_dir():
-        init_article_repo("art-1")
+        init_article_repo(rp)
     (rp / "article.md").write_text("# Test Content")
     commit_article(rp, "Initial", "Alice", "alice@peerpedia")
 

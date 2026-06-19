@@ -12,33 +12,22 @@ count) lives in the database so it can be queried and aggregated.
 """
 
 import tempfile
-import threading
 from pathlib import Path
-from typing import Optional
 
 DEFAULT_ARTICLES_DIR = Path.home() / ".peerpedia" / "articles"
 
-# Per-article git operation locks. Plain dict (not WeakValueDictionary — locks
-# must survive GC). Guarded by a module-level lock for thread-safe get/create.
-_locks_dict: dict[str, threading.Lock] = {}
-_locks_guard = threading.Lock()
 
-
-def init_article_repo(
-    article_id: str,
-    base_dir: Optional[Path] = None,
-) -> Path:
+def init_article_repo(repo_path: Path) -> Path:
     """Initialize a new git repository for an article.
 
-    Returns the path to the repo.
+    Creates the repo directory, initializes .git/, and sets up the
+    reviews/ subdirectory.  Returns repo_path.
     """
     import git
 
-    base = base_dir or DEFAULT_ARTICLES_DIR
-    repo_path = base / article_id
     repo_path.mkdir(parents=True, exist_ok=True)
-
     git.Repo.init(repo_path)
+    (repo_path / "reviews").mkdir(exist_ok=True)
     return repo_path
 
 
@@ -383,28 +372,12 @@ def create_bundle(repo_path: Path, since_hash: str) -> bytes:
         Path(bundle_path).unlink(missing_ok=True)
 
 
-def get_article_lock(article_id: str) -> threading.Lock:
-    """Get or create a per-article threading.Lock for git operation serialization.
-
-    Guards the dict with _locks_guard to prevent races during lock creation.
-    The lock persists indefinitely (no GC risk like WeakValueDictionary).
-    """
-    with _locks_guard:
-        lock = _locks_dict.get(article_id)
-        if lock is None:
-            lock = threading.Lock()
-            _locks_dict[article_id] = lock
-    return lock
-
-
-def delete_article_repo(article_id: str, base_dir: Path | None = None) -> None:
+def delete_article_repo(repo_path: Path) -> None:
     """Delete the git repository for an article (idempotent).
 
     Called by orchestration layer AFTER the database record has been deleted.
     """
     import shutil
 
-    root = base_dir or DEFAULT_ARTICLES_DIR
-    repo_path = root / article_id
     if repo_path.exists():
         shutil.rmtree(str(repo_path))

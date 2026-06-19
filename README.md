@@ -154,7 +154,9 @@ peerpedia bookmark list --user Bob
 # → 列出所有书签
 ```
 
-### 9. 离线同步
+### 9. 联网同步
+
+每篇文章是独立的 Git 仓库，同步使用 **git bundle 协议**——只传增量对象，不是全量文件。
 
 ```bash
 # 查看同步状态
@@ -173,6 +175,8 @@ peerpedia sync push
 ```bash
 export PEERPEDIA_SERVER="https://peerpedia.example.com"
 ```
+
+同步协议：客户端通过 k-exponential 搜索找到与服务器的共同祖先，然后只传增量 git bundle。详见 [docs/architecture.md](docs/architecture.md)。
 
 ## 命令参考
 
@@ -278,7 +282,7 @@ export PEERPEDIA_SERVER="https://peerpedia.example.com"
 ## 作为 Python 库使用
 
 ```python
-from peerpedia_core.storage.commands import create_article_with_content, fork_article
+from peerpedia_core.commands import create_article_with_content, fork_article
 from peerpedia_core.storage.db.engine import get_engine, get_session, init_db
 
 engine = get_engine("sqlite:///my_peerpedia.db")
@@ -287,7 +291,7 @@ db = get_session(engine)
 
 # 创建文章
 result = create_article_with_content(
-    db, title="My Paper", content="# Hello", format="markdown", user_id="alice",
+    db, title="My Paper", content="# Hello", format="markdown", author_ids=["alice"],
 )
 db.commit()
 print(result["id"])

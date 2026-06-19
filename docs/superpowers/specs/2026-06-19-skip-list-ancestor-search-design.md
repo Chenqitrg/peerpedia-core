@@ -167,7 +167,7 @@ def find_common_ancestor(
     return hash_at(hi)
 ```
 
-### `bundle_sync.py`
+### `bundle_client.py`
 
 The diverged case (currently `_pull_full` fallback) uses `find_common_ancestor`:
 
@@ -231,7 +231,7 @@ appropriate status code. No bundle generation, no complex logic.
 | File | Change |
 |------|--------|
 | `peerpedia_core/storage/git_backend.py` | Remove `get_ancestor_hashes`, `find_merge_base`; add `find_common_ancestor` |
-| `peerpedia_core/sync/bundle_sync.py` | Diverged case uses `find_common_ancestor` + probe; add `_find_merge_base_via_probe` |
+| `peerpedia_core/sync/bundle_client.py` | Diverged case uses `find_common_ancestor` + probe; add `_find_merge_base_via_probe` |
 | `tests/test_git_backend.py` | Tests for `find_common_ancestor` with mock probe |
 | `tests/test_sync.py` | Integration tests for diverged sync with probe endpoint |
 

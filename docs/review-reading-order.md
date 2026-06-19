@@ -32,7 +32,9 @@
 |------|------|--------|-------------|
 | 6 | [engine.py](../peerpedia_core/storage/db/engine.py) | Engine 缓存、WAL + foreign_keys pragma、`JSONList`/`JSONDict` 类型 | DB 是所有模块的基础 |
 | 7 | [session_utils.py](../peerpedia_core/storage/db/session_utils.py) | `db_session_scope` context manager——理解事务边界 | CLI 和 commands 都依赖它 |
-| 8 | [git_backend.py](../peerpedia_core/storage/git_backend.py) | `init_article_repo` / `commit_article` / `get_commit_history` / `get_diff` / `get_diff_between` / `create_bundle` / `apply_bundle` / `merge_git_repos` / `delete_article_repo` | Git 是第二个存储引擎 |
+| 8 | [git_backend.py](../peerpedia_core/storage/git_backend.py) | `init_article_repo` / `commit_article` / `get_commit_history` / `get_diff_between` / `get_commit_authors` / `merge_git_repos` / `delete_article_repo` | Git 是第二个存储引擎 |
+| 8b | [sync/git_bundle.py](../peerpedia_core/sync/git_bundle.py) | `create_bundle` / `apply_bundle` / `find_common_ancestor` / `is_ancestor` | git bundle 协议——自包含，不依赖 git_backend |
+| 8c | [sync/monotonic_search.py](../peerpedia_core/sync/monotonic_search.py) | `search_monotonic_boundary` — k-exponential 搜索 + 二分精确定位 | 纯算法，无外部依赖 |
 | 9 | [policies/articles.py](../peerpedia_core/policies/articles.py) | 每个 `assert_can_*` 函数——谁可以读写/fork/publish/download | 权限是业务规则的集中表达 |
 | 10 | [crud_article.py](../peerpedia_core/storage/db/crud_article.py) | `create_article` / `get_article` / `list_articles` / `delete_article` / `set_sink_start` / `extend_sink` | 最复杂的 CRUD，其他 CRUD 结构类似 |
 
@@ -213,24 +215,28 @@ $ peerpedia sync push \           # 3. 推到别人或自己的服务器
 
 | 模块 | 客户端 | 服务器 | 说明 |
 |------|--------|--------|------|
-| `git_backend.py` | 需要 | 需要 | `create_bundle` / `apply_bundle` 两端都用 |
+| `git_backend.py` | 需要 | 需要 | `commit` / `get_commit_history` / `get_commit_authors` 两端都用 |
+| `git_bundle.py` | 需要 | 需要 | `create_bundle` / `apply_bundle` / `find_common_ancestor` 两端都用 |
 | `models.py` | 需要 | 需要 | 同一套 ORM |
 | `policies/articles.py` | 需要 | 需要 | `assert_can_sync_article` 两端都用 |
-| `sync/` (整个包) | 需要 | 不需要 | 全是 HTTP client 代码 |
+| `bundle_client.py` | 需要 | 不需要 | 客户端 sync 编排 |
+| `bundle_server.py` | 不需要 | 需要 | 服务端 handler（不含 HTTP） |
+| `transport/http.py` | 需要 | 不需要 | 只有客户端发起 HTTP 请求 |
 | `commands.py` | 需要 | 不需要 | 业务编排只在本地 |
 | `cli.py` | 需要 | 不需要 | CLI 入口只在本地 |
-| `workflow/scoring.py` | 需要 | 不需要 | 评分计算只在本地 |
-| HTTP 路由 (`serve` 命令) | 不需要 | 需要 | 未来用 Starlette，调用已有函数 |
+| `workflow/scoring.py` | 需要 | 需要 | 评分计算两端都需（merge 后触发） |
+| HTTP 路由 (`serve` 命令) | 不需要 | 需要 | 未来用 Starlette，调用 bundle_server |
 
 ### 阅读顺序
 
 | 序号 | 文件 | 读什么 | 关键点 |
 |------|------|--------|--------|
 | 15 | [sync/network.py](../peerpedia_core/sync/network.py) | `is_online(server_url)` — GET `/health` | 5 秒超时 |
-| 16 | [sync/bundle_sync.py](../peerpedia_core/sync/bundle_sync.py) | `push()` / `pull()` | 完整递增 sync 协议，409 重试 |
-| 17 | [sync/pending_queue.py](../peerpedia_core/sync/pending_queue.py) | 文件队列 | 离线操作暂存 |
-| 18 | [cli.py](../peerpedia_core/cli.py#L461-L482) | `_cmd_sync_status` / `_cmd_sync_push` | 遍历队列推送 |
-| 19 | `../peerpedia/backend/peerpedia_api/routes/articles.py` | `GET /head`、`POST /sync`、`GET /bundle` | 服务器端 sync 端点 |
+| 16 | [sync/bundle_client.py](../peerpedia_core/sync/bundle_client.py) | `sync(server, article_id)` → pull/push/merge 编排 | 完整递增 sync 协议，三种 case（server ahead / local ahead / diverged） |
+| 17 | [sync/bundle_server.py](../peerpedia_core/sync/bundle_server.py) | `serve_get_head` / `serve_post_sync` / `serve_get_bundle` / `serve_get_ancestor` / `serve_post_articles` | 服务端 handler，不含 HTTP 代码 |
+| 18 | [sync/transport/http.py](../peerpedia_core/sync/transport/http.py) | `fetch_head` / `push_bundle` / `fetch_bundle` / `ancestor_probe` / `post_article` | 唯一 import httpx 的文件 |
+| 19 | [sync/pending_queue.py](../peerpedia_core/sync/pending_queue.py) | 文件队列 | 离线操作暂存 |
+| 20 | [cli.py](../peerpedia_core/cli.py#L461-L482) | `_cmd_sync_status` / `_cmd_sync_push` | 遍历队列推送 |
 
 **第四遍的目标：** 你能解释为什么服务器和客户端安装同一个 pip 包、区别只在数据目录和启动命令。
 
@@ -243,7 +249,7 @@ $ peerpedia sync push \           # 3. 推到别人或自己的服务器
 |------|------|--------|
 | 21 | [cli.py](../peerpedia_core/cli.py) | argparse 结构、`_resolve_user` 函数、`_parse_scores` 函数、Rich 输出 |
 | 22 | [repl.py](../peerpedia_core/repl.py) | prompt_toolkit 交互式 REPL |
-| 23 | [compiler.py](../peerpedia_core/storage/compiler.py) | Markdown→HTML、Typst→PDF 编译后端 |
+| 23 | [storage/compiler.py](../peerpedia_core/storage/compiler.py) | Markdown→HTML、Typst→PDF 编译后端、frontmatter 解析 |
 
 ---
 
@@ -274,7 +280,15 @@ $ peerpedia sync push \           # 3. 推到别人或自己的服务器
 ```
 1. 先看 commands.py —— 确认所有 Git 调用点兼容
 2. 看 tests/test_git_backend.py —— 确认测试覆盖
-3. 看 sync/bundle_sync.py —— bundle 操作依赖 Git backend
+3. 看 sync/bundle_client.py 和 sync/bundle_server.py —— 它们直接调 git_backend
+```
+
+### 改动在 `sync/git_bundle.py`
+
+```
+1. 先看 sync/monotonic_search.py —— 确认搜索算法兼容
+2. 看 sync/bundle_client.py 和 sync/bundle_server.py —— 确认 bundle 调用点兼容
+3. 看 tests/test_sync.py —— 确认 bundle 测试覆盖
 ```
 
 ### 改动在 `policies/articles.py`
@@ -319,9 +333,10 @@ $ peerpedia sync push \           # 3. 推到别人或自己的服务器
 | Git repo 存在哪里？ | `~/.peerpedia/articles/<id>/` —— [git_backend.py:19](../peerpedia_core/storage/git_backend.py#L19) |
 | DB 存在哪里？ | `~/.peerpedia/peerpedia.db` —— [cli.py:69-70](../peerpedia_core/cli.py#L69-L70) |
 | 沉淀池自动发布逻辑？ | [workflow/sedimentation.py](../peerpedia_core/workflow/sedimentation.py) → `publish_ready_articles()` |
-| 本地如何与服务器同步？ | [sync/bundle_sync.py](../peerpedia_core/sync/bundle_sync.py) → `push()` / `pull()` |
-| sync 协议是什么？push 失败怎么办？ | [sync/bundle_sync.py](../peerpedia_core/sync/bundle_sync.py) — git bundle + fast-forward + 409 重试 |
-| 服务器 sync 端点在哪？ | `../peerpedia/backend/peerpedia_api/routes/articles.py` — `GET /head`、`POST /sync`、`GET /bundle` |
+| 本地如何与服务器同步？ | [sync/bundle_client.py](../peerpedia_core/sync/bundle_client.py) → `push()` / `pull()` |
+| sync 协议是什么？push 失败怎么办？ | [sync/bundle_client.py](../peerpedia_core/sync/bundle_client.py) — git bundle + k-exponential ancestor search + fast-forward + 409 重试 |
+| 服务器 sync 端点在哪？ | [sync/bundle_server.py](../peerpedia_core/sync/bundle_server.py) — `serve_get_head` / `serve_post_sync` / `serve_get_bundle` / `serve_get_ancestor` / `serve_post_articles` |
+| HTTP 传输实现在哪？ | [sync/transport/http.py](../peerpedia_core/sync/transport/http.py) — 唯一 import httpx 的文件，可插拔替换 |
 | 离线时怎么暂存操作？ | [sync/pending_queue.py](../peerpedia_core/sync/pending_queue.py) — `~/.peerpedia/pending_ops.json` |
 | 某个异常什么时候抛？ | [exceptions.py](../peerpedia_core/exceptions.py) + grep 调用点 |
 | 测试怎么写的？ | [tests/conftest.py](../tests/conftest.py) → 临时 SQLite engine 的 fixture |

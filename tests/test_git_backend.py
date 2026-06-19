@@ -170,8 +170,8 @@ class TestBundleSync:
         """S1+S2: Full bundle preserves commit hash when applied to empty repo."""
         import git as gitmod
 
+        from peerpedia_core.sync.git_bundle import apply_bundle
         from peerpedia_core.storage.git_backend import (
-            apply_bundle,
             commit_article,
             init_article_repo,
         )
@@ -209,9 +209,9 @@ class TestBundleSync:
 
     def test_create_incremental_bundle(self, articles_dir):
         """create_bundle returns bytes for since..HEAD range."""
+        from peerpedia_core.sync.git_bundle import create_bundle
         from peerpedia_core.storage.git_backend import (
             commit_article,
-            create_bundle,
             init_article_repo,
         )
 
@@ -229,9 +229,9 @@ class TestBundleSync:
 
     def test_create_bundle_bad_since_raises(self, articles_dir):
         """create_bundle with non-ancestor since_hash raises ValueError."""
+        from peerpedia_core.sync.git_bundle import create_bundle
         from peerpedia_core.storage.git_backend import (
             commit_article,
-            create_bundle,
             init_article_repo,
         )
 
@@ -244,21 +244,21 @@ class TestBundleSync:
 
     def test_create_bundle_bad_repo_raises(self, articles_dir):
         """create_bundle on non-existent repo raises FileNotFoundError."""
-        from peerpedia_core.storage.git_backend import create_bundle
+        from peerpedia_core.sync.git_bundle import create_bundle
 
         with pytest.raises(FileNotFoundError):
             create_bundle(articles_dir / "nonexistent", "0" * 40)
 
     def test_apply_bundle_bad_repo_raises(self, articles_dir):
         """apply_bundle on non-existent repo raises FileNotFoundError."""
-        from peerpedia_core.storage.git_backend import apply_bundle
+        from peerpedia_core.sync.git_bundle import apply_bundle
 
         with pytest.raises(FileNotFoundError):
             apply_bundle(articles_dir / "nonexistent", b"garbage")
 
     def test_apply_bundle_corrupt_raises(self, repo):
         """apply_bundle with corrupt bytes raises ValueError."""
-        from peerpedia_core.storage.git_backend import apply_bundle
+        from peerpedia_core.sync.git_bundle import apply_bundle
 
         with pytest.raises(ValueError, match="Invalid bundle"):
             apply_bundle(repo, b"not a git bundle")
@@ -267,9 +267,8 @@ class TestBundleSync:
         """apply_bundle with divergent history raises MergeConflictError."""
         import git as gitmod
 
+        from peerpedia_core.sync.git_bundle import MergeConflictError, apply_bundle
         from peerpedia_core.storage.git_backend import (
-            MergeConflictError,
-            apply_bundle,
             commit_article,
             init_article_repo,
         )
@@ -345,7 +344,7 @@ class TestFindCommonAncestor:
 
     def test_fork_at_probe_point(self, articles_dir):
         """Fork exactly at a probe distance (dist=5)."""
-        from peerpedia_core.storage.git_backend import find_common_ancestor
+        from peerpedia_core.sync.git_bundle import find_common_ancestor
 
         rp, hashes = self._make_repo_with_n_commits(articles_dir, "fork-probe", 10)
 
@@ -359,7 +358,7 @@ class TestFindCommonAncestor:
 
     def test_fork_between_probe_points(self, articles_dir):
         """Fork between probe points — binary refinement finds exact match."""
-        from peerpedia_core.storage.git_backend import find_common_ancestor
+        from peerpedia_core.sync.git_bundle import find_common_ancestor
 
         rp, hashes = self._make_repo_with_n_commits(articles_dir, "fork-between", 10)
 
@@ -373,7 +372,7 @@ class TestFindCommonAncestor:
 
     def test_head_is_common_ancestor(self, articles_dir):
         """HEAD is common — remote is ahead or identical."""
-        from peerpedia_core.storage.git_backend import find_common_ancestor
+        from peerpedia_core.sync.git_bundle import find_common_ancestor
 
         rp, hashes = self._make_repo_with_n_commits(articles_dir, "head-common", 5)
 
@@ -385,7 +384,7 @@ class TestFindCommonAncestor:
 
     def test_no_common_ancestor(self, articles_dir):
         """No common ancestor — all probes return False."""
-        from peerpedia_core.storage.git_backend import find_common_ancestor
+        from peerpedia_core.sync.git_bundle import find_common_ancestor
 
         rp, hashes = self._make_repo_with_n_commits(articles_dir, "no-common", 5)
 
@@ -399,7 +398,7 @@ class TestFindCommonAncestor:
 
     def test_probe_returns_none_after_retries(self, articles_dir):
         """Probe returns None (network error) — retries exhausted → None."""
-        from peerpedia_core.storage.git_backend import find_common_ancestor
+        from peerpedia_core.sync.git_bundle import find_common_ancestor
 
         rp, hashes = self._make_repo_with_n_commits(articles_dir, "probe-none", 5)
 
@@ -411,7 +410,8 @@ class TestFindCommonAncestor:
 
     def test_empty_repo_raises(self, articles_dir):
         """Empty repo raises ValueError."""
-        from peerpedia_core.storage.git_backend import find_common_ancestor, init_article_repo
+        from peerpedia_core.sync.git_bundle import find_common_ancestor
+        from peerpedia_core.storage.git_backend import init_article_repo
 
         rp = init_article_repo(articles_dir / "empty-fca")
         with pytest.raises(ValueError, match="no commits"):
@@ -421,7 +421,7 @@ class TestFindCommonAncestor:
 
     def test_shallow_history(self, articles_dir):
         """Two commits, fork at dist=1 (binary refinement with tiny range)."""
-        from peerpedia_core.storage.git_backend import find_common_ancestor
+        from peerpedia_core.sync.git_bundle import find_common_ancestor
 
         rp, hashes = self._make_repo_with_n_commits(articles_dir, "shallow", 2)
 
@@ -434,7 +434,7 @@ class TestFindCommonAncestor:
 
     def test_deep_fork_within_max_depth(self, articles_dir):
         """Deep fork still within max_depth — found correctly."""
-        from peerpedia_core.storage.git_backend import find_common_ancestor
+        from peerpedia_core.sync.git_bundle import find_common_ancestor
 
         n = 200  # enough commits to exercise multiple probe rounds
         rp, hashes = self._make_repo_with_n_commits(articles_dir, "deep-fork", n)
@@ -449,7 +449,7 @@ class TestFindCommonAncestor:
 
     def test_exhausts_max_depth(self, articles_dir):
         """Phase 1 exhausts all commits with no True → None."""
-        from peerpedia_core.storage.git_backend import find_common_ancestor
+        from peerpedia_core.sync.git_bundle import find_common_ancestor
 
         rp, hashes = self._make_repo_with_n_commits(articles_dir, "exhaust", 3)
 
@@ -458,6 +458,76 @@ class TestFindCommonAncestor:
 
         result = find_common_ancestor(rp, probe, max_depth=3)
         assert result is None
+
+    # ── Fast-path tests ────────────────────────────────────────────────────
+
+    def test_server_head_is_common_ancestor(self, articles_dir):
+        """Local ahead — server_head is in local history: 0 HTTP probes."""
+        from peerpedia_core.sync.git_bundle import find_common_ancestor
+
+        rp, hashes = self._make_repo_with_n_commits(articles_dir, "local-ahead", 10)
+        server_head = hashes[5]  # server is 5 commits behind local HEAD
+
+        probe_calls = [0]
+
+        def probe(h: str) -> bool | None:
+            probe_calls[0] += 1
+            # If server_head is truly the common ancestor, the server has
+            # server_head and all older commits.  But the fast-path should
+            # return before probe is ever called.
+            return False  # should never be reached
+
+        result = find_common_ancestor(rp, probe, server_head=server_head)
+        assert result == server_head
+        assert probe_calls[0] == 0  # zero HTTP calls
+
+    def test_server_head_not_in_repo_falls_through(self, articles_dir):
+        """server_head not in local repo (server ahead) — falls through to probe."""
+        from peerpedia_core.sync.git_bundle import find_common_ancestor
+
+        rp, hashes = self._make_repo_with_n_commits(articles_dir, "svr-ahead-sp", 10)
+
+        # server_head not in local repo → fast-path skipped → full search
+        # probe returns True for HEAD → HEAD is common (server ahead)
+        fake_server_head = "f" * 40
+        result = find_common_ancestor(rp, lambda h: True, server_head=fake_server_head)
+        assert result == hashes[0]  # HEAD returned by Phase 0 of full search
+
+    def test_server_head_in_repo_but_not_ancestor(self, articles_dir):
+        """server_head exists in repo but not on HEAD's chain — falls through."""
+        import git
+
+        from peerpedia_core.sync.git_bundle import find_common_ancestor
+        from peerpedia_core.storage.git_backend import (
+            commit_article,
+            init_article_repo,
+        )
+
+        rp = init_article_repo(articles_dir / "side-branch")
+        repo = git.Repo(rp)
+
+        # Create c1 as the initial commit
+        (rp / "article.md").write_text("v1")
+        c1 = commit_article(rp, "c1", "Author", "a@b.com")
+
+        # Create a side commit that is NOT on HEAD's chain:
+        # save HEAD, create c2, then reset back
+        main_ref = repo.head.commit.hexsha
+        (rp / "article.md").write_text("v2-side")
+        repo.git.add(A=True)
+        c2 = repo.index.commit(
+            "c2", author=git.Actor("Author", "a@b.com"),
+            committer=git.Actor("Author", "a@b.com"),
+        ).hexsha
+        # Reset HEAD back to c1 — c2 is now orphaned (not on HEAD's chain)
+        repo.head.reset(main_ref, index=True, working_tree=True)
+
+        # c2 exists in repo but is_ancestor returns False (not on HEAD's chain).
+        # Fast-path skips → full search finds c1.
+        result = find_common_ancestor(
+            rp, lambda h: h in (c1,), server_head=c2,
+        )
+        assert result == c1  # found by full search, not fast-path
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -490,10 +560,9 @@ class TestClosedLoopSync:
         """S1+S2+S3: Create → push → verify hash → server change → pull → push again."""
         import git as gitmod
 
+        from peerpedia_core.sync.git_bundle import apply_bundle, create_bundle
         from peerpedia_core.storage.git_backend import (
-            apply_bundle,
             commit_article,
-            create_bundle,
             init_article_repo,
         )
 
@@ -565,11 +634,9 @@ class TestClosedLoopSync:
         """S4: Divergent commits on both sides → 409 conflict."""
         import git as gitmod
 
+        from peerpedia_core.sync.git_bundle import MergeConflictError, apply_bundle, create_bundle
         from peerpedia_core.storage.git_backend import (
-            MergeConflictError,
-            apply_bundle,
             commit_article,
-            create_bundle,
             init_article_repo,
         )
 

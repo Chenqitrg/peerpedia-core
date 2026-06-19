@@ -920,7 +920,7 @@ $$
         try:
             rp = init_article_repo(articles_dir / a.id)
             (rp / "article.md").write_text(ad["content"])
-            commit_article(rp, "Initial submission", author.name, f"{author.id}@peerpedia", allow_empty=True)
+            commit_article(rp, "Initial submission", author.name, f"{author.id}@peerpedia")
             # Write co-author attribution commits so git-derived authors
             # can recover the full author list on repair/rebuild.
             for co_author_id in co_author_ids:
@@ -930,7 +930,6 @@ $$
                     f"Co-author: {co.name}",
                     co.name,
                     f"{co.id}@peerpedia",
-                    allow_empty=True,
                 )
         except Exception as e:
             print(f"  Warning: git repo for {ad['title'][:40]} failed: {e}")
@@ -1042,14 +1041,14 @@ program and data. This is the von Neumann architecture.""",
         try:
             rp = init_article_repo(articles_dir / fork.id)
             (rp / "article.md").write_text(content)
-            commit_article(rp, "Fork with extensions", forker.name, f"{forker.id}@peerpedia", allow_empty=True)
+            commit_article(rp, "Fork with extensions", forker.name, f"{forker.id}@peerpedia")
             # Second commit with improvements
             (rp / "article.md").write_text(
                 content + "\n\n## Further Refinements\n"
                 "Additional improvements based on further analysis and peer feedback.\n"
                 f"\\n*— {forker_name}*"
             )
-            commit_article(rp, "Refinements after review", forker.name, f"{forker.id}@peerpedia", allow_empty=True)
+            commit_article(rp, "Refinements after review", forker.name, f"{forker.id}@peerpedia")
         except Exception as e:
             print(f"  Fork git warning: {e}")
 

@@ -36,28 +36,23 @@ def commit_article(
     message: str,
     author_name: str,
     author_email: str,
-    *,
-    allow_empty: bool = False,
 ) -> str:
     """Stage all changes and commit. Returns the commit hash.
 
-    Set allow_empty=True to create a commit even if nothing changed
-    (used for merge records, fork tracking, etc.).
-
-    Raises ValueError if the repo has no commits and allow_empty is False.
+    If the repo already has a HEAD and nothing changed, returns the
+    current HEAD hash without creating a new commit.  Always creates
+    an initial commit on an empty repo.
     """
     import git
 
     repo = git.Repo(repo_path)
     repo.git.add(A=True)
 
-    has_head = repo.head.is_valid()
-
-    # Skip commit only if nothing changed AND we already have commits
-    if not repo.is_dirty(untracked_files=True) and not allow_empty and has_head:
+    # Nothing to commit — return current HEAD
+    if not repo.is_dirty(untracked_files=True) and repo.head.is_valid():
         return repo.head.commit.hexsha  # type: ignore[union-attr]
 
-    # Otherwise: create commit (handles initial commit + all normal commits)
+    # Create commit (initial commit or normal commit)
     commit = repo.index.commit(
         message,
         author=git.Actor(author_name, author_email),
@@ -90,9 +85,7 @@ def get_commit_history(
                     "files": list(c.stats.files.keys()),
                     "insertions": c.stats.total.get("insertions", 0) if isinstance(c.stats.total, dict) else 0,
                     "deletions": c.stats.total.get("deletions", 0) if isinstance(c.stats.total, dict) else 0,
-                }
-                if c.stats.total
-                else {},
+                },
             }
         )
     return commits
@@ -115,66 +108,19 @@ def get_blame(repo_path: Path, file_path: str) -> list[dict]:
     return blames
 
 
-def get_diff(repo_path: Path, commit_hash: str) -> dict:
-    """Get the diff for a specific commit.
-
-    Returns a dict with:
-        - commit_hash: the commit's full hash
-        - message: commit message
-        - author: author name
-        - timestamp: ISO datetime
-        - files: list of file paths changed
-        - diff_text: unified diff text (for diff2html rendering)
-        - parent_hash: parent commit hash (or None for initial commit)
-    """
-    import git
-
-    repo = git.Repo(repo_path)
-    commit = repo.commit(commit_hash)
-
-    parent_hash = commit.parents[0].hexsha if commit.parents else None
-
-    # Get diff between parent and this commit
-    if commit.parents:
-        diff_index = commit.parents[0].diff(commit, create_patch=True)
-    else:
-        # Initial commit: diff against empty tree
-        diff_index = commit.diff(git.NULL_TREE, create_patch=True)
-
-    files_changed = []
-    diff_parts = []
-
-    for d in diff_index:
-        if d.a_path:
-            files_changed.append(d.a_path)
-        if d.diff:
-            diff_text = d.diff.decode("utf-8", errors="replace") if isinstance(d.diff, bytes) else str(d.diff)
-            diff_parts.append(diff_text)
-
-    unified_diff = "\n".join(diff_parts)
-
-    return {
-        "commit_hash": commit.hexsha,
-        "message": commit.message.strip(),
-        "author": str(commit.author),
-        "timestamp": commit.committed_datetime.isoformat(),
-        "files": files_changed,
-        "diff_text": unified_diff,
-        "parent_hash": parent_hash,
-        "stats": {
-            "total": commit.stats.total.get("lines", 0) if commit.stats.total else 0,
-            "files": list(commit.stats.files.keys()) if commit.stats.total else [],
-        }
-        if commit.stats.total
-        else {},
-    }
+def _patch_text(d) -> str:
+    """Decode a git diff patch to str."""
+    if d is None:
+        return ""
+    if isinstance(d, bytes):
+        return d.decode("utf-8", errors="replace")
+    return str(d)
 
 
 def get_diff_between(repo_path: Path, hash1: str, hash2: str) -> dict:
     """Get the diff between two arbitrary commits.
 
     hash1 is the "old" commit, hash2 is the "new" commit.
-    Returns the same shape as get_diff().
     """
     import git
 
@@ -182,42 +128,31 @@ def get_diff_between(repo_path: Path, hash1: str, hash2: str) -> dict:
     c1 = repo.commit(hash1)
     c2 = repo.commit(hash2)
 
-    diff_index = c1.diff(c2, create_patch=True)
-
-    files_changed = []
-    diff_parts = []
-
-    for d in diff_index:
-        if d.a_path:
-            files_changed.append(d.a_path)
-        if d.diff:
-            diff_text = d.diff.decode("utf-8", errors="replace") if isinstance(d.diff, bytes) else str(d.diff)
-            diff_parts.append(diff_text)
-
-    unified_diff = "\n".join(diff_parts)
-
-    # Compute stats from the diff text (unified diff format).
+    files_changed: list[str] = []
+    diff_parts: list[str] = []
     total_insertions = 0
     total_deletions = 0
-    diff_files = {}
-    for d in diff_index:
+    diff_files: dict[str, dict[str, int]] = {}
+
+    for d in c1.diff(c2, create_patch=True):
         fname = d.a_path or d.b_path or ""
-        if fname:
-            diff_text = d.diff.decode("utf-8", errors="replace") if d.diff else ""
-            ins = sum(1 for line in diff_text.split("\n") if line.startswith("+") and not line.startswith("+++"))
-            dels = sum(1 for line in diff_text.split("\n") if line.startswith("-") and not line.startswith("---"))
-            diff_files[fname] = {"insertions": ins, "deletions": dels}
-            total_insertions += ins
-            total_deletions += dels
+        if d.a_path:
+            files_changed.append(d.a_path)
+
+        patch = _patch_text(d.diff)
+        if not patch:
+            continue
+
+        diff_parts.append(patch)
+        ins = sum(1 for l in patch.split("\n") if l.startswith("+") and not l.startswith("+++"))
+        dels = sum(1 for l in patch.split("\n") if l.startswith("-") and not l.startswith("---"))
+        diff_files[fname] = {"insertions": ins, "deletions": dels}
+        total_insertions += ins
+        total_deletions += dels
 
     return {
-        "commit_hash": c2.hexsha,
-        "message": c2.message.strip(),
-        "author": str(c2.author),
-        "timestamp": c2.committed_datetime.isoformat(),
+        "diff_text": "\n".join(diff_parts),
         "files": files_changed,
-        "diff_text": unified_diff,
-        "parent_hash": c1.hexsha,
         "stats": {
             "total": {
                 "insertions": total_insertions,
@@ -241,8 +176,13 @@ class MergeConflictError(Exception):
 def merge_git_repos(target: Path, fork: Path, author_name: str) -> str:
     """Merge fork repo into target repo.
 
-    Adds fork as a remote, fetches, merges into target.
-    Returns the resulting HEAD commit hash.
+    ``fork`` is a filesystem path to the fork's git repository (e.g.
+    ``~/.peerpedia/articles/def456``).  We add it as a git remote,
+    fetch its refs, and merge.  The remote-tracking refs in
+    ``.git/refs/remotes/fork-<name>/`` are a git implementation
+    detail — they are NOT the source of truth for fork relationships.
+    The DB (``Article.forked_from``) owns that.
+
     Raises MergeConflictError if the merge has conflicts.
     """
     import git
@@ -254,17 +194,8 @@ def merge_git_repos(target: Path, fork: Path, author_name: str) -> str:
         target_repo.create_remote(remote_name, str(fork))
         target_repo.git.fetch(remote_name)
 
-        # Find the fork's HEAD ref
-        fork_ref = None
-        for branch_name in ["master", "main"]:
-            try:
-                fork_ref = target_repo.refs[f"{remote_name}/{branch_name}"]
-                break
-            except (IndexError, AttributeError):
-                continue
-
-        if fork_ref is None:
-            raise MergeConflictError("Could not find main/master branch in fork")
+        # Fork repos have exactly one branch — take the first remote ref
+        fork_ref = target_repo.remotes[remote_name].refs[0]
 
         target_repo.git.merge(
             fork_ref.commit.hexsha,

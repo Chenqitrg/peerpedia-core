@@ -48,7 +48,7 @@ from peerpedia_core.storage.db.crud_merge import create_merge_proposal
 from peerpedia_core.storage.db.crud_review import get_reviews_for_article
 from peerpedia_core.storage.db.crud_user import create_user, get_user, get_user_by_username
 from peerpedia_core.storage.db.engine import get_engine, get_session, init_db
-from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, get_commit_history, get_diff_between
+from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, get_commit_history
 from peerpedia_core.sync import is_online, count as pending_count, push as sync_push
 from peerpedia_core.storage.compiler import MarkdownBackend, TypstBackend, detect_format
 

@@ -55,12 +55,12 @@ class TestInitAndCommit:
         # file has latest content
         assert f.read_text() == "v2"
 
-    def test_commit_allow_empty_on_empty_repo(self, articles_dir):
-        """commit_article with allow_empty=True on empty repo should create initial commit."""
+    def test_commit_initial_on_empty_repo(self, articles_dir):
+        """commit_article on empty repo creates initial commit."""
         from peerpedia_core.storage.git_backend import commit_article, init_article_repo
 
-        rp = init_article_repo(articles_dir / "test-empty-allow")
-        h = commit_article(rp, "initial", "A", "a@b.com", allow_empty=True)
+        rp = init_article_repo(articles_dir / "test-init-empty")
+        h = commit_article(rp, "initial", "A", "a@b.com")
         assert len(h) == 40
 
 
@@ -101,13 +101,25 @@ class TestHistory:
 
 
 class TestDiff:
-    def test_diff_returns_text(self, repo):
-        from peerpedia_core.storage.git_backend import get_commit_history, get_diff
+    def test_diff_returns_text(self, articles_dir):
+        from peerpedia_core.storage.git_backend import (
+            commit_article,
+            get_commit_history,
+            get_diff_between,
+            init_article_repo,
+        )
 
-        history = get_commit_history(repo)
-        result = get_diff(repo, history[-1]["hash"])  # oldest = initial commit
+        rp = init_article_repo(articles_dir / "test-diff-text")
+        (rp / "a.md").write_text("line1\n")
+        commit_article(rp, "first", "A", "a@b.com")
+        (rp / "a.md").write_text("line1\nline2\n")
+        commit_article(rp, "second", "A", "a@b.com")
+        history = get_commit_history(rp)
+        result = get_diff_between(rp, history[1]["hash"], history[0]["hash"])
         assert "diff_text" in result
-        assert result["commit_hash"] is not None
+        assert result["diff_text"]
+        assert "files" in result
+        assert "stats" in result
 
     def test_diff_between_two_commits(self, articles_dir):
         from peerpedia_core.storage.git_backend import (
@@ -149,15 +161,6 @@ class TestDiff:
         # Should have at least some insertions or files
         insertions = result["stats"].get("total", {}).get("insertions", 0)
         assert insertions > 0
-
-    def test_diff_initial_commit_has_no_parent(self, repo):
-        """Initial commit diff has parent_hash=None."""
-        from peerpedia_core.storage.git_backend import get_commit_history, get_diff
-
-        history = get_commit_history(repo)
-        initial = history[-1]
-        result = get_diff(repo, initial["hash"])
-        assert result["parent_hash"] is None
 
 
 class TestBlame:

@@ -162,7 +162,7 @@ class TestPublishReadyArticles:
                 gb_mod.DEFAULT_ARTICLES_DIR = base
                 rp = init_article_repo(base / article_id)
                 (rp / "article.md").write_text("# Test")
-                commit_article(rp, "init", "A", "a@b.com", allow_empty=True)
+                commit_article(rp, "init", "A", "a@b.com")
 
                 count = publish_ready_articles(session)
                 assert count == 1

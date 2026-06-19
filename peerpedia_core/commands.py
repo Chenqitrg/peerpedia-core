@@ -226,7 +226,6 @@ def create_article_with_content(
     author_name = authors[0]
     commit_hash = commit_article(
         rp, "Initial submission", author_name, f"{authors[0]}@peerpedia",
-        allow_empty=True,
     )
 
     rebuild_article_authors(db, a.id, set(authors))

@@ -91,13 +91,13 @@ class TestHistory:
         assert history[0]["message"] == "second"
         assert history[1]["message"] == "first"
 
-    def test_history_empty_repo_returns_empty_list(self, articles_dir):
-        """Bug 2: get_commit_history crashes on empty repo. Should return empty list."""
+    def test_history_empty_repo_raises(self, articles_dir):
+        """get_commit_history on a repo with no commits raises ValueError."""
         from peerpedia_core.storage.git_backend import get_commit_history, init_article_repo
 
         rp = init_article_repo(articles_dir / "test-empty-history")
-        history = get_commit_history(rp)
-        assert history == []
+        with pytest.raises(ValueError, match="no commits"):
+            get_commit_history(rp)
 
 
 class TestDiff:
@@ -161,26 +161,6 @@ class TestDiff:
         # Should have at least some insertions or files
         insertions = result["stats"].get("total", {}).get("insertions", 0)
         assert insertions > 0
-
-
-class TestBlame:
-    """Git blame — maps lines to commit authors."""
-
-    def test_blame_imports_and_runs(self, repo):
-        """Blame runs without import errors. Note: current GitPython has
-        a pre-existing attribute mismatch in the blame code."""
-        from peerpedia_core.storage.git_backend import get_blame
-
-        try:
-            blames = get_blame(repo, "article.md")
-            assert isinstance(blames, list)
-            if len(blames) > 0:
-                # If it worked, verify shape
-                assert "commit" in blames[0] or "author" in blames[0]
-        except AttributeError:
-            # Pre-existing bug: BlameEntry attribute names changed in newer GitPython
-            # This is a known issue, not a regression
-            pass
 
 
 class TestBundleSync:

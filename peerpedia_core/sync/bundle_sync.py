@@ -52,8 +52,9 @@ def push(server: str, article_id: str) -> dict:
         {"pushed": False, "head": None} on failure
     """
     # 1. Get local HEAD
-    history = get_commit_history(DEFAULT_ARTICLES_DIR / article_id)
-    if not history:
+    try:
+        history = get_commit_history(DEFAULT_ARTICLES_DIR / article_id)
+    except ValueError:
         return {"pushed": False, "head": None}
     local_head: str = history[0]["hash"]
 
@@ -64,8 +65,7 @@ def push(server: str, article_id: str) -> dict:
             _pull_and_apply(server, article_id, local_head)
             # Refresh local HEAD after pull
             history = get_commit_history(DEFAULT_ARTICLES_DIR / article_id)
-            if history:
-                local_head = history[0]["hash"]
+            local_head = history[0]["hash"]
         except Exception:
             pass  # Non-fatal: continue with push anyway
 
@@ -89,8 +89,7 @@ def push(server: str, article_id: str) -> dict:
                 # ff-only failed: pull + retry once
                 _pull_and_apply(server, article_id, local_head)
                 history = get_commit_history(DEFAULT_ARTICLES_DIR / article_id)
-                if history:
-                    local_head = history[0]["hash"]
+                local_head = history[0]["hash"]
                 server_head = _get_server_head(server, article_id)
                 if server_head:
                     bundle_bytes = create_bundle(DEFAULT_ARTICLES_DIR / article_id, server_head)
@@ -151,10 +150,11 @@ def pull(server: str, article_id: str) -> dict:
     Returns:
         {"pulled": True, "head": "<hash>"} or {"pulled": False}
     """
-    local_head = None
-    history = get_commit_history(DEFAULT_ARTICLES_DIR / article_id)
-    if history:
+    try:
+        history = get_commit_history(DEFAULT_ARTICLES_DIR / article_id)
         local_head = history[0]["hash"]
+    except ValueError:
+        local_head = None
 
     try:
         new_head = _pull_and_apply(server, article_id, local_head)
@@ -189,6 +189,4 @@ def _pull_and_apply(server: str, article_id: str, since_hash: str | None = None)
     apply_bundle(DEFAULT_ARTICLES_DIR / article_id, bundle_bytes)
 
     history = get_commit_history(DEFAULT_ARTICLES_DIR / article_id)
-    if history:
-        return history[0]["hash"]
-    return None
+    return history[0]["hash"]

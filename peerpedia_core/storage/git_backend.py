@@ -65,47 +65,33 @@ def get_commit_history(
     repo_path: Path,
     max_count: int = 50,
 ) -> list[dict]:
-    """Get commit history for an article. Returns empty list for empty repos."""
+    """Get commit history for an article.
+
+    Raises ValueError if the repo has no commits — the caller should
+    commit before asking for history.
+    """
     import git
 
     repo = git.Repo(repo_path)
     if not repo.head.is_valid():
-        return []
-    commits = []
-    for c in repo.iter_commits(max_count=max_count):
-        commits.append(
-            {
-                "hash": c.hexsha,
-                "parents": [p.hexsha for p in c.parents],
-                "message": c.message.strip(),
-                "author": str(c.author),
-                "timestamp": c.committed_datetime.isoformat(),
-                "stats": {
-                    "total": c.stats.total,
-                    "files": list(c.stats.files.keys()),
-                    "insertions": c.stats.total.get("insertions", 0) if isinstance(c.stats.total, dict) else 0,
-                    "deletions": c.stats.total.get("deletions", 0) if isinstance(c.stats.total, dict) else 0,
-                },
-            }
-        )
-    return commits
+        raise ValueError(f"Repo has no commits: {repo_path}")
 
-
-def get_blame(repo_path: Path, file_path: str) -> list[dict]:
-    """Get git blame for a file — maps lines to authors."""
-    import git  # type: ignore[import-untyped]
-
-    repo = git.Repo(repo_path)
-    blames: list[dict] = []
-    for entry in repo.blame_incremental("HEAD", file_path):  # type: ignore[attr-defined]
-        blames.append(
-            {
-                "commit": entry.commit.hexsha[:8],  # type: ignore[attr-defined]
-                "author": str(entry.commit.author),  # type: ignore[attr-defined]
-                "lines": list(range(entry.linenos_start, entry.linenos_start + entry.linenos_count)),  # type: ignore[attr-defined]
-            }
-        )
-    return blames
+    return [
+        {
+            "hash": c.hexsha,
+            "parents": [p.hexsha for p in c.parents],
+            "message": c.message.strip(),
+            "author": str(c.author),
+            "timestamp": c.committed_datetime.isoformat(),
+            "stats": {
+                "total": c.stats.total,
+                "files": list(c.stats.files.keys()),
+                "insertions": c.stats.total.get("insertions", 0) if isinstance(c.stats.total, dict) else 0,
+                "deletions": c.stats.total.get("deletions", 0) if isinstance(c.stats.total, dict) else 0,
+            },
+        }
+        for c in repo.iter_commits(max_count=max_count)
+    ]
 
 
 def _patch_text(d) -> str:

@@ -383,11 +383,13 @@ def submit_review(
 
     rp = DEFAULT_ARTICLES_DIR / article_id
     if (rp / ".git").is_dir():
-        commits = get_commit_history(rp)
-        if commits:
+        try:
+            commits = get_commit_history(rp)
             score = compute_article_score_for_commit(db, article_id, commits[0]["hash"])
             if score is not None:
                 article.score = score
+        except ValueError:
+            pass  # repo has no commits yet
 
     for aid in author_ids:
         compute_author_reputation(db, aid)

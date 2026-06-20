@@ -1,13 +1,55 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""Git bundle protocol — create, ingest, and find common ancestors.
+r"""Git bundle protocol — create, ingest, and find common ancestors.
 
-Pure git — depends only on GitPython and ``monotonic_search``.  Does NOT
-import from ``git_backend``.
+This is the lowest layer of the sync stack.  It operates on raw git
+repositories via GitPython and the k-exponential search algorithm.  It
+does NOT import from ``git_backend`` or ``storage/db`` — it is a pure
+protocol implementation.
 
-``ingest_bundle`` only verifies + fetches objects; it does NOT merge.
-Merging and DB reconciliation happen in ``commands.apply_sync_bundle``.
+Function relationships::
+
+    create_bundle(repo, since_hash) → bytes
+        Bundle all commits from *since_hash* to HEAD.  If *since_hash* is
+        not an ancestor, returns a full bundle (all objects).
+
+    ingest_bundle(repo, bundle_bytes) → str
+        Verify + fetch objects from a bundle file into the repo.
+        Returns the tip commit hash from the bundle.  Does NOT merge —
+        objects are fetched into .git/objects but the working tree is
+        unchanged.
+
+    apply_bundle(repo, bundle_bytes, ff_only=True) → str
+        Convenience: ingest + merge in one step.
+
+    is_ancestor(repo, maybe_ancestor) → bool
+        Check whether *maybe_ancestor* is reachable from HEAD.
+
+    find_common_ancestor(repo, probe, server_head, k=5) → str | None
+        Use k-exponential search to find the most recent commit that both
+        local and remote share.  Each "probe" is a callable that asks the
+        remote "is hash X your ancestor?" → bool.  First jumps by powers of
+        k to find a boundary, then binary search to pinpoint.
+
+Protocol property — self-contained
+----------------------------------
+This module depends only on:
+    - GitPython (``git.Repo``, ``git.GitCommandError``)
+    - ``monotonic_search`` (pure algorithm)
+    - ``tempfile`` (stdlib)
+
+It does NOT know about HTTP, JSON, the database, or the article model.
+This makes it testable without a server and reusable for other git-based
+sync protocols.
+
+Reviewer's checklist
+--------------------
+- Is ``create_bundle`` used for pushes and ``ingest_bundle`` used for pulls?
+  (Client creates, server ingests, and vice versa.)
+- Does ``find_common_ancestor`` handle the case where no common ancestor
+  exists?  (Returns None → full bundle needed.)
+- Are bundle temp files cleaned up after use?
 """
 
 import tempfile

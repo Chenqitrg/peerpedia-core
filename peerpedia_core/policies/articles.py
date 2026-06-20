@@ -1,15 +1,53 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""Article permission policy — centralized visibility and authorization.
+r"""Article permission policy — centralized visibility and authorization.
 
-Every read/write endpoint must call the appropriate ``assert_can_*``
-function instead of duplicating ``current_user.id in get_author_ids(...)``
-checks.
+Every endpoint must call the appropriate ``assert_can_*`` function instead
+of duplicating ``current_user.id in get_author_ids(...)``.  All functions
+raise semantic exceptions (``NotFoundError``, ``NotAuthorizedError``,
+``ConflictError``, ``BadRequestError``) — no HTTP dependency.
 
-All functions raise semantic exceptions from ``peerpedia_core.exceptions``
-— no HTTP dependency. Backend routes rely on the ``PeerpediaError`` handler
-in ``main.py`` to translate to HTTP status codes.
+Permission matrix
+-----------------
+
+| Operation   | Function                      | Who              | Allowed statuses        |
+|-------------|-------------------------------|------------------|-------------------------|
+| Read        | assert_can_read_article       | Anyone           | sedimentation, published|
+|             |                               | Author           | draft, sedimentation, published |
+| Download    | assert_can_download_content   | Anyone           | published               |
+|             |                               | Author           | any                     |
+| Edit        | assert_can_edit_article       | Author only      | draft, published        |
+| Delete      | assert_can_delete_article     | Author only      | draft, published        |
+| Publish     | assert_can_publish_article    | Author only      | draft, published        |
+| Rollback    | assert_can_rollback_article   | Author only      | draft, published        |
+| Fork        | assert_can_fork_article       | Anyone (no dupe) | published               |
+| Review      | assert_can_submit_review      | Anyone           | sedimentation, published|
+| Extend sink | assert_can_extend_sink        | Author only      | sedimentation           |
+| Sync        | assert_can_sync_article       | Author only      | draft, published        |
+
+Key: sedimentation articles are immutable — even the author cannot edit,
+delete, rollback, or sync during the peer-review window.
+
+Visibility rules
+----------------
+- ``PUBLIC_READABLE_STATUSES = {"sedimentation", "published"}``
+- ``FORKABLE_STATUSES = {"published"}``
+- ``PUBLIC_DOWNLOADABLE_STATUSES = {"published"}``
+- ``_WRITABLE_STATUSES = {"draft", "published"}``
+
+Callers
+-------
+All ``assert_can_*`` functions are called from ``commands/``.  The only
+exception is ``require_self_review_for_publish``, which is called from
+``commands/articles.py:publish_article`` as a secondary gate (G6).
+
+Reviewer's checklist
+--------------------
+- Does every new command function call the right policy check before mutating?
+- Are new statuses added to the right visibility/writable sets?
+- Does ``require_self_review_for_publish`` check AFTER the self-review is
+  written and the score is computed?  (The check verifies the DB cache.)
 """
 
 from __future__ import annotations

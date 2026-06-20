@@ -1,11 +1,45 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""HTTP transport for sync — the only module that imports ``httpx``.
+"""HTTP transport for sync -- the only module that imports ``httpx``.
 
-When PeerPedia switches to a different transport (WebSocket, direct TCP, file
-exchange), replace this module without touching ``bundle_client`` or
-``bundle_server``.
+Every HTTP call in the entire project goes through this file.  If the
+transport protocol changes (e.g. WebSocket, gRPC, Unix socket), only this
+file needs to be replaced.  No other module knows about HTTP.
+
+Functions -- each mirrors a server endpoint
+-------------------------------------------
+
+fetch_head(server, article_id) -> str | None
+    GET /api/v1/articles/{id}/head -> server's HEAD hash, or None if 404.
+
+push_bundle(server, article_id, bundle_bytes) -> str
+    POST /api/v1/articles/{id}/sync with raw bundle bytes.
+    Returns "ok", "conflict", or "error".
+
+fetch_bundle(server, article_id, since_hash) -> bytes | None
+    GET /api/v1/articles/{id}/bundle?since=<hash> -> raw bundle bytes.
+
+ancestor_probe(server, article_id) -> Callable[[str], bool]
+    Returns a probe function for ``find_common_ancestor``.
+    GET /api/v1/articles/{id}/ancestor/{hash} -> boolean.
+
+post_article(server, article_id, bundle_b64) -> bool
+    POST /api/v1/articles (first-time push).  Payload is base64-encoded
+    tar.gz of the entire article repo.
+
+Design -- replaceable transport
+-------------------------------
+This is the only file that imports ``httpx``.  To switch to a different
+protocol, replace this file with one that exposes the same function
+signatures.  ``bundle_client.py`` and ``bundle_server.py`` never import
+``httpx`` directly.
+
+Reviewer's checklist
+--------------------
+- Is every function using ``httpx`` via this module, not directly?
+- Are timeouts set on every request?
+- Are error responses (4xx, 5xx) handled distinctly from transport errors?
 """
 
 import httpx

@@ -25,7 +25,7 @@ def create_merge_proposal(
         status="open",
     )
     session.add(mp)
-    session.commit()
+    session.flush()
     return mp
 
 
@@ -50,7 +50,7 @@ def _resolve(session: Session, proposal_id: str, new_status: str) -> MergePropos
         raise ValueError(f"MergeProposal {proposal_id} is already {mp.status}")
     mp.status = new_status
     mp.resolved_at = datetime.now(timezone.utc)
-    session.commit()
+    session.flush()
     return mp
 
 

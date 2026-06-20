@@ -1,15 +1,48 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""Server-side bundle handlers — mirror of ``bundle_client``.
+r"""Server-side bundle handlers — mirror of ``bundle_client``.
 
-These functions receive decoded HTTP request data and call into
-``git_bundle`` and ``commands``.  They contain no HTTP code — the HTTP
-layer (``server/main.py``) calls them after parsing requests and checking
-permissions.
+These functions are the server's half of the sync protocol.  They receive
+decoded HTTP request data and call into ``git_bundle`` and ``commands``.
+They contain NO HTTP code — a separate routing layer (``server/main.py``,
+TBD) parses requests, checks JWT/permissions, and calls these handlers.
 
-Every function that accepts or produces bytes is the server-side mirror of
-a client operation in ``bundle_client.py``.
+Function mapping (client → server)::
+
+    bundle_client                         bundle_server
+    ─────────────                         ─────────────
+    client_find_merge_base  ──probe──►    serve_get_ancestor
+    client_pull_incremental ──GET──►      serve_get_bundle
+    client_push_incremental ──POST──►     serve_post_sync
+    client_create_article   ──POST──►     serve_post_articles
+    (client asks for head)  ──GET──►      serve_get_head
+
+Call graph::
+
+    serve_get_head(repo_path) → str | None
+      └─ git.Repo.head.commit.hexsha
+
+    serve_get_bundle(repo_path, since_hash) → bytes | None
+      └─ git_bundle.create_bundle
+
+    serve_post_sync(repo_path, bundle_bytes) → str
+      ├─ git_bundle.ingest_bundle      (verify + fetch objects)
+      └─ commands.sync.apply_sync_bundle   (merge + reconcile DB)
+
+    serve_get_ancestor(repo_path, hash) → bool
+      └─ git_bundle.is_ancestor
+
+    serve_post_articles(repo_path, payload) → str
+      ├─ tar.gz unpack
+      └─ git.Repo.init
+
+Reviewer's checklist
+--------------------
+- Is every function stateless?  (No server-side session — each call is
+  independent, just like git's HTTP protocol.)
+- Does ``serve_post_sync`` call ``apply_sync_bundle`` to reconcile the DB?
+- Are bundle bytes verified before being applied?  (ingest_bundle does this.)
 """
 
 import base64
@@ -20,8 +53,10 @@ from pathlib import Path
 from sqlalchemy.orm import Session
 
 from peerpedia_core.commands import apply_sync_bundle
-from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR
 from peerpedia_core.sync.git_bundle import (
+
+DEFAULT_ARTICLES_DIR = Path.home() / ".peerpedia" / "articles"
+
     create_bundle,
     ingest_bundle,
     is_ancestor,

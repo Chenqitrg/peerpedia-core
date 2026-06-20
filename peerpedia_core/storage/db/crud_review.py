@@ -1,12 +1,36 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""Review score cache operations.
+r"""Review score cache — synced from git, queried by scoring.
 
-Review content lives in git (reviews/<reviewer_id>/scores.json,
-thread.md).  The database Review table is a cache of structured
-scores — synced after git writes — so scoring and reputation
-workflows can query without reading git.
+Review content lives in git (``reviews/<reviewer_id>/scores.json`` +
+``threads/*.md``).  The database ``Review`` table is a read cache of
+structured scores — populated after every git write — so that
+``recompute_article_score`` and ``compute_author_reputation`` can query
+without touching the filesystem.
+
+Functions
+---------
+upsert_review(session, article_id, commit_hash, reviewer_id, scores) → Review
+    Create or update the score cache for one review.  Keyed by
+    (article_id, reviewer_id, scope, commit_hash).  Called AFTER review
+    files are committed to git — from ``submit_review`` (local) and
+    ``git_sync_reviews`` (sync).
+
+    Scope is set to ``article.status`` at the time of the call — so
+    reviews written during sedimentation are tagged ``scope="sedimentation"``
+    and reviews written after publish are tagged ``scope="published"``.
+
+get_reviews_for_article(session, article_id) → list[Review]
+    All cached reviews for an article, newest first.  Used by
+    ``recompute_article_score`` to gather input for scoring.
+
+Reviewer's checklist
+--------------------
+- Is ``upsert_review`` called AFTER the git commit succeeds?  (git-first)
+- Is the ``scope`` field correctly derived from the article's current status?
+- Remember: this is a CACHE.  The real data is in git.  If there's a
+  disagreement, git wins.
 """
 
 from __future__ import annotations
@@ -45,7 +69,7 @@ def upsert_review(
     )
     if existing:
         existing.scores = scores
-        session.commit()
+        session.flush()
         return existing
 
     r = Review(
@@ -56,7 +80,7 @@ def upsert_review(
         scores=scores,
     )
     session.add(r)
-    session.commit()
+    session.flush()
     return r
 
 

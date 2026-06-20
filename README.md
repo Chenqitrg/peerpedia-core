@@ -1,16 +1,16 @@
 # PeerPedia Core
 
-同行评审基础设施。一个自包含的命令行工具 + Python 库，用来写论文、互相评审、公开发布。
+同行评审基础设施。自包含的命令行工具 + Python 库，用来写论文、互相评审、公开发布。
 
-**Git 存内容，数据库存状态。** 每篇文章是一个独立的 Git 仓库——正文和评审内容有完整历史、可 diff/fork/merge；元数据（状态、评分、fork 计数）通过 SQLite 查询和聚合。
+**Git 存内容，数据库存状态。** 每篇文章是一个独立的 Git 仓库——正文和评审有完整历史、可 diff/fork/merge；元数据（状态、评分）通过 SQLite 查询和聚合。
 
 支持三种写作格式：
 
 | 格式 | 编译方式 | 安装 |
 |------|---------|------|
-| Markdown | 内建（Python markdown 库） | 零依赖，开箱即用 |
-| bTeX | 外部服务器（TypeScript） | `git clone` + `yarn start`，~2MB |
-| Typst | 外部 CLI（Rust） | `brew install typst`，~30MB |
+| Markdown | 内建（Python markdown 库） | 零依赖 |
+| bTeX | 外部服务器（TypeScript） | `git clone` + `yarn start` |
+| Typst | 外部 CLI（Rust） | `brew install typst` |
 
 ## 安装
 
@@ -18,9 +18,9 @@
 pip install peerpedia-core
 ```
 
-依赖：Python 3.11+，Git。不需要数据库服务——SQLite 文件自动创建在 `~/.peerpedia/`。
+依赖：Python 3.11+，Git。SQLite 自动创建在 `~/.peerpedia/`。
 
-### 启用 Tab 补全
+### Tab 补全
 
 ```bash
 # bash（加到 ~/.bashrc）
@@ -30,8 +30,6 @@ eval "$(register-python-argcomplete peerpedia)"
 autoload -U bashcompinit && bashcompinit
 eval "$(register-python-argcomplete peerpedia)"
 ```
-
-然后就可以 `peerpedia <TAB>` 看到所有子命令，`peerpedia article <TAB>` 看到 create/edit/show 等。
 
 ## 5 分钟上手
 
@@ -45,7 +43,7 @@ peerpedia account register --name "Bob"
 # → ✓ Registered bob (id: 05539e04)
 ```
 
-所有数据存在本地的 `~/.peerpedia/peerpedia.db`。不需要连服务器。
+所有数据存本地 `~/.peerpedia/peerpedia.db`。不需要服务器。
 
 ### 2. 写一篇文章
 
@@ -57,9 +55,9 @@ peerpedia article create \
     --user Alice
 ```
 
-`--format` 可以是 `markdown`、`btex` 或 `typst`。不传 `--content` 的话会打开 `$EDITOR` 让你写。
+不传 `--content` 会打开 `$EDITOR`。
 
-### 3. 看看写了什么
+### 3. 查看文章
 
 ```bash
 peerpedia article list
@@ -70,11 +68,6 @@ peerpedia article list
 # └──────────┴───────────────────────────┴────────┘
 
 peerpedia article show d7aa1643
-# ╭─ Article ───────────────────────────────╮
-# │  A Note on Tensor Networks      draft   │
-# │  Authors: alice                         │
-# │  ...                                    │
-# ╰─────────────────────────────────────────╯
 ```
 
 ### 4. 修改内容
@@ -83,33 +76,21 @@ peerpedia article show d7aa1643
 peerpedia article edit d7aa1643 \
     --content "# Introduction\n\nUpdated version with new results." \
     --user Alice
-# → ✓ Updated d7aa1643 — A Note on Tensor Networks
 ```
 
-每次修改都会在 Git 里产生一个新的 commit。
+每次修改产生一个新的 Git commit。
 
 ### 5. 发布到沉淀池
 
-沉淀池（sedimentation pool）是 PeerPedia 的评审机制：你提交自评后，文章进入一个限时的公开评审期，别人可以来评审。
+沉淀池（sedimentation pool）是 PeerPedia 的评审机制：文章进入限时公开评审期（首次 7 天），到期自动发布。
 
 ```bash
 peerpedia article publish d7aa1643 \
     --scores "originality=4,rigor=3,completeness=4,pedagogy=3,impact=4" \
     --user Alice
-# → ✓ Published d7aa1643 to sedimentation pool
-#     originality    ★★★★☆  4/5
-#     rigor          ★★★☆☆  3/5
-#     ...
 ```
 
-也可以创建时直接发布：
-
-```bash
-peerpedia article create --title "My Paper" \
-    --format markdown --content "# Hello" \
-    --user Alice --publish \
-    --scores "originality=4,rigor=3,completeness=4,pedagogy=3,impact=4"
-```
+只能从 draft 发布。已发表文章修改后会自动进入 3 天沉淀期。
 
 ### 6. 评审别人的文章
 
@@ -118,65 +99,45 @@ peerpedia review submit d7aa1643 \
     --scores "originality=5,rigor=4,completeness=3,pedagogy=4,impact=5" \
     --comment "Well-structured argument. Section 3 could use more lemmas." \
     --user Bob
-# → ✓ Review submitted
-
-peerpedia review list d7aa1643
-# → 显示所有评审的评分
 ```
 
 ### 7. Fork 和 Merge
 
-Fork 一篇已发表的文章，改你自己的版本，然后提 Merge 请求：
-
 ```bash
 peerpedia fork abc123 --user Bob
-# → ✓ Forked → def456
+# → Forked → def456
 
-# 编辑你的 fork...
 peerpedia article edit def456 --content "# My improved version" --user Bob
 
-# 提合并请求
 peerpedia merge propose def456 --target abc123 --user Bob
-# → ✓ Merge proposed
-
-# 原作者接受
 peerpedia merge accept <proposal-id> --target abc123 --user Alice
-# → ✓ Merge accepted
 ```
 
-### 8. 书签
+### 8. 自动发布
 
 ```bash
-peerpedia bookmark add abc123 --user Bob
-# → ✓ Bookmarked abc123
+# 手动触发
+peerpedia article scan
+# → 已发布 2 篇文章
 
-peerpedia bookmark list --user Bob
-# → 列出所有书签
+# 系统会在启动时、REPL 中、sync 后自动扫描
 ```
 
-### 9. 联网同步
+## 状态机
 
-每篇文章是独立的 Git 仓库，同步使用 **git bundle 协议**——只传增量对象，不是全量文件。
-
-```bash
-# 查看同步状态
-peerpedia sync status
-# ╭─ Sync Status ───────────────────────╮
-# │  Server:  offline                   │
-# │  Pending: 3 ops                     │
-# ╰─────────────────────────────────────╯
-
-# 联网后推送
-peerpedia sync push
-# → ✓ Pushed 2 articles, deleted 1
+```
+draft ──publish()──► sedimentation ──到期自动──► published
+                          ▲                          │
+                          │   edit / merge / rollback │
+                          └──────────────────────────┘
+                              (自动 3 天沉淀)
 ```
 
-设置服务器地址：
-```bash
-export PEERPEDIA_SERVER="https://peerpedia.example.com"
-```
+- **draft**：草稿，仅作者可见、可编辑
+- **sedimentation**：沉淀池，公开可读、可评审、不可编辑
+- **published**：公开发表，可 fork。有新 commit 则自动回到 sedimentation
 
-同步协议：客户端通过 k-exponential 搜索找到与服务器的共同祖先，然后只传增量 git bundle。详见 [docs/architecture.md](docs/architecture.md)。
+不可撤稿——published 不能回 draft。但可以 edit 修改内容（会自动触发 3 天沉淀）。
 
 ## 命令参考
 
@@ -191,116 +152,93 @@ export PEERPEDIA_SERVER="https://peerpedia.example.com"
 
 | 命令 | 说明 |
 |------|------|
-| `article create --title <t> --format <md\|typst> [--content <c>] [--user <u>]` | 创建文章。不传 --content 会打开 $EDITOR |
-| `article create ... --publish --scores <s>` | 创建并直接发布到沉淀池 |
-| `article show <id> [--user <u>]` | 查看文章内容和元数据 |
-| `article edit <id> --content <c> [--title <t>] --user <u>` | 编辑文章，产生新 commit |
+| `article create --title <t> --format <md\|typst> [--content <c>] [--user <u>]` | 创建草稿 |
+| `article create ... --publish --scores <s>` | 创建并直接发布 |
+| `article show <id>` | 查看文章内容 |
+| `article edit <id> --content <c> --user <u>` | 编辑文章（published 文章自动进入 3 天沉淀） |
 | `article list [--status <draft\|sedimentation\|published>]` | 列出文章 |
-| `article publish <id> --scores <s> --user <u>` | 发布到沉淀池 |
-| `article delete <id> --force --user <u>` | 删除文章（仅 draft 和 published） |
+| `article publish <id> --scores <s> --user <u>` | 发布到沉淀池（仅 draft） |
+| `article delete <id> --force --user <u>` | 删除文章 |
+| `article scan` | 手动触发自动发布 |
 
 ### review
 
 | 命令 | 说明 |
 |------|------|
 | `review submit <article-id> --scores <s> [--comment <c>] --user <u>` | 提交评审 |
-| `review list <article-id>` | 列出文章的所有评审 |
+| `review list <article-id>` | 列出评审 |
 
 ### fork / merge
 
 | 命令 | 说明 |
 |------|------|
-| `fork <article-id> --user <u>` | Fork 一篇已发表的文章 |
+| `fork <article-id> --user <u>` | Fork 已发表文章 |
 | `merge propose <fork-id> --target <original-id> --user <u>` | 提合并请求 |
 | `merge accept <proposal-id> --target <article-id> --user <u>` | 接受合并 |
 
-### bookmark
+### bookmark / compile / sync
 
 | 命令 | 说明 |
 |------|------|
 | `bookmark add <article-id> --user <u>` | 添加书签 |
 | `bookmark list --user <u>` | 列出书签 |
-
-### compile
-
-| 命令 | 说明 |
-|------|------|
 | `compile <id> [--format pdf\|svg\|png\|html]` | 编译文章 |
-
-### sync
-
-| 命令 | 说明 |
-|------|------|
-| `sync status` | 查看同步状态（在线/离线、pending 数量） |
-| `sync push` | 推送所有 pending 操作 |
+| `sync status` | 查看同步状态 |
+| `sync push` | 推送 pending 操作 |
 
 ### 通用选项
 
 | 选项 | 说明 |
 |------|------|
-| `--json` | 输出机器可读的 JSON |
-| `--user <name\|id>` | 以指定用户身份操作（支持用户名或 UUID） |
+| `--json` | 输出 JSON |
+| `--user <name\|id>` | 以指定用户身份操作 |
 
 ## 评分维度
 
-所有评分都是 1-5 分，五个维度：
+| 维度 | 含义 |
+|------|------|
+| originality（原创性） | 想法有多新颖 |
+| rigor（严谨性） | 论证有多严密 |
+| completeness（完整性） | 工作有多完整 |
+| pedagogy（教学性） | 写得有多清楚 |
+| impact（影响力） | 有多大潜在影响 |
 
-| 维度 | 英文 | 含义 |
-|------|------|------|
-| 原创性 | originality | 想法有多新颖 |
-| 严谨性 | rigor | 论证有多严密 |
-| 完整性 | completeness | 工作有多完整 |
-| 教学性 | pedagogy | 写得有多清楚 |
-| 影响力 | impact | 有多大的潜在影响 |
-
-## 数据在哪里
-
-所有数据存在 `~/.peerpedia/`：
+## 数据目录
 
 ```
 ~/.peerpedia/
-├── peerpedia.db          ← SQLite 数据库（元数据：状态、评分缓存、作者列表）
+├── peerpedia.db          ← SQLite（元数据、评分缓存、作者列表）
 ├── pending_ops.json      ← 离线操作队列
 └── articles/
     └── {article_id}/
-        ├── .git/          ← Git 仓库（完整内容历史）
-        ├── article.md     ← 文章正文 + 元数据（YAML frontmatter）
+        ├── .git/          ← Git 仓库
+        ├── article.md     ← 正文 + YAML frontmatter
         └── reviews/
-            ├── {reviewer_a}/
-            │   ├── scores.json       ← 评审评分（JSON）
-            │   └── threads/
-            │       ├── 001.md        ← 评审意见（按时间排序）
-            │       ├── 002.md        ← 作者回复
-            │       └── ...
-            └── {author}/
-                ├── scores.json       ← 作者自评（和评审同格式）
-                └── threads/
+            └── {reviewer}/scores.json + threads/*.md
 ```
-
-备份只需要复制整个 `~/.peerpedia/` 目录。迁移到新机器：复制目录 + 安装 peerpedia-core。
 
 ## 作为 Python 库使用
 
 ```python
-from peerpedia_core.commands import create_article_with_content, fork_article
+from peerpedia_core.commands import (
+    create_article_with_content,
+    publish_article,
+    submit_review,
+    publish_ready_articles,
+)
 from peerpedia_core.storage.db.engine import get_engine, get_session, init_db
 
 engine = get_engine("sqlite:///my_peerpedia.db")
 init_db(engine)
 db = get_session(engine)
 
-# 创建文章
 result = create_article_with_content(
     db, title="My Paper", content="# Hello", format="markdown", author_ids=["alice"],
 )
 db.commit()
-print(result["id"])
 ```
 
-## 参与开发
-
-环境搭建、Review 顺序、测试指南、VS Code 配置见 [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)。
-架构设计见 [docs/architecture.md](docs/architecture.md)。
+## 开发
 
 ```bash
 git clone https://github.com/Chenqitrg/peerpedia-core.git
@@ -309,6 +247,8 @@ python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 pytest tests/ -v
 ```
+
+架构详见 [docs/architecture.md](docs/architecture.md)。
 
 ## 许可证
 

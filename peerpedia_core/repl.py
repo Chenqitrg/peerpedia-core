@@ -1,23 +1,65 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""Interactive REPL for PeerPedia.
+r"""Interactive REPL for PeerPedia -- persistent session, same commands as CLI.
 
-Usage:
-    peerpedia repl          → enter the REPL explicitly
-    peerpedia               → enter the REPL (when no subcommand given)
+Usage::
 
-Features:
-    - Persistent DB session across commands
-    - Sticky user (use :user to switch, no need to --user every time)
-    - Full argparse under the hood — same commands, same flags
-    - History, tab completion, syntax highlighting (prompt_toolkit)
+    peerpedia repl          enter the REPL explicitly
+    peerpedia               enter the REPL (when no subcommand given)
+
+How it works
+------------
+::
+
+    run()
+      |-- _ensure_db()             persistent SQLite session (never closes
+      |                             until REPL exits)
+      |-- prompt_toolkit loop      blocks on session.prompt()
+      |     |
+      |     |-- user types "create --title ..."
+      |     |-- _dispatch(cmd_str)
+      |     |     |-- shlex.split  parse like a shell
+      |     |     |-- cmd_map      flat command -> argparse group mapping
+      |     |     |     "create" -> ["article", "create"]
+      |     |     |     "review"  -> ["review"]
+      |     |     |-- inject --user if sticky user set
+      |     |     |-- build_parser().parse_args()
+      |     |     |-- args.func(args)     same handler as CLI!
+      |     |
+      |     |-- periodic scan: if >1hr since last scan
+      |           publish_ready_articles(db)
+
+Key differences from CLI
+------------------------
+- **Persistent session**: One DB connection for the entire REPL session.
+  CLI creates a new session per command.  This means ``db.commit()`` in
+  the REPL commits ALL pending flushes from prior commands.
+- **Sticky user**: ``:user alice`` sets a user that auto-injects ``--user``
+  into every subsequent command.  No need to type ``--user`` every time.
+- **Flat commands**: In the REPL you type ``create`` not ``article create``.
+  The ``cmd_map`` dictionary translates flat names to argparse groups.
+- **Periodic auto-publish**: After every command, the REPL checks if an
+  hour has passed since the last scan and runs ``publish_ready_articles``.
+
+Meta-commands
+-------------
+:help, :h       Show command reference
+:user, :u       Set sticky user (e.g. ``:user alice``)
+:quit, :q       Exit REPL
+
+Reviewer's checklist
+--------------------
+- Are new CLI commands also registered in ``cmd_map`` and ``COMMANDS`` list?
+- Does the periodic scan use ``_ensure_db()`` to get the session?
+- Are exceptions caught and displayed without crashing the REPL?
 """
 
 from __future__ import annotations
 
 import shlex
 import sys
+import time
 from pathlib import Path
 
 from prompt_toolkit import PromptSession
@@ -55,7 +97,7 @@ COMMANDS = [
     "register", "whoami",
     "create", "show", "list", "edit", "publish", "delete",
     "review", "fork", "merge", "bookmark",
-    "search", "compile", "sync",
+    "scan", "search", "compile", "sync",
     ":help", ":user", ":quit",
 ]
 FLAGS = ["--title", "--format", "--content", "--user", "--json", "--force",
@@ -176,6 +218,7 @@ def _dispatch(cmd_str: str) -> bool:
         "edit": ["article", "edit"],
         "publish": ["article", "publish"],
         "delete": ["article", "delete"],
+        "scan": ["article", "scan"],
         "review": ["review"],
         "fork": ["fork"],
         "merge": ["merge"],
@@ -249,6 +292,8 @@ def run():
         lexer=PygmentsLexer(BashLexer),
     )
 
+    _last_scan = 0.0
+
     try:
         while True:
             try:
@@ -261,6 +306,18 @@ def run():
                 break
 
             should_continue = _dispatch(cmd)
+
+            # Periodic scan: check for publishable articles every hour
+            now = time.time()
+            if now - _last_scan > 3600:
+                db = _ensure_db()
+                from peerpedia_core.commands import publish_ready_articles
+                count = publish_ready_articles(db)
+                db.commit()
+                if count > 0:
+                    console.print(f"[info]{count} 篇文章已自动发布[/]")
+                _last_scan = now
+
             if not should_continue:
                 console.print("[muted]Bye.[/]")
                 break

@@ -1,21 +1,46 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""Git bundle sync — push/pull article repos to/from a remote server.
+r"""Git bundle sync — push/pull article repos to/from a remote server.
 
-Client-side functions mirror the server-side handlers in ``bundle_server``:
+Client-side functions mirror the server-side handlers in ``bundle_server``::
 
-  client_sync()              ↔  (orchestration, no direct server mirror)
-  client_find_merge_base()   ↔  serve_get_ancestor()
-  client_pull_incremental()  ↔  serve_get_bundle()
-  client_push_incremental()  ↔  serve_post_sync()
-  client_create_article()    ↔  serve_post_articles()
+      CLIENT (bundle_client)              SERVER (bundle_server)
+      ─────────────────────               ──────────────────────
+      client_sync() → orchestrates        (HTTP routing layer, TBD)
+        ├─ client_find_merge_base()   ↔   serve_get_ancestor()
+        │    └─ monotonic_search            └─ is_ancestor()
+        ├─ client_pull_incremental()   ↔   serve_get_bundle()
+        │    └─ fetch_bundle(HTTP)          └─ create_bundle()
+        └─ client_push_incremental()   ↔   serve_post_sync()
+             └─ create_bundle()             └─ apply_bundle()
 
-Protocol:
-  1. GET /api/v1/articles/{id}/head  → server HEAD hash (or 404 if unknown)
-  2. POST /api/v1/articles/{id}/sync → send incremental git bundle (ff-only)
-  3. GET /api/v1/articles/{id}/bundle?since=<hash> → pull incremental bundle
-  4. 409 Conflict → pull + retry once
+Protocol flow (client_sync orchestrates)::
+
+    1. GET  /api/v1/articles/{id}/head     → server HEAD (404 if unknown)
+    2. If server has no article:
+         tar.gz → POST /api/v1/articles    → server unpacks + inits repo
+    3. Find merge base:
+         k-exponential probe GET /ancestor/{hash} → boolean
+         Binary search to exact boundary
+    4. If server has new commits:
+         GET /bundle?since=<local_head>    → incremental bundle bytes
+         apply_bundle(repo, bundle)
+    5. If local has new commits:
+         create_bundle(repo, server_head)  → incremental bundle bytes
+         POST /sync with bundle            → server applies (ff_only=True)
+    6. On 409 Conflict (history diverged):
+         Pull first → merge locally → push again
+
+After sync, the caller must call ``commands.sync.apply_sync_bundle`` to
+reconcile the DB cache with the updated git state.  This module does NOT
+touch the DB — it only moves git objects.
+
+Reviewer's checklist
+--------------------
+- Does every HTTP call go through ``transport/http.py`` (not httpx directly)?
+- Is ``ff_only=True`` on all pushes?  (PeerPedia rejects force-pushes.)
+- On 409, does the retry pull before re-pushing?
 """
 
 from __future__ import annotations

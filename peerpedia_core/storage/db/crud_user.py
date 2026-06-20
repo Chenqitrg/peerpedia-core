@@ -1,7 +1,21 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""User CRUD operations."""
+r"""User CRUD — database only, ``session.flush()`` only.
+
+Functions
+---------
+create_user             New user with bcrypt password hash
+get_user                By ID or name
+get_user_by_name        Exact name match
+update_user_reputation  Write reputation dict (flush only)
+follow_user / unfollow_user / get_followers / get_following / get_follower_count
+derive_anonymous_name   Display name from anonymous hash (e.g. "anon-a3f2...")
+
+Reviewer's checklist
+--------------------
+- All functions call ``session.flush()``, not ``session.commit()``.
+"""
 
 import secrets
 import uuid
@@ -92,7 +106,7 @@ def create_user(
         affiliation=affiliation,
     )
     session.add(u)
-    session.commit()
+    session.flush()
     return u
 
 
@@ -113,7 +127,7 @@ def update_user_reputation(session: Session, user_id: str, reputation: dict) -> 
     if u is None:
         raise ValueError(f"User {user_id} not found")
     u.reputation = reputation
-    session.commit()
+    session.flush()
     return u
 
 
@@ -125,7 +139,7 @@ def follow_user(session: Session, follower_id: str, followed_id: str) -> Follow:
         raise ValueError("A user cannot follow themselves")
     f = Follow(follower_id=follower_id, followed_id=followed_id)
     session.add(f)
-    session.commit()
+    session.flush()
     return f
 
 
@@ -133,7 +147,7 @@ def unfollow_user(session: Session, follower_id: str, followed_id: str) -> None:
     f = session.query(Follow).filter(Follow.follower_id == follower_id, Follow.followed_id == followed_id).first()
     if f:
         session.delete(f)
-        session.commit()
+        session.flush()
 
 
 def is_following(session: Session, follower_id: str, followed_id: str) -> bool:

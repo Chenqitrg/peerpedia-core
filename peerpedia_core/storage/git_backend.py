@@ -4,13 +4,47 @@
 """Layer 0: Git storage backend for article content and reviews.
 
 Every article is an independent git repository stored under
-~/.peerpedia/articles/<article-id>/.
+``~/.peerpedia/articles/<article-id>/``.
 
 Git stores content (article body, review files) — the things that need
 version history, diff, and fork/merge.  Metadata (status, scores, fork
 count) lives in the database so it can be queried and aggregated.
 
 Pure local git — does not depend on bundle or sync modules.
+
+Functions by category
+---------------------
+Write (mutate state)
+    init_article_repo      Create .git/ + reviews/ directory
+    commit_article          Stage all changes → commit → return hash
+    merge_git_repos         Merge a fork repo into a target repo
+    delete_article_repo     Delete the entire repo directory (idempotent)
+
+Read (inspect state)
+    get_commit_history      List recent commits with stats
+    get_commit_authors      Extract user IDs from commit author emails
+    get_diff_between        Diff two arbitrary commits
+
+Review file reading (non-git — reads worktree files directly)
+    list_review_dirs        List directory names under reviews/
+    read_review_scores      Parse reviews/{dir}/scores.json → dict
+
+Why read review files from the worktree?
+----------------------------------------
+Reviews arrive through two paths:
+
+1. Local submission (``commands/reviews.py:submit_review``):
+   _write_review_to_git() → upsert_review(commit_hash=return_value)
+   Both git and DB are updated atomically.
+
+2. Remote sync (``commands/sync.py:apply_sync_bundle``):
+   git merge FETCH_HEAD → ... → git_sync_reviews() → upsert_review()
+   The bundle merged new review files into git, but nobody told the DB.
+   ``git_sync_reviews`` closes this gap by reading every scores.json from
+   the worktree and upserting into the Review cache.
+
+This is NOT a full git-log traversal — it only reads the current worktree
+state.  Full historical review reconstruction from git history is deferred.
 """
 
 from pathlib import Path
@@ -228,6 +262,34 @@ def merge_git_repos(target: Path, fork: Path, author_name: str) -> str:
             pass
 
     return merge_hash
+
+
+# ── Review file reading ────────────────────────────────────────────────────
+
+
+def list_review_dirs(repo_path: Path) -> list[str]:
+    """Return directory names under reviews/ (reviewer IDs or anonymous hashes).
+
+    Returns an empty list if reviews/ does not exist or is empty.
+    """
+    reviews_dir = repo_path / "reviews"
+    if not reviews_dir.is_dir():
+        return []
+    return [d.name for d in reviews_dir.iterdir() if d.is_dir()]
+
+
+def read_review_scores(repo_path: Path, reviewer_dir: str) -> dict | None:
+    """Read reviews/{reviewer_dir}/scores.json and return the parsed dict.
+
+    Returns None if the scores file does not exist.
+    Raises json.JSONDecodeError if the file contains malformed JSON.
+    """
+    import json
+
+    scores_file = repo_path / "reviews" / reviewer_dir / "scores.json"
+    if not scores_file.is_file():
+        return None
+    return json.loads(scores_file.read_text())
 
 
 def delete_article_repo(repo_path: Path) -> None:

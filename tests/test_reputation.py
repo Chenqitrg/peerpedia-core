@@ -10,10 +10,9 @@ from peerpedia_core.storage.db.crud_user import create_user, update_user_reputat
 from peerpedia_core.storage.db.engine import get_session
 from peerpedia_core.storage.db.models import User
 from peerpedia_core.types.scores import ReputationScores
+from peerpedia_core.commands import recompute_author_reputation, recalculate_all_reputations
 from peerpedia_core.workflow.reputation import (
-    compute_author_reputation,
     get_reviewer_weight,
-    recalculate_all_reputations,
 )
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -44,7 +43,7 @@ class TestComputeAuthorReputation:
     def test_no_articles_returns_defaults(self, session):
         """A user with no articles gets all-zero reputation."""
         user = create_user(session, name="alice")
-        rep = compute_author_reputation(session, user.id)
+        rep = recompute_author_reputation(session, user.id)
 
         assert isinstance(rep, ReputationScores)
         assert rep.professionalism == 0.0
@@ -73,7 +72,7 @@ class TestComputeAuthorReputation:
             score=_build_score(originality=4, rigor=3, completeness=5, pedagogy=4, impact=4),
         )
 
-        rep = compute_author_reputation(session, user.id)
+        rep = recompute_author_reputation(session, user.id)
 
         assert rep.professionalism == pytest.approx(0.3 * 3.5, abs=0.01)
         assert rep.objectivity == pytest.approx(0.3 * 5.0, abs=0.01)
@@ -101,7 +100,7 @@ class TestComputeAuthorReputation:
             score=_build_score(originality=1, rigor=1, completeness=1, pedagogy=1, impact=1),
         )
 
-        rep = compute_author_reputation(session, user.id)
+        rep = recompute_author_reputation(session, user.id)
 
         # Status weights: published = 1.0, sedimentation = 0.7
         # Article reputation averages (all 5 dims map the same for each article):
@@ -127,7 +126,7 @@ class TestComputeAuthorReputation:
             status="published",
             score=_build_score(originality=4, rigor=4, completeness=4, pedagogy=4, impact=4),
         )
-        rep1 = compute_author_reputation(session, user.id)
+        rep1 = recompute_author_reputation(session, user.id)
 
         # Article avg: professionalism = avg(4,4)=4, objectivity = 4, etc.
         # rep1 = 0.3 * 4 = 1.2 for all dimensions
@@ -141,7 +140,7 @@ class TestComputeAuthorReputation:
             status="published",
             score=_build_score(originality=5, rigor=5, completeness=5, pedagogy=5, impact=5),
         )
-        rep2 = compute_author_reputation(session, user.id)
+        rep2 = recompute_author_reputation(session, user.id)
 
         # New article average from both articles:
         #   first: all 4, second: all 5
@@ -160,7 +159,7 @@ class TestComputeAuthorReputation:
             status="published",
             score=None,  # no score set yet
         )
-        rep = compute_author_reputation(session, user.id)
+        rep = recompute_author_reputation(session, user.id)
         assert rep.professionalism == 0.0
         assert rep.objectivity == 0.0
         assert rep.collaboration == 0.0
@@ -176,7 +175,7 @@ class TestComputeAuthorReputation:
             status="published",
             score=_build_score(originality=5, rigor=5, completeness=5, pedagogy=5, impact=5),
         )
-        compute_author_reputation(session, user.id)
+        recompute_author_reputation(session, user.id)
 
         session.expire_all()
         updated = session.get(User, user.id)
@@ -198,37 +197,28 @@ class TestGetReviewerWeight:
         s.close()
 
     def test_unknown_user_returns_default(self, session):
-        """A user who doesn't exist gets weight 1.0."""
-        rep = get_reviewer_weight(session, "nonexistent-id")
+        """None reputation gets weight 1.0."""
+        rep = get_reviewer_weight(None)
         assert rep == 1.0
 
     def test_user_without_reputation_returns_default(self, session):
-        """A user who has no reputation data gets weight 1.0."""
-        user = create_user(session, name="grace")
-        rep = get_reviewer_weight(session, user.id)
+        """Empty reputation dict gets weight 1.0."""
+        rep = get_reviewer_weight({})
         assert rep == 1.0
 
     def test_user_with_high_rep_gets_weight_above_one(self, session):
         """Avg reputation > 3.0 gives weight > 1.0."""
-        user = create_user(session, name="heidi")
-        update_user_reputation(
-            session,
-            user.id,
+        rep = get_reviewer_weight(
             {"professionalism": 5.0, "objectivity": 5.0, "collaboration": 5.0, "pedagogy": 5.0},
         )
-        rep = get_reviewer_weight(session, user.id)
         # avg_rep = 5.0 -> weight = 1.0 + 0.2 * (5.0 - 3.0) / 2.0 = 1.2
         assert rep == pytest.approx(1.2, abs=0.01)
 
     def test_user_with_low_rep_gets_weight_below_one(self, session):
         """Avg reputation < 3.0 gives weight < 1.0."""
-        user = create_user(session, name="ivan")
-        update_user_reputation(
-            session,
-            user.id,
+        rep = get_reviewer_weight(
             {"professionalism": 1.0, "objectivity": 1.0, "collaboration": 1.0, "pedagogy": 1.0},
         )
-        rep = get_reviewer_weight(session, user.id)
         # avg_rep = 1.0 -> weight = 1.0 + 0.2 * (1.0 - 3.0) / 2.0 = 0.8
         assert rep == pytest.approx(0.8, abs=0.01)
 
@@ -288,7 +278,7 @@ class TestWeightedArticleScoring:
 
     def test_no_reviewer_weights_unchanged(self):
         """Without reviewer_weights, behaves exactly as before."""
-        from peerpedia_core.workflow.scoring import compute_article_score, _aggregate_review_scores
+        from peerpedia_core.workflow.scoring import aggregate_review_scores
 
         reviews = [
             {
@@ -297,13 +287,13 @@ class TestWeightedArticleScoring:
                 "reviewer_id": "u1",
             },
         ]
-        result = _aggregate_review_scores(reviews)
+        result = aggregate_review_scores(reviews)
         assert result["originality"] == 4.0
         assert result["completeness"] == 5.0
 
     def test_reviewer_weights_applied(self):
         """Reviewer weights multiply the contribution of each review."""
-        from peerpedia_core.workflow.scoring import compute_article_score, _aggregate_review_scores
+        from peerpedia_core.workflow.scoring import aggregate_review_scores
 
         reviews = [
             {
@@ -318,7 +308,7 @@ class TestWeightedArticleScoring:
             },
         ]
         weights = {"trusted": 2.0, "low_rep": 0.5}
-        result = _aggregate_review_scores(reviews, reviewer_weights=weights)
+        result = aggregate_review_scores(reviews, reviewer_weights=weights)
 
         # Both are community reviews (weight = 0.85).
         # With reviewer weights:
@@ -330,7 +320,7 @@ class TestWeightedArticleScoring:
 
     def test_missing_reviewer_id_falls_back_to_one(self):
         """A review without a matching weight entry defaults to 1.0."""
-        from peerpedia_core.workflow.scoring import compute_article_score, _aggregate_review_scores
+        from peerpedia_core.workflow.scoring import aggregate_review_scores
 
         reviews = [
             {
@@ -340,12 +330,12 @@ class TestWeightedArticleScoring:
             },
         ]
         weights = {}
-        result = _aggregate_review_scores(reviews, reviewer_weights=weights)
+        result = aggregate_review_scores(reviews, reviewer_weights=weights)
         assert result["originality"] == 3.0
 
     def test_weights_multiply_with_self_review_weight(self):
         """Reviewer weights also affect self-reviews."""
-        from peerpedia_core.workflow.scoring import compute_article_score, _aggregate_review_scores
+        from peerpedia_core.workflow.scoring import aggregate_review_scores
 
         reviews = [
             {
@@ -356,6 +346,6 @@ class TestWeightedArticleScoring:
         ]
         # Self-review base weight = 0.15, boosted by 2.0 = 0.30
         weights = {"author": 2.0}
-        result = _aggregate_review_scores(reviews, reviewer_weights=weights)
+        result = aggregate_review_scores(reviews, reviewer_weights=weights)
         # Only one review, weight doesn't change the computed value
         assert result["originality"] == 5.0

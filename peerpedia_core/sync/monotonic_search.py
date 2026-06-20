@@ -7,6 +7,11 @@ When you have a monotonically False→True sequence where probing an
 element is expensive (network call, disk I/O, computation), this does
 :math:`O(\log n)` probes instead of probing every element.
 
+In PeerPedia, this is used to find the common ancestor between two git
+repos before syncing.  Each "probe" is an HTTP request to the remote peer
+asking "is commit X your ancestor?"  Linear scan would require O(N)
+round-trips; k-exponential search does it in O(log N).
+
 Algorithm
 ---------
 
@@ -19,15 +24,25 @@ with binary search to pinpoint the exact boundary where ``False`` flips to ``Tru
 This is the classic galloping / exponential search pattern, generalized from
 array lookup to an abstract ``probe_at`` callback.
 
-Use case in this project
-------------------------
+Single public function
+----------------------
+``search_monotonic_boundary(probe, high, low=0, k=5) → int``
+    *probe*: ``Callable[[int], bool]`` — True means the commit at this
+             position is an ancestor of the remote HEAD.
+    Returns the index of the last position where probe is True.
 
-``find_common_ancestor()`` in ``peerpedia_core.storage.git_backend``
-uses it to locate the merge base between two git histories: each probe
-is an HTTP call asking the remote peer "do you have commit X in your
-history?".
+Caller
+------
+``git_bundle.find_common_ancestor`` wraps this with the actual git commit
+indexing and HTTP probe mapping.
 
+Reviewer's checklist
+--------------------
+- k=5 is a tradeoff: larger k = fewer rounds, more binary steps.  OK for
+  typical article histories (<1000 commits).
+- The probe function is an HTTP call — ensure timeouts are set.
 """
+
 from collections.abc import Callable
 
 

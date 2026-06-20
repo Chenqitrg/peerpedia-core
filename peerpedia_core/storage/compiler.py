@@ -1,14 +1,57 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""Layer 1: Compiler backends for Typst and Markdown.
+r"""Compiler backends for Typst, Markdown, and bTeX.
 
-This is a versioned module — new backends can be added via PIP without
-changing the core protocol.
+Converts article source files into rendered output (HTML, PDF, SVG, PNG).
+The backend is selected based on the article's format field.
 
-Abstract interface:
-    CompilerBackend.compile(source_path, output_dir) -> CompileResult
-    CompilerBackend.extract_metadata(source_content) -> dict
+Architecture
+------------
+::
+
+    CLI: peerpedia compile <id> [--format pdf|svg|png|html]
+      |
+      v
+    compiler.detect_format(article_path) -> "typst" | "markdown"
+      |
+      v
+    TypstBackend or MarkdownBackend
+      |
+      v
+    CompileResult(html, pdf_path, pages, warnings)
+
+Backends are pluggable -- new formats can be added by subclassing
+``CompilerBackend`` without touching the core protocol.
+
+Classes and key functions
+-------------------------
+CompileResult           Dataclass: html, pdf_path, pages, warnings
+CompilerBackend (ABC)   Abstract: compile(), extract_metadata()
+TypstBackend            Calls ``typst compile`` via subprocess
+MarkdownBackend         Pure Python: markdown -> HTML with math protection
+
+Frontmatter helpers (used by commands/articles.py)
+--------------------------------------------------
+extract_frontmatter     Parse YAML frontmatter from source text
+parse_frontmatter       Same as extract, with error handling
+make_frontmatter        Build frontmatter string from dict
+make_article_frontmatter  Convenience: title, abstract, keywords, categories
+_strip_frontmatter      Remove frontmatter, return body only
+
+Callers
+-------
+- ``cli.py``: ``_cmd_compile`` -> ``detect_format`` -> backend.compile()
+- ``commands/articles.py``: ``create_article_with_content`` ->
+  ``make_article_frontmatter``; ``update_article_content`` ->
+  ``make_article_frontmatter`` + ``_strip_frontmatter``
+
+Reviewer's checklist
+--------------------
+- Does each backend call ``shutil.which()`` to check the external tool is
+  installed before trying to run it?
+- Are subprocess calls using timeouts?
+- Is math ($...$ and $$...$$) protected from Markdown parser interference?
 """
 
 from __future__ import annotations

@@ -27,6 +27,8 @@ class ScoreParams:
     max_score: float = 5.0
     self_review_weight: float = 0.15
     community_weight: float = 0.85
+    sedimentation_scope_weight: float = 1.0
+    published_scope_weight: float = 0.5
 
     def score_to_sink_multiplier(self, avg_score: float) -> float:
         """Convert average score (0..5) to a sink-time multiplier (0..1).

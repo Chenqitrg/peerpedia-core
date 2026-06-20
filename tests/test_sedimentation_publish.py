@@ -23,9 +23,9 @@ import pytest
 
 from peerpedia_core.storage.db.engine import get_session
 from peerpedia_core.storage.db.models import Article, ArticleAuthor, Review, User
+from peerpedia_core.commands import publish_ready_articles
 from peerpedia_core.workflow.sedimentation import (
     is_ready_to_publish,
-    publish_ready_articles,
 )
 
 

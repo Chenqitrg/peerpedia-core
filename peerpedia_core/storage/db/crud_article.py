@@ -1,7 +1,45 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""Article CRUD operations — database only, no git/filesystem side effects."""
+r"""Article CRUD — database only, no git/filesystem side effects.
+
+All functions call ``session.flush()`` only — the caller (CLI/REPL) is
+responsible for ``session.commit()``.  This ensures that multiple CRUD
+operations within a single command either all succeed or all roll back.
+
+Functions
+---------
+Author helpers (join table)
+    add_article_authors       Insert ArticleAuthor rows
+    set_article_authors       Replace all authors (delete + re-insert)
+    get_author_ids            Ordered author list for one article
+    get_author_ids_batch      Batch version for multiple articles
+    get_articles_by_author    All articles where user is an author
+
+CRUD
+    create_article            New article + author rows (flush only)
+    get_article               Single article by ID, or None
+    list_articles             Filtered list (status, author, follower)
+    count_articles            Count with same filters
+    update_article_compiled   Set compiled output cache
+    update_article_status     Change status with validation (G7)
+    increment_fork_count      ++fork_count
+    set_sink_start            Enter sedimentation + start timer
+    delete_article            Hard delete + cascade (reviews, bookmarks, etc.)
+    extend_sink               Author extends sink duration
+    get_article_by_fork_and_author  Find fork by (original, author)
+
+Status validation (G7)
+----------------------
+``update_article_status`` only accepts ``{"draft", "sedimentation",
+"published"}``.  Any other value raises ``ValueError``.
+
+Reviewer's checklist
+--------------------
+- Does every function call ``session.flush()``, not ``session.commit()``?
+- Are new queries indexed?  (author_id, status are the hot paths.)
+- Does ``delete_article`` cascade properly?  (Check the model relations.)
+"""
 
 from sqlalchemy.orm import Session
 
@@ -79,7 +117,7 @@ def create_article(
     session.add(a)
     session.flush()  # ensure a.id is available
     add_article_authors(session, a.id, authors)
-    session.commit()  # DB commit, not git
+    session.flush()
     return a
 
 
@@ -154,16 +192,19 @@ def update_article_compiled(
     a.compiled_format = html_format
     a.compiled_output = output
     a.compiled_pages = pages
-    session.commit()  # DB commit, not git
+    session.flush()
     return a
 
 
 def update_article_status(session: Session, article_id: str, new_status: str) -> Article:
+    _VALID_STATUSES = {"draft", "sedimentation", "published"}
+    if new_status not in _VALID_STATUSES:
+        raise ValueError(f"Invalid status {new_status!r}, must be one of {_VALID_STATUSES}")
     a = session.get(Article, article_id)
     if a is None:
         raise ValueError(f"Article {article_id} not found")
     a.status = new_status
-    session.commit()  # DB commit, not git
+    session.flush()
     return a
 
 
@@ -172,7 +213,7 @@ def increment_fork_count(session: Session, article_id: str) -> Article:
     if a is None:
         raise ValueError(f"Article {article_id} not found")
     a.fork_count += 1
-    session.commit()  # DB commit, not git
+    session.flush()
     return a
 
 
@@ -185,7 +226,7 @@ def set_sink_start(session: Session, article_id: str, duration_days: int) -> Art
     a.status = "sedimentation"
     a.sink_start = datetime.now(timezone.utc)
     a.sink_duration_days = duration_days
-    session.commit()  # DB commit, not git
+    session.flush()
     return a
 
 
@@ -220,7 +261,7 @@ def delete_article(session: Session, article_id: str) -> None:
     ).delete()
 
     session.delete(a)
-    session.commit()  # DB commit, not git
+    session.flush()
 
 
 def extend_sink(session: Session, article_id: str, extra_days: int, max_days: int = 180) -> Article:
@@ -241,7 +282,7 @@ def extend_sink(session: Session, article_id: str, extra_days: int, max_days: in
     a.sink_duration_days = new_total
     if new_total > old_total:
         a.sink_extended_count += 1
-    session.commit()  # DB commit, not git
+    session.flush()
     return a
 
 

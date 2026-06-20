@@ -1,18 +1,38 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""Reputation mechanism — core calculation logic.
+r"""Reputation mechanism — pure computation, zero storage dependencies.
 
-Computes author reputation from article scores and uses reputation
-to weight reviewer contributions.
+Three public functions used by ``commands/workflow.py``:
+
+    compute_reputation(articles) → ReputationScores
+        Aggregate article scores (5 dims) into reputation (4 dims), weighted
+        by article status (published=1.0, sedimentation=0.7, draft=0.3).
+        Returns all zeros if no articles have scores.
+
+    blend_reputation(existing, new, weight) → ReputationScores
+        EMA smooth new reputation into existing reputation.  Weight defaults
+        to params.reputation.article_to_author_weight (0.3).
+
+    get_reviewer_weight(reputation) → float
+        Map reputation average to a review weight multiplier.  Neutral point
+        is 3.0 → weight=1.0.  Returns 1.0 for None/empty reputation.
+
+Dimension mapping (5→4)
+-----------------------
+    professionalism ← avg(originality, rigor)
+    objectivity    ← completeness
+    collaboration  ← avg(originality, impact)
+    pedagogy       ← pedagogy (1:1)
+
+Reviewer's checklist
+--------------------
+- Is this file free of storage/ and Session imports?
+- Are status weights hardcoded or from params?  (currently hardcoded — by design,
+  they define the reputation model, not tuning knobs)
 """
 
-from sqlalchemy.orm import Session
-
 from peerpedia_core.config.params import params
-from peerpedia_core.storage.db.crud_article import get_articles_by_author
-from peerpedia_core.storage.db.crud_user import update_user_reputation
-from peerpedia_core.storage.db.models import User
 from peerpedia_core.types.scores import ReputationScores
 
 # Status-based weights for article scoring in reputation.
@@ -24,10 +44,6 @@ _STATUS_WEIGHTS = {
 }
 
 # Mapping from the 5 article-score dimensions to the 4 reputation dimensions.
-# professionalism ← avg(originality, rigor)
-# objectivity    ← completeness
-# collaboration  ← avg(originality, impact)
-# pedagogy       ← pedagogy (1:1)
 _REP_DIMS: dict[str, list[str]] = {
     "professionalism": ["originality", "rigor"],
     "objectivity": ["completeness"],
@@ -36,27 +52,15 @@ _REP_DIMS: dict[str, list[str]] = {
 }
 
 
-def compute_author_reputation(session: Session, user_id: str) -> ReputationScores:
-    """Compute and persist a blended reputation for *user_id*.
+def compute_reputation(articles: list[dict]) -> ReputationScores:
+    """Compute raw reputation from a list of article dicts.
 
-    1. Fetch every article where the user is listed as an author.
-    2. Aggregate the article scores (5 dims) into reputation scores (4 dims)
-       using the dimension mapping defined above.
-    3. Weight each article's contribution by its status
-       (published > sedimentation > draft).
-    4. Blend the result with the user's existing reputation using
-       ``article_to_author_weight`` so that reputation changes smoothly.
-    5. Persist via ``update_user_reputation()``.
-    6. Return the new ``ReputationScores``.
+    Each article dict must have:
+        - score: dict or None (FiveDimScores)
+        - status: str
+
+    Returns ReputationScores with all zeros if no articles have scores.
     """
-    articles = get_articles_by_author(session, user_id)
-
-    # --- Compute reputation from article scores --------------------------------
-    if not articles:
-        rep = ReputationScores()
-        update_user_reputation(session, user_id, rep.to_dict())
-        return rep
-
     dim_totals: dict[str, float] = {
         "professionalism": 0.0,
         "objectivity": 0.0,
@@ -66,88 +70,72 @@ def compute_author_reputation(session: Session, user_id: str) -> ReputationScore
     total_weight = 0.0
 
     for article in articles:
-        if not article.score:
+        score = article.get("score")
+        if not score:
             continue
-        status_w = _STATUS_WEIGHTS.get(article.status, 0.3)
+        status_w = _STATUS_WEIGHTS.get(article.get("status", ""), 0.3)
 
         for rep_dim, article_dims in _REP_DIMS.items():
-            values = [article.score.get(d, 0.0) for d in article_dims]
+            values = [score.get(d, 0.0) for d in article_dims]
             dim_totals[rep_dim] += (sum(values) / len(values)) * status_w
 
         total_weight += status_w
 
     if total_weight == 0:
-        rep = ReputationScores()
-    else:
-        rep = ReputationScores(
-            professionalism=round(dim_totals["professionalism"] / total_weight, 2),
-            objectivity=round(dim_totals["objectivity"] / total_weight, 2),
-            collaboration=round(dim_totals["collaboration"] / total_weight, 2),
-            pedagogy=round(dim_totals["pedagogy"] / total_weight, 2),
-        )
+        return ReputationScores()
 
-    # --- Blend with existing reputation -----------------------------------------
-    user = session.get(User, user_id)
-    existing_rep: dict = user.reputation if (user and user.reputation) else {}
+    return ReputationScores(
+        professionalism=round(dim_totals["professionalism"] / total_weight, 2),
+        objectivity=round(dim_totals["objectivity"] / total_weight, 2),
+        collaboration=round(dim_totals["collaboration"] / total_weight, 2),
+        pedagogy=round(dim_totals["pedagogy"] / total_weight, 2),
+    )
 
-    weight = params.reputation.article_to_author_weight  # 0.3
-    blended = ReputationScores(
+
+def blend_reputation(
+    existing: dict,
+    new: ReputationScores,
+    weight: float | None = None,
+) -> ReputationScores:
+    """Blend new reputation scores with existing ones using EMA smoothing.
+
+    *existing* is the current reputation dict (may be empty).
+    *weight* defaults to params.reputation.article_to_author_weight.
+    """
+    if weight is None:
+        weight = params.reputation.article_to_author_weight
+
+    return ReputationScores(
         professionalism=round(
-            (1 - weight) * existing_rep.get("professionalism", 0.0) + weight * rep.professionalism,
-            2,
+            (1 - weight) * existing.get("professionalism", 0.0) + weight * new.professionalism, 2,
         ),
         objectivity=round(
-            (1 - weight) * existing_rep.get("objectivity", 0.0) + weight * rep.objectivity,
-            2,
+            (1 - weight) * existing.get("objectivity", 0.0) + weight * new.objectivity, 2,
         ),
         collaboration=round(
-            (1 - weight) * existing_rep.get("collaboration", 0.0) + weight * rep.collaboration,
-            2,
+            (1 - weight) * existing.get("collaboration", 0.0) + weight * new.collaboration, 2,
         ),
         pedagogy=round(
-            (1 - weight) * existing_rep.get("pedagogy", 0.0) + weight * rep.pedagogy,
-            2,
+            (1 - weight) * existing.get("pedagogy", 0.0) + weight * new.pedagogy, 2,
         ),
     )
 
-    update_user_reputation(session, user_id, blended.to_dict())
-    return blended
 
-
-def get_reviewer_weight(session: Session, reviewer_id: str) -> float:
+def get_reviewer_weight(reputation: dict | None) -> float:
     """Return a weight factor for a reviewer based on their reputation.
 
-    Formula:
-        weight = 1.0 + author_weight_in_review * (avg_rep - 3.0) / 2.0
-
-    - 1.0  = neutral (no influence).
-    - >1.0 = trusted reviewer (their reviews count more).
-    - <1.0 = low-reputation reviewer (their reviews count less).
-
-    Defaults to 1.0 when the user has no reputation data.
+    Defaults to 1.0 when reputation is None or empty.
     """
-    user = session.get(User, reviewer_id)
-    if user is None or not user.reputation:
+    if not reputation:
         return 1.0
 
     rep = ReputationScores(
-        professionalism=user.reputation.get("professionalism", 0.0),
-        objectivity=user.reputation.get("objectivity", 0.0),
-        collaboration=user.reputation.get("collaboration", 0.0),
-        pedagogy=user.reputation.get("pedagogy", 0.0),
+        professionalism=reputation.get("professionalism", 0.0),
+        objectivity=reputation.get("objectivity", 0.0),
+        collaboration=reputation.get("collaboration", 0.0),
+        pedagogy=reputation.get("pedagogy", 0.0),
     )
 
     avg_rep = rep.average()
     weight = 1.0 + params.reputation.author_weight_in_review * (avg_rep - 3.0) / 2.0
     return max(0.0, weight)
-
-
-def recalculate_all_reputations(session: Session) -> int:
-    """Recalculate reputation for every user in the system.
-
-    Returns the number of users whose reputation was (re)computed.
-    """
-    users = session.query(User).all()
-    for user in users:
-        compute_author_reputation(session, user.id)
-    return len(users)

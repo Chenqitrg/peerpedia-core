@@ -1,13 +1,73 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""PeerPedia CLI — self-contained academic peer review from the terminal.
+r"""PeerPedia CLI -- self-contained academic peer review from the terminal.
 
-Usage:
-    peerpedia article create --title "..." --format markdown
-    peerpedia article show <id>
-    peerpedia review submit <article-id>
-    peerpedia sync status
+Entry point for all user-facing commands.  Parses argv via argparse, creates
+a DB session per command, and dispatches to ``commands/`` functions.
+
+How a command flows through this file
+--------------------------------------
+::
+
+    main()
+      |-- Startup scan: publish_ready_articles(db)
+      |-- No args -> repl.run()
+      |-- Has args -> build_parser().parse_args()
+      |
+      v
+    args.func(args)                          # e.g. _cmd_article_create
+      |
+      v
+    @_with_db decorator                      # creates session, calls db.commit()
+      |
+      v
+    _cmd_article_create(db, args)            # handler function
+      |-- Parse args (--title, --content, etc.)
+      |-- Resolve user (_resolve_user)
+      |-- Call commands.create_article_with_content(db, ...)
+      |-- db.commit()                        # decorator handles this
+      |-- Print result or --json output
+
+Key infrastructure
+------------------
+_get_db()               Open SQLite engine, init tables, return session.
+                        DB path: ~/.peerpedia/peerpedia.db
+
+_with_db(func)          Decorator.  Creates a session, calls func(db, args),
+                        then calls db.commit().  If the function raises,
+                        the session is rolled back.  This is the transaction
+                        boundary -- every CLI command is one transaction.
+
+_resolve_user(db, ref)  Look up a user by name or UUID.  Ref can be a full
+                        UUID, a prefix (first 8 chars), or a username.
+
+_parse_scores(str)      Parse "orig=4,rigor=3,..." into a scores dict.
+                        Used by publish and review submit commands.
+
+_open_editor(initial)   Open $EDITOR with initial content for article
+                        creation/editing.
+
+_output helpers         _ok (green checkmark), _die (red error + exit),
+                        _json_out (machine-readable), _stars (score bars),
+                        _status_badge (colored status label).
+
+Design notes
+------------
+- CLI handlers import from ``commands/`` for write operations and directly
+  from ``storage/db/crud_*.py`` for read-only queries.  This is intentional --
+  crud reads have no side effects and don't need orchestration.
+- ``db.commit()`` is called by the @_with_db decorator, not by individual
+  handlers.  Handlers only call commands functions (which only flush).
+- Startup scan and REPL periodic scan call ``publish_ready_articles``
+  directly from the main entry point.
+- ``--json`` flag on any command switches output to machine-readable JSON.
+
+Reviewer's checklist
+--------------------
+- Does every write command go through a ``commands/`` function?
+- Does every command handler have --json support?
+- Are user-facing errors caught and displayed with _die, not raw tracebacks?
 """
 
 from __future__ import annotations
@@ -322,6 +382,18 @@ def _cmd_article_delete(db, args):
     _ok(f"Deleted [accent]{args.id[:8]}[/]")
 
 
+@_with_db
+def _cmd_article_scan(db, args):
+    from peerpedia_core.commands import publish_ready_articles
+
+    count = publish_ready_articles(db)
+    db.commit()
+    if args.json:
+        _json_out({"published": count})
+    else:
+        _ok(f"已发布 [accent]{count}[/] 篇文章")
+
+
 # ── Review commands ──────────────────────────────────────────────────────
 
 
@@ -331,7 +403,6 @@ def _cmd_review_submit(db, args):
     result = submit_review(
         db, article_id=args.article_id, reviewer_id=_resolve_user(db, args.user),
         scores=scores,
-        commit_hash=args.commit_hash or "unknown",
         comment=args.comment or "",
     )
     db.commit()
@@ -554,6 +625,9 @@ def build_parser() -> argparse.ArgumentParser:
     _add_common_args(p)
     p.set_defaults(func=_cmd_article_delete)
 
+    p = art_subs.add_parser("scan")
+    p.set_defaults(func=_cmd_article_scan)
+
     # ── review ───────────────────────────────────────────────────────────
 
     rev = subs.add_parser("review")
@@ -563,7 +637,6 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("article_id")
     p.add_argument("--scores", required=True)
     p.add_argument("--comment")
-    p.add_argument("--commit-hash")
     _add_common_args(p)
     p.set_defaults(func=_cmd_review_submit)
 
@@ -635,6 +708,17 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main():
+    # Startup scan — publish any articles whose sink time has elapsed
+    from peerpedia_core.storage.db.engine import get_session
+    from peerpedia_core.commands import publish_ready_articles
+
+    session = get_session()
+    try:
+        publish_ready_articles(session)
+        session.commit()
+    finally:
+        session.close()
+
     # If no arguments, enter REPL
     if len(sys.argv) == 1:
         from peerpedia_core.repl import run

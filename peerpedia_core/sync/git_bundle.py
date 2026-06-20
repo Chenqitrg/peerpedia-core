@@ -1,10 +1,13 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""Git bundle protocol — create, apply, and find common ancestors.
+"""Git bundle protocol — create, ingest, and find common ancestors.
 
 Pure git — depends only on GitPython and ``monotonic_search``.  Does NOT
-import from ``git_backend``.  Used only by ``sync/``; dead code when offline.
+import from ``git_backend``.
+
+``ingest_bundle`` only verifies + fetches objects; it does NOT merge.
+Merging and DB reconciliation happen in ``commands.apply_sync_bundle``.
 """
 
 import tempfile
@@ -23,14 +26,16 @@ class MergeConflictError(Exception):
 # ── Bundle operations ────────────────────────────────────────────────────────
 
 
-def apply_bundle(repo_path: Path, bundle_bytes: bytes, *, ff_only: bool = True) -> str:
-    """Fetch objects from a git bundle and merge.
+def ingest_bundle(repo_path: Path, bundle_bytes: bytes) -> None:
+    """Verify and fetch git bundle objects into the local repo.
 
-    When *ff_only* is True (default), does a fast-forward merge — fails with
-    MergeConflictError if histories have diverged.  Set to False for the
-    diverged case (e.g., both sides edited different files).
+    Pure git — adds objects to ``.git/objects`` but does NOT merge or
+    touch the working tree.  The caller is responsible for merging
+    ``FETCH_HEAD`` and reconciling DB state.
 
-    Returns the new HEAD commit hash.
+    Raises:
+        FileNotFoundError: repo_path/.git doesn't exist.
+        ValueError: bundle is invalid or fetch failed.
     """
     import git
 
@@ -39,7 +44,7 @@ def apply_bundle(repo_path: Path, bundle_bytes: bytes, *, ff_only: bool = True) 
 
     repo = git.Repo(repo_path)
 
-    with tempfile.NamedTemporaryFile(suffix=".bundle", delete=True) as f:
+    with tempfile.NamedTemporaryFile(suffix=".bundle", delete=False) as f:
         f.write(bundle_bytes)
         f.flush()
 
@@ -52,18 +57,6 @@ def apply_bundle(repo_path: Path, bundle_bytes: bytes, *, ff_only: bool = True) 
             repo.git.fetch(f.name, "HEAD")
         except git.GitCommandError as e:
             raise ValueError(f"Bundle fetch failed: {e}") from e
-
-    merge_args = ["FETCH_HEAD", "--ff-only"] if ff_only else ["FETCH_HEAD"]
-    try:
-        repo.git.merge(*merge_args)
-    except git.GitCommandError as e:
-        try:
-            repo.git.merge("--abort")
-        except git.GitCommandError:
-            pass
-        raise MergeConflictError(f"Merge failed: {e}") from e
-
-    return repo.head.commit.hexsha
 
 
 def create_bundle(repo_path: Path, since_hash: str) -> bytes:

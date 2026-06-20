@@ -19,7 +19,6 @@ from peerpedia_core.storage.db.models import (
     Review,
     User,
 )
-from peerpedia_core.types.messages import ThreadMessage
 
 # ── Helpers ─────────────────────────────────────────────────────────────
 

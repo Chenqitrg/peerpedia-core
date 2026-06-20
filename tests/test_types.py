@@ -5,7 +5,6 @@
 
 import pytest
 
-from peerpedia_core.types.messages import ThreadMessage
 from peerpedia_core.types.scores import FiveDimScores, ReputationScores
 
 
@@ -164,37 +163,3 @@ class TestReputationScores:
         }
 
 
-class TestThreadMessage:
-    """评论对话线程中的一条消息"""
-
-    def test_create(self):
-        msg = ThreadMessage(
-            author_id="user123",
-            content="这个公式推导可以更详细。",
-        )
-        assert msg.author_id == "user123"
-        assert msg.content == "这个公式推导可以更详细。"
-        assert msg.created_at is not None  # 自动生成时间戳
-
-    def test_content_not_exceed_300_chars(self):
-        """超过 300 字抛出异常"""
-        long_content = "x" * 301
-        with pytest.raises(ValueError, match="300"):
-            ThreadMessage(author_id="user1", content=long_content)
-
-    def test_content_exactly_300_chars(self):
-        """刚好 300 字可以创建"""
-        content = "a" * 300
-        msg = ThreadMessage(author_id="user1", content=content)
-        assert len(msg.content) == 300
-
-    def test_empty_content_raises(self):
-        with pytest.raises(ValueError):
-            ThreadMessage(author_id="user1", content="")
-
-    def test_to_dict(self):
-        msg = ThreadMessage(author_id="user1", content="好文章")
-        d = msg.to_dict()
-        assert d["author_id"] == "user1"
-        assert d["content"] == "好文章"
-        assert "created_at" in d

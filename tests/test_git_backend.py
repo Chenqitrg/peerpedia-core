@@ -166,11 +166,11 @@ class TestDiff:
 class TestBundleSync:
     """Git bundle create/apply — commit hash preservation across repos."""
 
-    def test_create_and_apply_bundle_preserves_hash(self, articles_dir):
-        """S1+S2: Full bundle preserves commit hash when applied to empty repo."""
+    def test_ingest_and_merge_preserves_hash(self, articles_dir):
+        """S1+S2: ingest + merge preserves commit hash when applied to empty repo."""
         import git as gitmod
 
-        from peerpedia_core.sync.git_bundle import apply_bundle
+        from peerpedia_core.sync.git_bundle import ingest_bundle
         from peerpedia_core.storage.git_backend import (
             commit_article,
             init_article_repo,
@@ -196,15 +196,16 @@ class TestBundleSync:
         finally:
             Path(bundle_path).unlink(missing_ok=True)
 
-        # Server: empty repo — apply full bundle (initial sync)
+        # Server: empty repo — ingest objects then merge (initial sync)
         server_rp = init_article_repo(articles_dir / "server-article")
-        new_head = apply_bundle(server_rp, full_bytes)
+        ingest_bundle(server_rp, full_bytes)
+        server_repo = gitmod.Repo(server_rp)
+        server_repo.git.merge("FETCH_HEAD")
+        new_head = server_repo.head.commit.hexsha
         assert new_head == h2  # hash preserved!
 
         # Verify content and history
-        server_repo = gitmod.Repo(server_rp)
         assert len(list(server_repo.iter_commits())) == 2
-        assert server_repo.head.commit.hexsha == h2
         assert (server_rp / "article.md").read_text() == "v2"
 
     def test_create_incremental_bundle(self, articles_dir):
@@ -249,25 +250,25 @@ class TestBundleSync:
         with pytest.raises(FileNotFoundError):
             create_bundle(articles_dir / "nonexistent", "0" * 40)
 
-    def test_apply_bundle_bad_repo_raises(self, articles_dir):
-        """apply_bundle on non-existent repo raises FileNotFoundError."""
-        from peerpedia_core.sync.git_bundle import apply_bundle
+    def test_ingest_bundle_bad_repo_raises(self, articles_dir):
+        """ingest_bundle on non-existent repo raises FileNotFoundError."""
+        from peerpedia_core.sync.git_bundle import ingest_bundle
 
         with pytest.raises(FileNotFoundError):
-            apply_bundle(articles_dir / "nonexistent", b"garbage")
+            ingest_bundle(articles_dir / "nonexistent", b"garbage")
 
-    def test_apply_bundle_corrupt_raises(self, repo):
-        """apply_bundle with corrupt bytes raises ValueError."""
-        from peerpedia_core.sync.git_bundle import apply_bundle
+    def test_ingest_bundle_corrupt_raises(self, repo):
+        """ingest_bundle with corrupt bytes raises ValueError."""
+        from peerpedia_core.sync.git_bundle import ingest_bundle
 
         with pytest.raises(ValueError, match="Invalid bundle"):
-            apply_bundle(repo, b"not a git bundle")
+            ingest_bundle(repo, b"not a git bundle")
 
-    def test_apply_bundle_divergent_history(self, articles_dir):
-        """apply_bundle with divergent history raises MergeConflictError."""
+    def test_ff_only_merge_divergent_history(self, articles_dir):
+        """ff-only merge on divergent history raises GitCommandError."""
         import git as gitmod
 
-        from peerpedia_core.sync.git_bundle import MergeConflictError, apply_bundle
+        from peerpedia_core.sync.git_bundle import ingest_bundle
         from peerpedia_core.storage.git_backend import (
             commit_article,
             init_article_repo,
@@ -297,8 +298,11 @@ class TestBundleSync:
         finally:
             Path(bundle_path).unlink(missing_ok=True)
 
-        with pytest.raises(MergeConflictError):
-            apply_bundle(server_rp, bundle_bytes)
+        # Ingest succeeds (pure git — just adds objects)
+        ingest_bundle(server_rp, bundle_bytes)
+        # ff-only merge rejects divergent history (no MERGE_HEAD created)
+        with pytest.raises(gitmod.GitCommandError):
+            gitmod.Repo(server_rp).git.merge("FETCH_HEAD", "--ff-only")
 
     def test_lock_reuse(self):
         """get_article_lock returns same lock for same article_id."""
@@ -560,7 +564,7 @@ class TestClosedLoopSync:
         """S1+S2+S3: Create → push → verify hash → server change → pull → push again."""
         import git as gitmod
 
-        from peerpedia_core.sync.git_bundle import apply_bundle, create_bundle
+        from peerpedia_core.sync.git_bundle import create_bundle, ingest_bundle
         from peerpedia_core.storage.git_backend import (
             commit_article,
             init_article_repo,
@@ -577,7 +581,6 @@ class TestClosedLoopSync:
 
         # Server starts with empty repo (init only, no commits)
         server_rp = init_article_repo(base / "lifecycle-s1-server")
-        # iter_commits raises on repos with no commits — verify instead
         assert not gitmod.Repo(server_rp).head.is_valid()
 
         # Create full bundle of all client commits
@@ -587,9 +590,11 @@ class TestClosedLoopSync:
             full_bundle = Path(f.name).read_bytes()
         Path(f.name).unlink(missing_ok=True)
 
-        # Server applies full bundle
-        server_head = apply_bundle(server_rp, full_bundle)
-        assert server_head == h2  # S1: hash preserved end-to-end!
+        # Server: ingest + merge (initial sync)
+        ingest_bundle(server_rp, full_bundle)
+        gitmod.Repo(server_rp).git.merge("FETCH_HEAD")
+        server_head = gitmod.Repo(server_rp).head.commit.hexsha
+        assert server_head == h2  # S1: hash preserved!
         assert (server_rp / "article.md").read_text() == "# v2"
 
         # ── S3: Server adds a review commit; client pulls it ──────────────
@@ -599,12 +604,14 @@ class TestClosedLoopSync:
         assert server_h_review != h2
 
         # Client pulls server commits via incremental bundle
-        incr_bundle = create_bundle(server_rp, h2)  # since client's last known HEAD
+        incr_bundle = create_bundle(server_rp, h2)
         assert len(incr_bundle) > 0
 
-        # Client applies server's bundle
-        client_new_head = apply_bundle(client_rp, incr_bundle)
-        assert client_new_head == server_h_review  # same hash
+        # Client: ingest + merge server's bundle
+        ingest_bundle(client_rp, incr_bundle)
+        gitmod.Repo(client_rp).git.merge("FETCH_HEAD")
+        client_new_head = gitmod.Repo(client_rp).head.commit.hexsha
+        assert client_new_head == server_h_review
 
         # Client now has the review commit
         client_repo2 = gitmod.Repo(client_rp)
@@ -619,8 +626,10 @@ class TestClosedLoopSync:
         incr_bundle2 = create_bundle(client_rp, server_h_review)
         assert len(incr_bundle2) > 0
 
-        # Server applies incremental bundle
-        server_head2 = apply_bundle(server_rp, incr_bundle2)
+        # Server: ingest + merge incremental bundle
+        ingest_bundle(server_rp, incr_bundle2)
+        gitmod.Repo(server_rp).git.merge("FETCH_HEAD")
+        server_head2 = gitmod.Repo(server_rp).head.commit.hexsha
         assert server_head2 == client_h3  # S2: incremental hash preserved!
         assert (server_rp / "article.md").read_text() == "# v3 after review"
 
@@ -628,13 +637,13 @@ class TestClosedLoopSync:
         client_hashes = {c.hexsha for c in client_repo2.iter_commits()}
         server_commits = gitmod.Repo(server_rp)
         server_hashes = {c.hexsha for c in server_commits.iter_commits()}
-        assert client_hashes == server_hashes  # identical git history
+        assert client_hashes == server_hashes
 
     def test_divergent_history_s4(self, articles_dir):
-        """S4: Divergent commits on both sides → 409 conflict."""
+        """S4: Divergent commits on both sides → ff-only merge rejected."""
         import git as gitmod
 
-        from peerpedia_core.sync.git_bundle import MergeConflictError, apply_bundle, create_bundle
+        from peerpedia_core.sync.git_bundle import create_bundle, ingest_bundle
         from peerpedia_core.storage.git_backend import (
             commit_article,
             init_article_repo,
@@ -654,7 +663,8 @@ class TestClosedLoopSync:
             gitmod.Repo(client_rp).git.bundle("create", f.name, "HEAD")
             full = Path(f.name).read_bytes()
         Path(f.name).unlink(missing_ok=True)
-        apply_bundle(server_rp, full)
+        ingest_bundle(server_rp, full)
+        server_repo.git.merge("FETCH_HEAD")
         assert server_repo.head.commit.hexsha == h2
 
         # Client makes commit C
@@ -666,9 +676,10 @@ class TestClosedLoopSync:
         h_server = commit_article(server_rp, "server edit", "Bob", "bob@test.com")
         assert h_client != h_server
 
-        # Client tries to push → 409 conflict
+        # Client tries to push → ff-only merge rejects divergent history
         client_bundle = create_bundle(client_rp, h2)
         assert len(client_bundle) > 0
 
-        with pytest.raises(MergeConflictError, match="Merge failed"):
-            apply_bundle(server_rp, client_bundle)
+        ingest_bundle(server_rp, client_bundle)
+        with pytest.raises(gitmod.GitCommandError):
+            server_repo.git.merge("FETCH_HEAD", "--ff-only")

@@ -17,10 +17,13 @@ import io
 import tarfile
 from pathlib import Path
 
+from sqlalchemy.orm import Session
+
+from peerpedia_core.commands import apply_sync_bundle
 from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR
 from peerpedia_core.sync.git_bundle import (
-    apply_bundle,
     create_bundle,
+    ingest_bundle,
     is_ancestor,
 )
 
@@ -41,16 +44,21 @@ def serve_get_head(repo_path: Path) -> str | None:
         return None
 
 
-def serve_post_sync(repo_path: Path, bundle_bytes: bytes) -> str:
-    """Apply an incoming git bundle to the local repo.
+def serve_post_sync(db: Session, article_id: str, bundle_bytes: bytes) -> str:
+    """Apply an incoming git bundle and reconcile DB state.
 
-    Fast-forward only — diverged histories are rejected with
-    MergeConflictError so the client pulls and retries.
+    1. ``ingest_bundle`` — verify + fetch objects (pure git)
+    2. ``apply_sync_bundle`` — merge + DB reconcile (via commands)
+
+    Fast-forward only — diverged histories raise MergeConflictError
+    so the client pulls and retries.
 
     Called by the HTTP layer for ``POST /sync``.
     Returns the new HEAD hash.
     """
-    return apply_bundle(repo_path, bundle_bytes, ff_only=True)
+    rp = DEFAULT_ARTICLES_DIR / article_id
+    ingest_bundle(rp, bundle_bytes)
+    return apply_sync_bundle(db, article_id, ff_only=True)
 
 
 def serve_get_bundle(repo_path: Path, since_hash: str | None) -> bytes | None:

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import uuid
+from pathlib import Path
 
 import git as gitmod
 from sqlalchemy.orm import Session
@@ -529,3 +530,52 @@ def accept_merge(db: Session, article_id: str, proposal_id: str, user_id: str) -
 
     mp = accept_merge_proposal(db, proposal_id)
     return {"id": mp.id, "status": mp.status}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Sync — apply incoming git bundle
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def apply_sync_bundle(
+    db: Session,
+    article_id: str,
+    *,
+    ff_only: bool = False,
+) -> str:
+    """Merge fetched bundle objects (``FETCH_HEAD``) and reconcile DB state.
+
+    The caller must have already called ``ingest_bundle`` to verify + fetch
+    objects into the repo.  This function only does the merge and DB
+    reconciliation.  It does NOT import from ``sync/``.
+
+    Returns the new HEAD commit hash.
+
+    Raises:
+        MergeConflictError: merge conflict (ff-only rejected).
+    """
+    import git
+
+    rp = DEFAULT_ARTICLES_DIR / article_id
+    repo = git.Repo(rp)
+
+    merge_args = ["FETCH_HEAD", "--ff-only"] if ff_only else ["FETCH_HEAD"]
+    try:
+        repo.git.merge(*merge_args)
+    except git.GitCommandError as e:
+        try:
+            repo.git.merge("--abort")
+        except git.GitCommandError:
+            pass
+        raise MergeConflictError(f"Merge failed: {e}") from e
+
+    new_head = repo.head.commit.hexsha
+
+    # DB reconciliation — git state changed, DB must follow
+    rebuild_article_authors(db, article_id)
+    score = compute_article_score(db, article_id)
+    if score is not None:
+        article = get_article(db, article_id)
+        article.score = score
+
+    return new_head

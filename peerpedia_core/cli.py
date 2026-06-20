@@ -49,7 +49,7 @@ from peerpedia_core.storage.db.crud_review import get_reviews_for_article
 from peerpedia_core.storage.db.crud_user import create_user, get_user, get_user_by_name
 from peerpedia_core.storage.db.engine import get_engine, get_session, init_db
 from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, delete_article_repo
-from peerpedia_core.sync import is_online, count as pending_count, sync as sync_push
+from peerpedia_core.sync import is_online, count as pending_count, client_sync as sync_push
 from peerpedia_core.storage.compiler import MarkdownBackend, TypstBackend, detect_format
 
 # ── Rich console with theme ──────────────────────────────────────────────
@@ -463,7 +463,8 @@ def _cmd_compile(args):
         _die(result.error or "Compilation failed")
 
 
-def _cmd_sync_push(args):
+@_with_db
+def _cmd_sync_push(db, args):
     server = args.server or os.environ.get("PEERPEDIA_SERVER", "http://localhost:8080")
     if not is_online(server):
         _die("Server unreachable")
@@ -472,11 +473,12 @@ def _cmd_sync_push(args):
 
     pushed = 0
     for op in list_all():
-        result = sync_push(server, op["id"])
+        result = sync_push(db, server, op["id"])
         if result.get("synced"):
             pop_pending(op["id"])
             pushed += 1
     if pushed > 0:
+        db.commit()
         _ok(f"Pushed {pushed} article(s)")
     else:
         console.print("[muted]Nothing to push.[/]")

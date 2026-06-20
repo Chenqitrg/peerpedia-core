@@ -57,8 +57,7 @@ peerpedia_core/
 │   └── reputation.py         # 声誉计算（EMA 平滑）
 │
 └── types/
-    ├── scores.py             # 五维评分（FiveDimScores）+ 四维声誉（ReputationScores）
-    └── messages.py           # Thread 消息
+    └── scores.py             # 五维评分（FiveDimScores）+ 四维声誉（ReputationScores）
 
 tests/
 ├── conftest.py               # 共享 fixture（临时 SQLite 引擎）
@@ -132,8 +131,8 @@ tests/
 |------|------|------|
 | `sync/git_bundle.py` | git bundle 协议：`create_bundle` / `apply_bundle` / `find_common_ancestor` / `is_ancestor` | GitPython + `monotonic_search` |
 | `sync/monotonic_search.py` | k-exponential 搜索算法（`search_monotonic_boundary`） | 纯 Python，无外部依赖 |
-| `sync/bundle_client.py` | 客户端 sync 编排：`sync()` → pull/push/create 流程 | `git_bundle` + `transport/http` + `git_backend` |
-| `sync/bundle_server.py` | 服务端 handler：`serve_get_head` / `serve_post_sync` / `serve_get_bundle` / `serve_get_ancestor` / `serve_post_articles` | `git_bundle` + `git_backend`（不含 HTTP 代码） |
+| `sync/bundle_client.py` | 客户端 sync 编排：`client_sync` / `client_pull_incremental` / `client_push_incremental` / `client_create_article` / `client_find_merge_base` | `git_bundle` + `transport/http` + GitPython |
+| `sync/bundle_server.py` | 服务端 handler：`serve_get_head` / `serve_post_sync` / `serve_get_bundle` / `serve_get_ancestor` / `serve_post_articles` | `git_bundle` + GitPython（不含 HTTP 代码） |
 | `sync/transport/http.py` | HTTP 传输实现：`fetch_head` / `push_bundle` / `fetch_bundle` / `ancestor_probe` / `post_article` | `httpx`（唯一） |
 | `sync/network.py` | 网络检测：`is_online(server_url)` | `httpx` |
 | `sync/pending_queue.py` | 离线操作队列（`~/.peerpedia/pending_ops.json`） | 文件 I/O |
@@ -142,22 +141,22 @@ tests/
 
 ```
      CLIENT (bundle_client.py)           SERVER (bundle_server.py)
-     ────────────────────────           ─────────────────────────
-     sync() → 编排 push/pull           被 HTTP 路由层调用
-       ├─ _pull_incremental            ├─ serve_get_head()
-       │    → fetch_bundle(HTTP)       │    → git.Repo.head.commit.hexsha
-       │    → apply_bundle()           │
-       ├─ _push_incremental            ├─ serve_post_sync()
-       │    → create_bundle()          │    → apply_bundle(ff_only=True)
-       │    → push_bundle(HTTP)        │
-       ├─ _create_article             ├─ serve_get_bundle()
-       │    → post_article(HTTP)      │    → create_bundle()
-       │                              │
-       └─ _find_merge_base            ├─ serve_get_ancestor()
-            → ancestor_probe(HTTP)    │    → is_ancestor()
-            → find_common_ancestor()  │
-                                      └─ serve_post_articles()
-                                           → tar.gz 解包
+     ───────────────────────────           ─────────────────────────
+     client_sync() → 编排 push/pull      被 HTTP 路由层调用
+       ├─ client_pull_incremental        ├─ serve_get_head()
+       │    → fetch_bundle(HTTP)         │    → git.Repo.head.commit.hexsha
+       │    → apply_bundle()             │
+       ├─ client_push_incremental        ├─ serve_post_sync()
+       │    → create_bundle()            │    → apply_bundle(ff_only=True)
+       │    → push_bundle(HTTP)          │
+       ├─ client_create_article          ├─ serve_get_bundle()
+       │    → post_article(HTTP)         │    → create_bundle()
+       │                                 │
+       └─ client_find_merge_base         ├─ serve_get_ancestor()
+            → ancestor_probe(HTTP)       │    → is_ancestor()
+            → find_common_ancestor()     │
+                                         └─ serve_post_articles()
+                                              → tar.gz 解包
 ```
 
 ### 同步协议
@@ -272,7 +271,11 @@ User ──< ArticleAuthor >── Article ──< Citation >── Article
 
 | 函数 | 职责 |
 |------|------|
-| `sync(server, article_id) → dict` | 客户端 sync 编排：find merge base → pull/push/merge |
+| `client_sync(server, article_id) → dict` | 客户端 sync 编排：find merge base → pull/push/merge |
+| `client_find_merge_base(server, article_id, repo_path, server_head) → str \| None` | 通过 k-exponential probe 找到与服务器的共同祖先 |
+| `client_pull_incremental(server, article_id, since_hash, ff_only=True) → str \| None` | 拉取增量 bundle 并 apply |
+| `client_push_incremental(server, article_id, since_hash, to_hash) → str \| None` | 创建增量 bundle 并推送 |
+| `client_create_article(server, article_id) → bool` | 首次推送：tar.gz 全量上传 |
 
 ### 同步服务端 (sync/bundle_server.py)
 

@@ -232,7 +232,7 @@ $ peerpedia sync push \           # 3. 推到别人或自己的服务器
 | 序号 | 文件 | 读什么 | 关键点 |
 |------|------|--------|--------|
 | 15 | [sync/network.py](../peerpedia_core/sync/network.py) | `is_online(server_url)` — GET `/health` | 5 秒超时 |
-| 16 | [sync/bundle_client.py](../peerpedia_core/sync/bundle_client.py) | `sync(server, article_id)` → pull/push/merge 编排 | 完整递增 sync 协议，三种 case（server ahead / local ahead / diverged） |
+| 16 | [sync/bundle_client.py](../peerpedia_core/sync/bundle_client.py) | `client_sync` / `client_pull_incremental` / `client_push_incremental` / `client_create_article` / `client_find_merge_base` | 完整递增 sync 协议，三种 case（server ahead / local ahead / diverged） |
 | 17 | [sync/bundle_server.py](../peerpedia_core/sync/bundle_server.py) | `serve_get_head` / `serve_post_sync` / `serve_get_bundle` / `serve_get_ancestor` / `serve_post_articles` | 服务端 handler，不含 HTTP 代码 |
 | 18 | [sync/transport/http.py](../peerpedia_core/sync/transport/http.py) | `fetch_head` / `push_bundle` / `fetch_bundle` / `ancestor_probe` / `post_article` | 唯一 import httpx 的文件 |
 | 19 | [sync/pending_queue.py](../peerpedia_core/sync/pending_queue.py) | 文件队列 | 离线操作暂存 |

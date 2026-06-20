@@ -3,6 +3,14 @@
 
 """Git bundle sync — push/pull article repos to/from a remote server.
 
+Client-side functions mirror the server-side handlers in ``bundle_server``:
+
+  client_sync()              ↔  (orchestration, no direct server mirror)
+  client_find_merge_base()   ↔  serve_get_ancestor()
+  client_pull_incremental()  ↔  serve_get_bundle()
+  client_push_incremental()  ↔  serve_post_sync()
+  client_create_article()    ↔  serve_post_articles()
+
 Protocol:
   1. GET /api/v1/articles/{id}/head  → server HEAD hash (or 404 if unknown)
   2. POST /api/v1/articles/{id}/sync → send incremental git bundle (ff-only)
@@ -15,16 +23,20 @@ from __future__ import annotations
 import base64
 import io
 import tarfile
+from pathlib import Path
 
-from peerpedia_core.storage.git_backend import (
-    DEFAULT_ARTICLES_DIR,
-    get_commit_history,
-)
+import git as _git
+from sqlalchemy.orm import Session
+
+from peerpedia_core.commands import apply_sync_bundle
 from peerpedia_core.sync.git_bundle import (
-    apply_bundle,
     create_bundle,
     find_common_ancestor,
+    ingest_bundle,
 )
+
+# Sync domain defines its own articles directory — no dependency on git_backend.
+DEFAULT_ARTICLES_DIR = Path.home() / ".peerpedia" / "articles"
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -32,7 +44,7 @@ from peerpedia_core.sync.git_bundle import (
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-def sync(server: str, article_id: str) -> dict:
+def client_sync(db: Session, server: str, article_id: str) -> dict:
     """Synchronize local article with the remote server.
 
     Finds the common ancestor, then acts on three cases:
@@ -41,53 +53,51 @@ def sync(server: str, article_id: str) -> dict:
       - Local ahead  (merge_base == server_head): push only.
       - Diverged:                                 pull (non-ff), merge, then push.
 
+    Pull applies the git bundle and reconciles DB state (authors, score).
+    Caller owns the transaction boundary — this function does NOT commit.
+
     Returns:
         {"synced": True, "head": "<hash>"} on success
         {"synced": False, "head": None} on failure
     """
     rp = DEFAULT_ARTICLES_DIR / article_id
     try:
-        history = get_commit_history(rp)
-    except ValueError:
+        repo = _git.Repo(rp)
+        local_head: str = repo.head.commit.hexsha
+    except (ValueError, _git.GitError):
         return {"synced": False, "head": None}
-    local_head: str = history[0]["hash"]
 
     server_head = fetch_head(server, article_id)
 
     # Server doesn't have this article yet — upload full repo
     if not server_head:
-        return _dict(_create_article(server, article_id), local_head)
+        return _dict(client_create_article(server, article_id), local_head)
 
     # Already in sync
     if local_head == server_head:
         return {"synced": True, "head": local_head}
 
-    merge_base = _find_merge_base_via_probe(server, article_id, rp, server_head)
+    merge_base = client_find_merge_base(server, article_id, rp, server_head)
 
     # ── Case 1: Server ahead — pull only (ff) ────────────────────────────
-    # _pull_incremental → fetch_bundle (GET) + apply_bundle (git merge --ff-only)
     if merge_base == local_head:
-        new_head = _pull_incremental(server, article_id, local_head)
+        new_head = client_pull_incremental(db, server, article_id, local_head)
         return _dict(new_head is not None, new_head)
 
     # ── Case 2: Local ahead — push only ──────────────────────────────────
-    # _push_incremental → create_bundle (git bundle create) + push_bundle (POST)
     if merge_base == server_head:
         return _dict(
-            _push_incremental(server, article_id, server_head, local_head) is not None,
+            client_push_incremental(server, article_id, server_head, local_head) is not None,
             local_head,
         )
 
     # ── Case 3: Diverged — pull (non-ff merge), then push ────────────────
-    # _pull_incremental(ff_only=False) → apply_bundle without --ff-only →
-    #    git merge creates a merge commit (or fast-forwards if possible).
-    # Then _push_incremental uploads the merged result.
     if merge_base is not None:
-        new_head = _pull_incremental(server, article_id, merge_base, ff_only=False)
+        new_head = client_pull_incremental(db, server, article_id, merge_base, ff_only=False)
         if not new_head:
             return {"synced": False, "head": None}
         return _dict(
-            _push_incremental(server, article_id, server_head, new_head) is not None,
+            client_push_incremental(server, article_id, server_head, new_head) is not None,
             new_head,
         )
 
@@ -99,12 +109,12 @@ def _dict(ok: bool, head: str) -> dict:
     return {"synced": True, "head": head} if ok else {"synced": False, "head": None}
 
 
-def _find_merge_base_via_probe(
+def client_find_merge_base(
     server: str, article_id: str, repo_path: Path, server_head: str,
 ) -> str | None:
     """Find merge base by probing the server with candidate hashes.
 
-    Delegates the HTTP probing to ``_ancestor_probe`` and the search to
+    Delegates the HTTP probing to ``ancestor_probe`` and the search to
     ``find_common_ancestor``.  This function itself has no HTTP code.
     """
     probe = ancestor_probe(server, article_id)
@@ -116,14 +126,19 @@ def _find_merge_base_via_probe(
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-def _pull_incremental(
-    server: str, article_id: str, since_hash: str | None, *, ff_only: bool = True,
+def client_pull_incremental(
+    db: Session,
+    server: str,
+    article_id: str,
+    since_hash: str | None,
+    *,
+    ff_only: bool = True,
 ) -> str | None:
     """Pull server commits from *since_hash* to server HEAD.
 
-    Does two things:
-      1. ``fetch_bundle`` — GET /bundle?since=… (HTTP)
-      2. ``apply_bundle`` — git bundle verify + git fetch + git merge
+    1. ``fetch_bundle`` — GET /bundle?since=… (HTTP) → bytes
+    2. ``ingest_bundle`` — verify + fetch objects into git (pure git)
+    3. ``apply_sync_bundle`` — merge + DB reconcile (via commands)
 
     *since_hash=None* means "full pull" (from the beginning).
     *ff_only=True*  → ``git merge --ff-only`` (server ahead).
@@ -132,13 +147,11 @@ def _pull_incremental(
     bundle_bytes = fetch_bundle(server, article_id, since_hash)
     if not bundle_bytes:
         return None
-    # apply_bundle → git merge (with or without --ff-only)
-    apply_bundle(DEFAULT_ARTICLES_DIR / article_id, bundle_bytes, ff_only=ff_only)
-    history = get_commit_history(DEFAULT_ARTICLES_DIR / article_id)
-    return history[0]["hash"]
+    ingest_bundle(DEFAULT_ARTICLES_DIR / article_id, bundle_bytes)
+    return apply_sync_bundle(db, article_id, ff_only=ff_only)
 
 
-def _push_incremental(
+def client_push_incremental(
     server: str, article_id: str, since_hash: str, to_hash: str,
 ) -> str | None:
     """Push local commits from *since_hash* to *to_hash*.
@@ -152,7 +165,7 @@ def _push_incremental(
     return None
 
 
-def _create_article(server: str, article_id: str) -> bool:
+def client_create_article(server: str, article_id: str) -> bool:
     """Upload a full repo tar.gz for a first-ever push."""
     rp = DEFAULT_ARTICLES_DIR / article_id
     if not (rp / ".git").is_dir():

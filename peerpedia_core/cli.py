@@ -89,28 +89,31 @@ from rich.theme import Theme
 
 from peerpedia_core.commands import (
     accept_merge,
+    add_bookmark,
+    count_articles,
     create_article_with_content,
+    create_merge_proposal,
+    create_user,
+    delete_article,
     fork_article,
+    get_article,
+    get_author_ids,
+    get_bookmarks_for_user,
+    get_reviews_for_article,
+    get_user,
+    get_user_by_name,
+    list_articles,
     publish_article,
+    remove_bookmark,
     rollback_article,
     submit_review,
     update_article_content,
 )
-from peerpedia_core.storage.db.crud_article import (
-    count_articles,
-    delete_article,
-    get_article,
-    get_author_ids,
-    list_articles,
-)
-from peerpedia_core.storage.db.crud_bookmark import add_bookmark, get_bookmarks_for_user, remove_bookmark
-from peerpedia_core.storage.db.crud_merge import create_merge_proposal
-from peerpedia_core.storage.db.crud_review import get_reviews_for_article
-from peerpedia_core.storage.db.crud_user import create_user, get_user, get_user_by_name
 from peerpedia_core.storage.db.engine import get_engine, get_session, init_db
-from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, delete_article_repo
 from peerpedia_core.sync import is_online, count as pending_count, client_sync as sync_push
 from peerpedia_core.storage.compiler import MarkdownBackend, TypstBackend, detect_format
+
+DEFAULT_ARTICLES_DIR = Path.home() / ".peerpedia" / "articles"
 
 # ── Rich console with theme ──────────────────────────────────────────────
 
@@ -377,8 +380,7 @@ def _cmd_article_delete(db, args):
     if not args.force:
         console.print("[warning]Use --force to confirm deletion[/]")
         return
-    delete_article(db, args.id)  # commits internally
-    delete_article_repo(DEFAULT_ARTICLES_DIR / args.id)
+    delete_article(db, args.id)
     _ok(f"Deleted [accent]{args.id[:8]}[/]")
 
 

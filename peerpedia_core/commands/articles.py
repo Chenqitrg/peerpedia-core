@@ -431,3 +431,46 @@ def publish_article(
     require_self_review_for_publish(db, article_id, user)
 
     return {"id": a.id, "title": a.title, "status": a.status}
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Read wrappers — thin pass-through to crud, so CLI doesn't import storage/db
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def get_article(db: Session, article_id: str):
+    """Return an article by ID, or None."""
+    from peerpedia_core.storage.db.crud_article import get_article as _get
+    return _get(db, article_id)
+
+
+def list_articles(db: Session, **kwargs):
+    """List articles with optional filters."""
+    from peerpedia_core.storage.db.crud_article import list_articles as _list
+    return _list(db, **kwargs)
+
+
+def count_articles(db: Session, **kwargs) -> int:
+    """Count articles with optional filters."""
+    from peerpedia_core.storage.db.crud_article import count_articles as _count
+    return _count(db, **kwargs)
+
+
+def get_author_ids(db: Session, article_id: str) -> list[str]:
+    """Return ordered author IDs for an article."""
+    from peerpedia_core.storage.db.crud_article import get_author_ids as _get_ids
+    return _get_ids(db, article_id)
+
+
+def delete_article(db: Session, article_id: str) -> None:
+    """Delete an article from DB and its git repo.
+
+    Calls crud delete first (DB), then removes the git repo directory.
+    """
+    from peerpedia_core.storage.db.crud_article import delete_article as _delete
+    from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, delete_article_repo
+
+    _delete(db, article_id)
+    delete_article_repo(DEFAULT_ARTICLES_DIR / article_id)
+
+    return {"id": a.id, "title": a.title, "status": a.status}

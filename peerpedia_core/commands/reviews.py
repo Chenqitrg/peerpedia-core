@@ -164,3 +164,12 @@ def _write_review_to_git(
     finally:
         lock.release()
     return h
+
+
+# ── Read wrapper ──────────────────────────────────────────────────────────
+
+
+def get_reviews_for_article(db: Session, article_id: str):
+    """Return all cached reviews for an article, newest first."""
+    from peerpedia_core.storage.db.crud_review import get_reviews_for_article as _get
+    return _get(db, article_id)

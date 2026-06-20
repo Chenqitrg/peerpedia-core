@@ -53,16 +53,23 @@ Design invariants
 """
 
 from peerpedia_core.commands.articles import (
+    count_articles,
     create_article_with_content,
+    delete_article,
     fork_article,
+    get_article,
+    get_author_ids,
+    list_articles,
     publish_article,
     rebuild_article_authors,
     rollback_article,
     update_article_content,
 )
-from peerpedia_core.commands.merge import accept_merge
-from peerpedia_core.commands.reviews import submit_review
+from peerpedia_core.commands.bookmarks import add_bookmark, get_bookmarks_for_user, remove_bookmark
+from peerpedia_core.commands.merge import accept_merge, create_merge_proposal
+from peerpedia_core.commands.reviews import get_reviews_for_article, submit_review
 from peerpedia_core.commands.sync import apply_sync_bundle, git_sync_reviews
+from peerpedia_core.commands.users import create_user, get_user, get_user_by_name
 from peerpedia_core.commands.workflow import (
     publish_ready_articles,
     recalculate_all_reputations,
@@ -72,16 +79,29 @@ from peerpedia_core.commands.workflow import (
 
 __all__ = [
     "accept_merge",
+    "add_bookmark",
     "apply_sync_bundle",
+    "count_articles",
     "create_article_with_content",
+    "create_merge_proposal",
+    "create_user",
+    "delete_article",
     "fork_article",
+    "get_article",
+    "get_author_ids",
+    "get_bookmarks_for_user",
+    "get_reviews_for_article",
+    "get_user",
+    "get_user_by_name",
     "git_sync_reviews",
+    "list_articles",
     "publish_article",
     "publish_ready_articles",
     "rebuild_article_authors",
     "recalculate_all_reputations",
     "recompute_article_score",
     "recompute_author_reputation",
+    "remove_bookmark",
     "rollback_article",
     "submit_review",
     "update_article_content",

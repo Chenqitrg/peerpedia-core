@@ -84,3 +84,12 @@ def accept_merge(db: Session, article_id: str, proposal_id: str, user_id: str) -
 
     mp = accept_merge_proposal(db, proposal_id)
     return {"id": mp.id, "status": mp.status}
+
+
+# ── Write wrapper ────────────────────────────────────────────────────────
+
+
+def create_merge_proposal(db: Session, fork_id: str, target_id: str, proposer_id: str):
+    """Create a merge proposal from a fork to its original article."""
+    from peerpedia_core.storage.db.crud_merge import create_merge_proposal as _create
+    return _create(db, fork_id, target_id, proposer_id)

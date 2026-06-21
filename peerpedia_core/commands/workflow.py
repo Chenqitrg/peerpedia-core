@@ -124,7 +124,7 @@ def publish_ready_articles(db: Session) -> int:
         if (rp / ".git").is_dir():
             git_commit(
                 rp,
-                "published",
+                "[status] published",
                 "PeerPedia",
                 "system@peerpedia",
             )

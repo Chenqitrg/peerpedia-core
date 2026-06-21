@@ -64,15 +64,19 @@ _VALID_STATUSES = {"draft", "sedimentation", "published"}
 
 
 def _parse_status_tag(message: str, author_email: str) -> str | None:
-    """Return the article status if *message* is a valid platform commit.
+    """Return the article status if *message* is a valid platform status commit.
 
-    Only accepts commits authored by the PeerPedia platform (system@peerpedia).
-    The commit message is the status string itself: "sedimentation", "published".
+    Only accepts commits authored by the PeerPedia platform (system@peerpedia)
+    whose message has the form ``[status] <valid_status>``.
     """
     if author_email != _PLATFORM_EMAIL:
         return None
     msg = message.strip()
-    return msg if msg in _VALID_STATUSES else None
+    prefix = "[status] "
+    if not msg.startswith(prefix):
+        return None
+    status = msg[len(prefix):]
+    return status if status in _VALID_STATUSES else None
 
 
 def git_sync_status(db: Session, article_id: str) -> None:
@@ -80,7 +84,7 @@ def git_sync_status(db: Session, article_id: str) -> None:
 
     Walks new commits since ``last_author_rebuild_hash``.  Only commits
     authored by PeerPedia (system@peerpedia) are considered.  The commit
-    message is the status string itself: ``"sedimentation"``, ``"published"``.
+    message has the form ``[status] <valid_status>``.
     The latest matching commit wins.
     """
     import git
@@ -139,9 +143,15 @@ def apply_sync_bundle(
     db: Session,
     article_id: str,
     *,
-    ff_only: bool = False,
+    ff_only: bool = True,
 ) -> str:
     """Merge fetched bundle objects (``FETCH_HEAD``) and reconcile DB state.
+
+    Defaults to ``--ff-only``: only fast-forward merges are performed,
+    so sync does not create new merge commits (which would cause
+    infinite ping-pong between peers).  If fast-forward is impossible
+    (genuine content divergence), raises ``MergeConflictError`` — the
+    caller should use the fork/merge proposal flow instead.
 
     The caller must have already called ``ingest_bundle`` to verify + fetch
     objects into the repo.  This function only does the merge and DB

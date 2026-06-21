@@ -150,6 +150,12 @@ def fork_article(db: Session, article_id: str, user_id: str) -> dict:
     gitmod.Repo.clone_from(str(src), str(dst))
 
     # Derive authors from git first, then write DB — git is the SOT.
+    # TODO(fork-ownership): ``get_commit_authors(dst)`` pulls in every
+    # original author (and reviewer — see review-author-leak) from the
+    # cloned git history.  These should remain as ArticleAuthor
+    # (they contributed content), but only the forker should be
+    # ScriptMaintainer (they manage the fork).  Add a separate
+    # ``ScriptMaintainer`` join table and write the forker as admin here.
     git_authors = get_commit_authors(dst) | {user_id}
 
     fork = create_article(
@@ -423,7 +429,7 @@ def publish_article(
     # Record status transition in git so it survives P2P sync.
     commit_hash = commit_article(
         DEFAULT_ARTICLES_DIR / article_id,
-        "sedimentation",
+        "[status] sedimentation",
         "PeerPedia",
         "system@peerpedia",
     )

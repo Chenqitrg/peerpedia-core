@@ -80,7 +80,7 @@ class TestIsReadyToPublish:
     def test_naive_datetime_treated_as_utc(self):
         """SP3 — A timezone-naive datetime is treated as UTC."""
         # Create a naive datetime in the past
-        past = datetime.utcnow() - timedelta(days=10)  # naive
+        past = datetime.now(timezone.utc) - timedelta(days=10)
         # Should not crash, and should correctly determine it's in the past
         result = is_ready_to_publish(past)
         assert result is True

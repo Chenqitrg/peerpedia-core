@@ -2,7 +2,10 @@
 
 同行评审基础设施。自包含的命令行工具 + Python 库，用来写论文、互相评审、公开发布。
 
-**Git 存内容，数据库存状态。** 每篇文章是一个独立的 Git 仓库——正文和评审有完整历史、可 diff/fork/merge；元数据（状态、评分）通过 SQLite 查询和聚合。
+**Git 存内容，数据库存状态。** 每篇文章是一个独立的 Git 仓库——正文和评审有完整历史、可 diff/fork/merge；元数据（状态、评分）通过 SQLite 查询和聚合。P2P 同步基于 git bundle 协议。
+
+[![Tests](https://github.com/Chenqitrg/peerpedia-core/actions/workflows/test.yml/badge.svg)](https://github.com/Chenqitrg/peerpedia-core/actions/workflows/test.yml)
+328 tests | 58% coverage | Python 3.11+
 
 支持三种写作格式：
 
@@ -11,6 +14,21 @@
 | Markdown | 内建（Python markdown 库） | 零依赖 |
 | bTeX | 外部服务器（TypeScript） | `git clone` + `yarn start` |
 | Typst | 外部 CLI（Rust） | `brew install typst` |
+
+## 架构概览
+
+```
+cli/ + repl.py          ← 入口层：解析参数 → 调编排函数 → commit()
+    │
+commands/               ← 编排层：唯一同时接触 git 和 db
+    │
+    ├── storage/        ← git_backend（内容）+ db（元数据），互不知晓
+    ├── workflow/       ← 纯计算：评分、声誉、沉淀逻辑，零 storage 依赖
+    ├── policies/       ← 权限检查：集中表达，语义异常
+    └── sync/           ← P2P 同步：git bundle 协议，自包含
+```
+
+详细架构见 [docs/architecture.md](docs/architecture.md)，阅读顺序见 [docs/review-reading-order.md](docs/review-reading-order.md)。
 
 ## 安装
 
@@ -51,7 +69,7 @@ peerpedia account register --name "Bob"
 peerpedia article create \
     --title "A Note on Tensor Networks" \
     --format markdown \
-    --content "# Introduction\n\nTensor networks provide a powerful framework..."
+    --content "# Introduction\n\nTensor networks provide a powerful framework..." \
     --user Alice
 ```
 
@@ -245,10 +263,15 @@ git clone https://github.com/Chenqitrg/peerpedia-core.git
 cd peerpedia-core
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
+
+# 运行测试
 pytest tests/ -v
+
+# 带覆盖率
+pytest tests/ --cov=peerpedia_core --cov-report=term-missing
 ```
 
-架构详见 [docs/architecture.md](docs/architecture.md)。
+架构详见 [docs/architecture.md](docs/architecture.md)，代码阅读顺序见 [docs/review-reading-order.md](docs/review-reading-order.md)。
 
 ## 许可证
 

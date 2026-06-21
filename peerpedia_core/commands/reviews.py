@@ -168,7 +168,7 @@ def _write_review_to_git(
     if not acquired:
         raise ConflictError("Article busy — retry later")
     try:
-        h = commit_article(rp, f"Review by {display_name}", display_name, email)
+        h = commit_article(rp, f"[review] {display_name}", display_name, email)
     finally:
         lock.release()
 

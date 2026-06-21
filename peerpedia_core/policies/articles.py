@@ -90,6 +90,10 @@ def get_article_or_raise(db: Session, article_id: str) -> Article:
 
 
 def _is_author(db: Session, article_id: str, user: Optional[User]) -> bool:
+    # TODO(fork-ownership): this checks authorship (content contribution),
+    # not admin permission.  Once ``ScriptMaintainer`` exists, add an
+    # ``_is_maintainer`` check and gate management operations (edit, delete,
+    # publish, sync) on admin role, not authorship.
     if user is None:
         return False
     return user.id in get_author_ids(db, article_id)

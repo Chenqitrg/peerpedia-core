@@ -1,0 +1,335 @@
+# SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
+# SPDX-License-Identifier: CC-BY-NC-SA-4.0
+
+"""Tests for sync orchestration — _parse_status_tag, git_sync_reviews,
+git_sync_status, and apply_sync_bundle."""
+
+from __future__ import annotations
+
+import json
+import tempfile
+from pathlib import Path
+from unittest.mock import patch
+
+import pytest
+from sqlalchemy.orm import Session
+
+from peerpedia_core.commands.sync import (
+    _parse_status_tag,
+    apply_sync_bundle,
+    git_sync_reviews,
+    git_sync_status,
+)
+from peerpedia_core.storage.db.crud_article import create_article, get_article
+from peerpedia_core.storage.db.crud_review import get_reviews_for_article
+from peerpedia_core.storage.db.engine import get_session
+from peerpedia_core.storage.db.models import User
+import peerpedia_core.storage.git_backend as git_backend
+from peerpedia_core.storage.git_backend import (
+    DEFAULT_ARTICLES_DIR,
+    commit_article,
+    init_article_repo,
+)
+
+
+def _create_user(db: Session, user_id: str, name: str = "Test Author"):
+    u = User(id=user_id, password_hash="$2b$12$test", name=name)
+    db.add(u)
+    db.flush()
+    return u
+
+
+@pytest.fixture
+def db(engine):
+    """Session from temporary SQLite."""
+    session = get_session(engine)
+    yield session
+    session.rollback()
+    session.close()
+
+
+@pytest.fixture
+def articles_dir():
+    """Temporary directory for article repos — isolates tests from each other."""
+    with tempfile.TemporaryDirectory() as tmp:
+        patch_modules = [
+            "peerpedia_core.storage.git_backend",
+            "peerpedia_core.commands.sync",
+            "peerpedia_core.commands.articles",
+            "peerpedia_core.commands.workflow",
+        ]
+        patches = [patch(f"{m}.DEFAULT_ARTICLES_DIR", Path(tmp)) for m in patch_modules]
+        for p in patches:
+            p.start()
+        try:
+            yield Path(tmp)
+        finally:
+            for p in patches:
+                p.stop()
+
+
+# ── _parse_status_tag ────────────────────────────────────────────────────────
+
+
+class TestParseStatusTag:
+    def test_platform_commit_sedimentation(self):
+        result = _parse_status_tag("[status] sedimentation", "system@peerpedia")
+        assert result == "sedimentation"
+
+    def test_platform_commit_published(self):
+        result = _parse_status_tag("[status] published", "system@peerpedia")
+        assert result == "published"
+
+    def test_platform_commit_draft(self):
+        result = _parse_status_tag("[status] draft", "system@peerpedia")
+        assert result == "draft"
+
+    def test_non_platform_email_returns_none(self):
+        result = _parse_status_tag("[status] published", "alice@peerpedia")
+        assert result is None
+
+    def test_invalid_status_returns_none(self):
+        result = _parse_status_tag("[status] foobar", "system@peerpedia")
+        assert result is None
+
+    def test_empty_message_returns_none(self):
+        result = _parse_status_tag("   ", "system@peerpedia")
+        assert result is None
+
+    def test_message_with_whitespace_stripped(self):
+        """Whitespace around the [status] message is stripped before matching."""
+        result = _parse_status_tag("  [status] sedimentation\n", "system@peerpedia")
+        assert result == "sedimentation"
+
+    def test_old_format_without_prefix_returns_none(self):
+        """Old format (no [status] prefix) is rejected — no backward compat."""
+        result = _parse_status_tag("sedimentation", "system@peerpedia")
+        assert result is None
+
+    def test_message_without_status_prefix_returns_none(self):
+        """Messages that don't start with [status] are rejected."""
+        result = _parse_status_tag("[review] published", "system@peerpedia")
+        assert result is None
+
+
+# ── git_sync_reviews ─────────────────────────────────────────────────────────
+
+
+class TestGitSyncReviews:
+    def test_syncs_reviews_from_git_to_db(self, db, articles_dir):
+        """Happy path: read scores.json from git worktree and upsert into DB."""
+        _create_user(db, "alice", "Alice")
+        _create_user(db, "reviewer-1", "Reviewer One")  # must exist for FK
+
+        article = create_article(db, id="art-1", title="Test", authors=["alice"], status="published")
+        db.flush()
+
+        rp = articles_dir / "art-1"
+        init_article_repo(rp)
+        (rp / "article.md").write_text("# Test\n")
+        commit_article(rp, "Initial", "Alice", "alice@peerpedia")
+
+        # Write a review to the git worktree
+        review_dir = rp / "reviews" / "reviewer-1"
+        review_dir.mkdir(parents=True)
+        (review_dir / "scores.json").write_text(json.dumps({
+            "originality": 4, "rigor": 3, "completeness": 4, "pedagogy": 3, "impact": 4,
+        }))
+        commit_article(rp, "Add review", "Reviewer", "reviewer-1@peerpedia")
+
+        git_sync_reviews(db, "art-1")
+
+        reviews = get_reviews_for_article(db, "art-1")
+        assert len(reviews) >= 1
+        synced = [r for r in reviews if r.reviewer_id == "reviewer-1"]
+        assert len(synced) == 1
+        assert synced[0].scores["originality"] == 4
+
+    def test_empty_reviews_dir_syncs_zero(self, db, articles_dir):
+        """No reviews directory means zero reviews synced."""
+        _create_user(db, "alice", "Alice")
+
+        create_article(db, id="art-2", title="Test", authors=["alice"], status="published")
+        db.flush()
+
+        rp = articles_dir / "art-2"
+        init_article_repo(rp)
+        (rp / "article.md").write_text("# Test\n")
+        commit_article(rp, "Initial", "Alice", "alice@peerpedia")
+
+        # No reviews written — should not crash
+        git_sync_reviews(db, "art-2")
+
+    def test_missing_scores_json_raises(self, db, articles_dir):
+        """Fail fast: if a review directory has no scores.json, raise."""
+        _create_user(db, "alice", "Alice")
+
+        create_article(db, id="art-3", title="Test", authors=["alice"], status="published")
+        db.flush()
+
+        rp = articles_dir / "art-3"
+        init_article_repo(rp)
+        (rp / "article.md").write_text("# Test\n")
+        commit_article(rp, "Initial", "Alice", "alice@peerpedia")
+
+        # Create review dir without scores.json
+        review_dir = rp / "reviews" / "ghost-reviewer"
+        review_dir.mkdir(parents=True)
+        commit_article(rp, "Add review dir", "Ghost", "ghost@peerpedia")
+
+        with pytest.raises(FileNotFoundError, match="scores.json"):
+            git_sync_reviews(db, "art-3")
+
+
+# ── git_sync_status ──────────────────────────────────────────────────────────
+
+
+class TestGitSyncStatus:
+    def test_syncs_published_status_from_commit(self, db, articles_dir):
+        """Platform commit 'published' updates article.status.
+
+        commit_article only creates a commit when there are file changes
+        (it checks is_dirty).  We change a file before the status commit
+        to ensure the commit is actually created — mirroring production
+        where _write_review_to_git creates file changes before the
+        "sedimentation"/"published" status commits.
+        """
+        _create_user(db, "alice", "Alice")
+
+        article = create_article(db, id="art-status-1", title="Test", authors=["alice"], status="sedimentation")
+        db.flush()
+
+        rp = articles_dir / "art-status-1"
+        init_article_repo(rp)
+        (rp / "article.md").write_text("# Test\n")
+        commit_article(rp, "Initial", "Alice", "alice@peerpedia")
+
+        # Make a file change so commit_article actually creates a new commit
+        (rp / "article.md").write_text("# Test\n\nUpdated section.")
+        commit_article(rp, "[status] published", "PeerPedia", "system@peerpedia")
+        db.flush()
+
+        git_sync_status(db, "art-status-1")
+        db.flush()
+
+        art = get_article(db, "art-status-1")
+        assert art.status == "published"
+
+    def test_no_platform_commits_preserves_status(self, db, articles_dir):
+        """Only user commits exist — status unchanged."""
+        _create_user(db, "alice", "Alice")
+
+        article = create_article(db, id="art-status-2", title="Test", authors=["alice"], status="sedimentation")
+        db.flush()
+
+        rp = articles_dir / "art-status-2"
+        init_article_repo(rp)
+        (rp / "article.md").write_text("# Test\n")
+        h1 = commit_article(rp, "Initial", "Alice", "alice@peerpedia")
+        article.last_author_rebuild_hash = h1
+        db.flush()
+
+        # No platform commits — just user commits (file change needed for commit)
+        (rp / "article.md").write_text("# Test\n\nUser edit section.")
+        commit_article(rp, "User edit", "Alice", "alice@peerpedia")
+        db.flush()
+
+        git_sync_status(db, "art-status-2")
+        db.flush()
+
+        art = get_article(db, "art-status-2")
+        assert art.status == "sedimentation"
+
+    def test_article_not_found_raises(self, db):
+        with pytest.raises(FileNotFoundError, match="Article not found"):
+            git_sync_status(db, "nonexistent")
+
+    def test_repo_not_found_raises(self, db, articles_dir):
+        """Article exists in DB but no git repo on disk."""
+        _create_user(db, "alice", "Alice")
+        create_article(db, id="art-no-repo", title="Test", authors=["alice"], status="draft")
+        db.flush()
+
+        with pytest.raises(FileNotFoundError, match="Git repo not found"):
+            git_sync_status(db, "art-no-repo")
+
+
+# ── apply_sync_bundle ────────────────────────────────────────────────────────
+
+
+class TestApplySyncBundle:
+    def test_ff_only_merge_success(self, db, articles_dir):
+        """Fast-forward merge of FETCH_HEAD succeeds and returns new HEAD."""
+        _create_user(db, "alice", "Alice")
+
+        create_article(db, id="art-bundle-1", title="Bundle Test", authors=["alice"], status="published")
+        db.flush()
+
+        rp = articles_dir / "art-bundle-1"
+        init_article_repo(rp)
+        (rp / "article.md").write_text("# Bundle Test\n")
+        h1 = commit_article(rp, "Initial", "Alice", "alice@peerpedia")
+
+        # Create a "remote" commit and set it as FETCH_HEAD
+        remote_dir = articles_dir / "remote-clone"
+        import git as gitmod
+        import shutil
+        # Clone to simulate remote
+        clone_repo = gitmod.Repo.clone_from(str(rp), str(remote_dir))
+        (remote_dir / "article.md").write_text("# Updated\n\nFrom remote.")
+        clone_repo.index.add(["article.md"])
+        clone_repo.index.commit("Remote update", author=gitmod.Actor("Alice", "alice@peerpedia"),
+                                 committer=gitmod.Actor("Alice", "alice@peerpedia"))
+
+        # Point FETCH_HEAD to the remote's HEAD
+        repo = gitmod.Repo(rp)
+        remote_head = clone_repo.head.commit.hexsha
+        (rp / ".git" / "FETCH_HEAD").write_text(
+            f"{remote_head}\t\tbranch 'main' of remote\n"
+        )
+        # Fetch the objects into the target repo
+        repo.git.fetch(str(remote_dir), "refs/heads/main")
+
+        result_hash = apply_sync_bundle(db, "art-bundle-1", ff_only=True)
+
+        assert len(result_hash) == 40
+        new_article = get_article(db, "art-bundle-1")
+        assert new_article is not None
+
+    def test_ff_only_merge_conflict_raises(self, db, articles_dir):
+        """Merge conflict propagates as MergeConflictError."""
+        _create_user(db, "alice", "Alice")
+
+        create_article(db, id="art-conflict-1", title="Conflict Test", authors=["alice"], status="published")
+        db.flush()
+
+        rp = articles_dir / "art-conflict-1"
+        init_article_repo(rp)
+        (rp / "article.md").write_text("# v1\n")
+        h1 = commit_article(rp, "Initial", "Alice", "alice@peerpedia")
+
+        # Create a divergent remote commit
+        import git as gitmod
+        remote_dir = articles_dir / "remote-conflict"
+        clone_repo = gitmod.Repo.clone_from(str(rp), str(remote_dir))
+        (remote_dir / "article.md").write_text("# v2-remote\n")
+        clone_repo.index.add(["article.md"])
+        clone_repo.index.commit("Remote edit", author=gitmod.Actor("Alice", "alice@peerpedia"),
+                                 committer=gitmod.Actor("Alice", "alice@peerpedia"))
+
+        # Make a LOCAL divergent change
+        (rp / "article.md").write_text("# v2-local\n")
+        commit_article(rp, "Local edit", "Alice", "alice@peerpedia")
+
+        # Set FETCH_HEAD to the remote commit
+        repo = gitmod.Repo(rp)
+        remote_commit = clone_repo.head.commit.hexsha
+        (rp / ".git" / "FETCH_HEAD").write_text(
+            f"{remote_commit}\t\tbranch 'main' of remote\n"
+        )
+        repo.git.fetch(str(remote_dir), "refs/heads/main")
+
+        from peerpedia_core.storage.git_backend import MergeConflictError
+
+        with pytest.raises(MergeConflictError, match="Merge failed"):
+            apply_sync_bundle(db, "art-conflict-1", ff_only=True)

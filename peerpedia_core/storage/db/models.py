@@ -44,6 +44,12 @@ class Article(Base):
     sink_start = Column(DateTime, nullable=True)
     sink_duration_days = Column(Integer, nullable=False, default=7)
     sink_extended_count = Column(Integer, nullable=False, default=0)
+    # TODO(fork-ownership): add a separate ``ScriptMaintainer`` join table
+    # (article_id + user_id).  Admin is a distinct concept from
+    # authorship — git history determines who *contributed*, the admin
+    # table determines who *manages* (edit/delete/publish/sync).  Multiple
+    # admins per article.  Currently absent, so original authors cloned
+    # via git history retain full management permissions on the fork.
     forked_from = Column(String, nullable=True)
     fork_count = Column(Integer, nullable=False, default=0)
     last_author_rebuild_hash = Column(String, nullable=True)  # HEAD commit hash of last author rebuild
@@ -80,6 +86,10 @@ class ArticleAuthor(Base):
     article_id = Column(String, ForeignKey("articles.id", ondelete="CASCADE"), primary_key=True)
     author_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
     position = Column(Integer, default=0)
+    # TODO(fork-ownership): add ``ScriptMaintainer`` model (article_id + user_id,
+    # separate table).  Admin is a standalone relationship, supports
+    # multiple per article.  Don't overload ArticleAuthor with a ``role``
+    # column; that conflates "contributed" with "manages".
 
 
 # ── User ─────────────────────────────────────────────────────────────────

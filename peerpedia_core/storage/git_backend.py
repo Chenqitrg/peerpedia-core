@@ -143,14 +143,23 @@ def _patch_text(d) -> str:
     return str(d)
 
 
+# Commit message prefixes for non-content commits — these commits are
+# platform operations (review, status transition, merge) and their
+# authors should NOT be counted as article authors.
+_NON_CONTENT_PREFIXES = ("[review]", "[status]", "[merge]")
+
+
 def get_commit_authors(
     repo_path: Path,
     since_hash: str | None = None,
 ) -> set[str]:
-    """Return the set of user IDs from commit author emails.
+    """Return the set of user IDs from content-commit author emails.
 
-    Emails have the form ``{user_id}@peerpedia``, so the user_id is
-    extracted directly from the email without needing a DB lookup.
+    Only counts commits whose message does NOT start with a non-content
+    prefix (``[review]``, ``[status]``, ``[merge]``) AND whose author
+    email ends with ``@peerpedia``.  This excludes review commits,
+    status-transition commits, merge commits, and commits authored by the
+    system git config.
     """
     import git as _git
 
@@ -159,6 +168,8 @@ def get_commit_authors(
     return {
         c.author.email.split("@", 1)[0]
         for c in repo.iter_commits(rev=rev)
+        if c.author.email.endswith("@peerpedia")
+        and not c.message.lstrip().startswith(_NON_CONTENT_PREFIXES)
     }
 
 
@@ -231,6 +242,7 @@ def merge_git_repos(target: Path, fork: Path, author_name: str) -> str:
     Raises MergeConflictError if the merge has conflicts.
     """
     import git
+    import os
 
     target_repo = git.Repo(target)
 
@@ -242,9 +254,19 @@ def merge_git_repos(target: Path, fork: Path, author_name: str) -> str:
         # Fork repos have exactly one branch — take the first remote ref
         fork_ref = target_repo.remotes[remote_name].refs[0]
 
+        # Set committer via env so the merge commit has a predictable author
+        # rather than inheriting the system git config.
+        merge_env = {
+            **os.environ,
+            "GIT_AUTHOR_NAME": author_name,
+            "GIT_AUTHOR_EMAIL": "system@peerpedia",
+            "GIT_COMMITTER_NAME": author_name,
+            "GIT_COMMITTER_EMAIL": "system@peerpedia",
+        }
         target_repo.git.merge(
             fork_ref.commit.hexsha,
-            message=f"Merge fork: {fork.name}",
+            message=f"[merge] {fork.name}",
+            env=merge_env,
         )
 
         merge_hash = target_repo.head.commit.hexsha

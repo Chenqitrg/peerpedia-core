@@ -216,7 +216,7 @@ def test_update_article_changes_content(db):
     aid = result["id"]
 
     updated = update_article_content(
-        db, aid, content="# Updated", user_id="alice",
+        db, aid, content="# Updated", user_id="alice", message="Update content",
     )
 
     assert updated["id"] == aid
@@ -234,7 +234,7 @@ def test_update_fails_for_non_author(db):
 
     from peerpedia_core.exceptions import NotAuthorizedError
     with pytest.raises(NotAuthorizedError):
-        update_article_content(db, result["id"], content="# Hacked", user_id="bob")
+        update_article_content(db, result["id"], content="# Hacked", user_id="bob", message="Hack attempt")
 
 
 # ── Format tests ─────────────────────────────────────────────────────────
@@ -283,11 +283,11 @@ def test_metadata_only_update_commits(db):
     aid = result["id"]
 
     updated = update_article_content(
-        db, aid, title="Updated Title", user_id="alice",
+        db, aid, title="Updated Title", user_id="alice", message="Update title",
     )
     assert updated["commit_hash"] != result["commit_hash"]
     # Verify frontmatter was updated
-    from peerpedia_core.storage.compiler import parse_frontmatter
+    from peerpedia_core.frontmatter import parse_frontmatter
     from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR
     article_text = (DEFAULT_ARTICLES_DIR / aid / "article.md").read_text()
     fm = parse_frontmatter(article_text)
@@ -296,7 +296,7 @@ def test_metadata_only_update_commits(db):
 
 def test_frontmatter_roundtrip():
     """make_article_frontmatter → parse_frontmatter roundtrip preserves data."""
-    from peerpedia_core.storage.compiler import make_article_frontmatter, parse_frontmatter
+    from peerpedia_core.frontmatter import make_article_frontmatter, parse_frontmatter
     fm = make_article_frontmatter("Test", "Abstract text", ["kw1", "kw2"], ["cat"])
     parsed = parse_frontmatter(fm + "# Content body")
     assert parsed["title"] == "Test"

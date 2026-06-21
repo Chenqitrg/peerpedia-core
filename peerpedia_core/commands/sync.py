@@ -59,6 +59,51 @@ from peerpedia_core.commands.articles import rebuild_article_authors
 from peerpedia_core.commands.workflow import recompute_article_score
 
 
+_PLATFORM_EMAIL = "system@peerpedia"
+_VALID_STATUSES = {"draft", "sedimentation", "published"}
+
+
+def _parse_status_tag(message: str, author_email: str) -> str | None:
+    """Return the article status if *message* is a valid platform commit.
+
+    Only accepts commits authored by the PeerPedia platform (system@peerpedia).
+    The commit message is the status string itself: "sedimentation", "published".
+    """
+    if author_email != _PLATFORM_EMAIL:
+        return None
+    msg = message.strip()
+    return msg if msg in _VALID_STATUSES else None
+
+
+def git_sync_status(db: Session, article_id: str) -> None:
+    """Read status transitions from commit messages and update DB.
+
+    Walks new commits since ``last_author_rebuild_hash``.  Only commits
+    authored by PeerPedia (system@peerpedia) are considered.  The commit
+    message is the status string itself: ``"sedimentation"``, ``"published"``.
+    The latest matching commit wins.
+    """
+    import git
+
+    article = get_article(db, article_id)
+    if article is None:
+        raise FileNotFoundError(f"Article not found: {article_id}")
+
+    rp = DEFAULT_ARTICLES_DIR / article_id
+    if not (rp / ".git").is_dir():
+        raise FileNotFoundError(f"Git repo not found for article: {article_id}")
+
+    repo = git.Repo(rp)
+    since = article.last_author_rebuild_hash
+    rev = f"{since}..HEAD" if since else None
+
+    for commit in repo.iter_commits(rev=rev):
+        new_status = _parse_status_tag(commit.message, commit.author.email)
+        if new_status:
+            article.status = new_status
+            break  # iter_commits returns newest first — first match is the latest status
+
+
 def git_sync_reviews(db: Session, article_id: str) -> None:
     """Sync review scores from git worktree into the DB Review cache.
 
@@ -127,11 +172,31 @@ def apply_sync_bundle(
 
     new_head = repo.head.commit.hexsha
 
+    # TODO(integrity): verify review commit signatures before applying.
+    # After merge, walk new commits touching reviews/*/ and verify each was
+    # signed by the reviewer's public key.  Reject the bundle if any review
+    # commit is unsigned or signed by an unexpected key.
+    # This is the server-side check that closes the loop with the TODO in
+    # commands/reviews.py (signing side).
+
     # DB reconciliation — git state changed, DB must follow
     rebuild_article_authors(db, article_id)
 
     # Sync reviews from git before scoring — git is the SOT (G5)
     git_sync_reviews(db, article_id)
+
+    # Sync status transitions from commit messages (P2P status transport).
+    git_sync_status(db, article_id)
+
+    # TODO(sync): social graph sync — independent of git bundle transport.
+    # Git handles articles and reviews; follow relationships, bookmarks, and
+    # user profiles travel through a separate social-graph API:
+    #
+    #   Visit user profile → pull following/followers from remote →
+    #   discover new users → follow locally → push follow back to remote.
+    #
+    # This is purely DB-to-DB sync (no git).  Needs its own transport layer
+    # and endpoints (GET/POST follows, GET bookmarks per user).
 
     recompute_article_score(db, article_id)
 

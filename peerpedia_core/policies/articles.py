@@ -179,7 +179,7 @@ def assert_can_edit_article(db: Session, article_id: str, current_user: User) ->
 
 
 def assert_can_delete_article(db: Session, article_id: str, current_user: User) -> Article:
-    return _assert_is_author(db, article_id, current_user, "delete")
+    return _assert_is_author(db, article_id, current_user, "delete", allowed_statuses={"draft"})
 
 
 def assert_can_rollback_article(db: Session, article_id: str, current_user: User) -> Article:

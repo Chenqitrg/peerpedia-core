@@ -73,6 +73,14 @@ def submit_review(
     Git-first: writes review files to git before DB mutation.
     Recomputes article score and author reputations.
     The commit_hash for the DB cache is taken from the new git commit.
+
+    TODO(integrity): key derivation and signing flow.
+    Each user has a key pair derived from their password (Argon2 → seed →
+    Ed25519).  ``submit_review`` looks up the user's key from the DB and
+    passes it to ``_write_review_to_git`` → ``commit_article`` for signing.
+    The user only needs to enter their password once per session (not per
+    commit).  Model after Signal: password → deterministic key, no key
+    management burden on the user.
     """
     user = get_user(db, reviewer_id)
     if user is None:
@@ -97,7 +105,7 @@ def submit_review(
 
     r = upsert_review(
         db, article_id=article_id, commit_hash=commit_hash,
-        reviewer_id=reviewer_id, scores=scores,
+        reviewer_id=reviewer_id, scores=scores, comment=comment,
     )
 
     recompute_article_score(db, article_id)
@@ -105,7 +113,7 @@ def submit_review(
     for aid in author_ids:
         recompute_author_reputation(db, aid)
 
-    return {"review_id": r.id, "scores": r.scores}
+    return {"review_id": r.id, "scores": r.scores, "commit_hash": commit_hash}
 
 
 def _derive_anonymous_id(article_id: str, reviewer_id: str) -> str:
@@ -163,6 +171,12 @@ def _write_review_to_git(
         h = commit_article(rp, f"Review by {display_name}", display_name, email)
     finally:
         lock.release()
+
+    # TODO(integrity): sign this commit with the reviewer's key.
+    # Model after Signal: user remembers one password → derive key pair via
+    # Argon2 + Ed25519.  ``commit_article`` should accept an optional signing
+    # key and produce a signed commit (git commit -S equivalent).  The key
+    # never leaves the local machine; only the public key is published.
     return h
 
 

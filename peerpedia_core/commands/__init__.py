@@ -66,6 +66,7 @@ from peerpedia_core.commands.articles import (
     update_article_content,
 )
 from peerpedia_core.commands.bookmarks import add_bookmark, get_bookmarks_for_user, remove_bookmark
+from peerpedia_core.frontmatter import parse_frontmatter
 from peerpedia_core.commands.merge import accept_merge, create_merge_proposal
 from peerpedia_core.commands.reviews import get_reviews_for_article, submit_review
 from peerpedia_core.commands.sync import apply_sync_bundle, git_sync_reviews
@@ -76,6 +77,15 @@ from peerpedia_core.commands.workflow import (
     recompute_article_score,
     recompute_author_reputation,
 )
+from peerpedia_core.storage.db.session_utils import db_session_scope as _db_session_scope
+
+
+def db_session(database_url: str):
+    """Context manager for a database session with auto commit/rollback/close.
+
+    CLI and REPL use this to get a session; they never import ``storage/`` directly.
+    """
+    return _db_session_scope(database_url)
 
 __all__ = [
     "accept_merge",
@@ -95,6 +105,7 @@ __all__ = [
     "get_user_by_name",
     "git_sync_reviews",
     "list_articles",
+    "parse_frontmatter",
     "publish_article",
     "publish_ready_articles",
     "rebuild_article_authors",

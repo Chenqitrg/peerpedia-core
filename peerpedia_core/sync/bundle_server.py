@@ -8,6 +8,12 @@ decoded HTTP request data and call into ``git_bundle`` and ``commands``.
 They contain NO HTTP code — a separate routing layer (``server/main.py``,
 TBD) parses requests, checks JWT/permissions, and calls these handlers.
 
+TODO(server): add server-side HTTP transport, separate from these handlers.
+These five handlers are pure logic — no HTTP.  Like the client side splits
+``bundle_client.py`` (logic) and ``transport/http.py`` (httpx), the server
+needs ``transport/http_server.py`` (Starlette/ASGI routing) that calls into
+these handlers.  Plus a ``peerpedia server start`` CLI command.
+
 Function mapping (client → server)::
 
     bundle_client                         bundle_server
@@ -54,13 +60,12 @@ from sqlalchemy.orm import Session
 
 from peerpedia_core.commands import apply_sync_bundle
 from peerpedia_core.sync.git_bundle import (
-
-DEFAULT_ARTICLES_DIR = Path.home() / ".peerpedia" / "articles"
-
     create_bundle,
     ingest_bundle,
     is_ancestor,
 )
+
+DEFAULT_ARTICLES_DIR = Path.home() / ".peerpedia" / "articles"
 
 
 def serve_get_head(repo_path: Path) -> str | None:

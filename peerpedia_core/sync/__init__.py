@@ -39,6 +39,16 @@ transport/http.py      HTTP transport implementation.  The ONLY file in the
                        entire project that imports ``httpx``.  Replaceable.
 network.py             Network detection — ``is_online(server_url)``.
 pending_queue.py       Offline operation queue (file-based JSON).
+
+Discovery model (planned)
+-------------------------
+No global index.  Discovery follows the social graph: each peer sees articles
+bookmarked by users they follow.  With ~50 follows and each follow connecting
+to ~50 others, the reachable network covers ~2500 researchers — enough to
+surface relevant papers without a central directory.
+
+The server exposes a bookmark index for each user it hosts; peers poll the
+bookmarks of followed users to discover new articles.
 """
 
 from peerpedia_core.sync.bundle_client import client_sync

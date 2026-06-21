@@ -116,7 +116,20 @@ def publish_ready_articles(db: Session) -> int:
         if len(community_reviews) == 0 and score is not None:
             score = apply_no_review_penalty(score)
 
-        # Mark article
+        # Git commit records the status transition for P2P sync.
+        # The commit message is searchable: grep git log for "[Publish]".
+        from peerpedia_core.storage.git_backend import commit_article as git_commit
+
+        rp = DEFAULT_ARTICLES_DIR / article.id
+        if (rp / ".git").is_dir():
+            git_commit(
+                rp,
+                "published",
+                "PeerPedia",
+                "system@peerpedia",
+            )
+
+        # Then DB.
         article.status = "published"
         if score:
             article.score = score

@@ -71,6 +71,7 @@ from sqlalchemy.orm import Session
 from peerpedia_core.config.params import params
 from peerpedia_core.exceptions import BadRequestError, ConflictError, NotAuthorizedError, NotFoundError
 from peerpedia_core.policies.articles import (
+    assert_can_delete_article,
     assert_can_edit_article,
     assert_can_fork_article,
     assert_can_publish_article,
@@ -208,7 +209,9 @@ def rollback_article(db: Session, article_id: str, target_hash: str, user_id: st
     rebuild_article_authors(db, article_id)
     recompute_article_score(db, article_id)
 
-    return {"commit_hash": new_hash, "message": f"Rollback to {target_hash[:8]}"}
+    msg = f"Rollback to {target_hash[:8]}"
+    return {"id": article.id, "title": article.title, "status": article.status,
+            "commit_hash": new_hash, "message": msg}
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -248,10 +251,22 @@ def create_article_with_content(
     article_id = str(uuid.uuid4())
 
     # Git first — init repo, write article.md with frontmatter, commit.
-    from peerpedia_core.storage.compiler import make_article_frontmatter
+    from peerpedia_core.frontmatter import make_article_frontmatter
 
     rp = DEFAULT_ARTICLES_DIR / article_id
     init_article_repo(rp)
+    (rp / ".gitignore").write_text("""\
+# PeerPedia article repo — only approved paths are tracked.
+# Prevents free-riding by blocking arbitrary files from being committed.
+*
+!.gitignore
+!article.md
+!article.typ
+!reviews/
+!reviews/**
+!compiled/
+!compiled/**
+""")
     ext = ".typ" if format == "typst" else ".md"
     fm = make_article_frontmatter(title, abstract, keywords, categories)
     (rp / f"article{ext}").write_text(fm + content)
@@ -293,7 +308,7 @@ def update_article_content(
     abstract: str | None = None,
     keywords: str | None = None,
     categories: str | None = None,
-    message: str = "Edit: content updated",
+    message: str,
     user_id: str,
 ) -> dict:
     """Edit an article: update content/metadata, commit to git.
@@ -320,7 +335,7 @@ def update_article_content(
     article_path = rp / f"article{ext}"
 
     # Build new frontmatter from current values
-    from peerpedia_core.storage.compiler import make_article_frontmatter, _strip_frontmatter
+    from peerpedia_core.frontmatter import make_article_frontmatter, strip_frontmatter
 
     new_title = title if title is not None else a.title
     new_abstract = abstract if abstract is not None else a.abstract
@@ -332,7 +347,7 @@ def update_article_content(
     if content is not None:
         body = content
     else:
-        body = _strip_frontmatter(article_path.read_text())
+        body = strip_frontmatter(article_path.read_text())
 
     article_path.write_text(new_fm + body)
 
@@ -401,8 +416,16 @@ def publish_article(
     # Write self-review to git — the publisher's own review (real name).
     from peerpedia_core.commands.reviews import _write_review_to_git
 
-    commit_hash = _write_review_to_git(
+    _write_review_to_git(
         article_id, user_id, self_review, comment, user.name, f"{user_id}@peerpedia",
+    )
+
+    # Record status transition in git so it survives P2P sync.
+    commit_hash = commit_article(
+        DEFAULT_ARTICLES_DIR / article_id,
+        "sedimentation",
+        "PeerPedia",
+        "system@peerpedia",
     )
 
     # Enter sedimentation so scope derivation works.
@@ -430,7 +453,7 @@ def publish_article(
     # G6: self-review must exist and score must be computed
     require_self_review_for_publish(db, article_id, user)
 
-    return {"id": a.id, "title": a.title, "status": a.status}
+    return {"id": a.id, "title": a.title, "status": a.status, "commit_hash": commit_hash}
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -462,15 +485,19 @@ def get_author_ids(db: Session, article_id: str) -> list[str]:
     return _get_ids(db, article_id)
 
 
-def delete_article(db: Session, article_id: str) -> None:
+def delete_article(db: Session, article_id: str, *, user_id: str) -> None:
     """Delete an article from DB and its git repo.
 
-    Calls crud delete first (DB), then removes the git repo directory.
+    Only callable from ``draft`` status by an author.  Sedimentation and
+    published articles cannot be deleted.
     """
     from peerpedia_core.storage.db.crud_article import delete_article as _delete
     from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, delete_article_repo
 
+    user = get_user(db, user_id)
+    if user is None:
+        raise NotFoundError("User not found")
+    assert_can_delete_article(db, article_id, user)
+
     _delete(db, article_id)
     delete_article_repo(DEFAULT_ARTICLES_DIR / article_id)
-
-    return {"id": a.id, "title": a.title, "status": a.status}

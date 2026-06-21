@@ -83,7 +83,10 @@ def accept_merge(db: Session, article_id: str, proposal_id: str, user_id: str) -
         set_sink_start(db, article_id, params.sink.edit_article_default_days)
 
     mp = accept_merge_proposal(db, proposal_id)
-    return {"id": mp.id, "status": mp.status}
+    import git
+    head_hash = git.Repo(target_repo).head.commit.hexsha
+    return {"id": article.id, "title": article.title, "status": article.status,
+            "commit_hash": head_hash}
 
 
 # ── Write wrapper ────────────────────────────────────────────────────────

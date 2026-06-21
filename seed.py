@@ -43,7 +43,7 @@ def seed(db_url: str, articles_dir: Path):
         Review,
         User,
     )
-    from peerpedia_core.storage.compiler import make_article_frontmatter
+    from peerpedia_core.frontmatter import make_article_frontmatter
     from peerpedia_core.storage.git_backend import (
         commit_article,
         init_article_repo,

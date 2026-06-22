@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from peerpedia_core.cli.helpers import _with_db, _resolve_user, _ok, _json_out
+from peerpedia_core.cli.helpers import _with_db, _get_session_user, _ok, _json_out
 from peerpedia_core.cli.display import _print_table, console
 from peerpedia_core.commands import (
     add_maintainer_to_article,
@@ -18,9 +18,9 @@ from peerpedia_core.commands import (
 def _cmd_maintainer_add(db, args):
     """Add a maintainer to an article.
 
-    args: article_id [positional], --target-user, --user, --json
+    args: article_id [positional], --target-user, --json
     """
-    caller_id = _resolve_user(db, args.user)
+    caller_id = _get_session_user()
     result = add_maintainer_to_article(db, args.article_id, args.target_user, caller_id)
     db.commit()
     if args.json:
@@ -33,9 +33,9 @@ def _cmd_maintainer_add(db, args):
 def _cmd_maintainer_remove(db, args):
     """Remove a maintainer from an article.
 
-    args: article_id [positional], --target-user, --user, --json
+    args: article_id [positional], --target-user, --json
     """
-    caller_id = _resolve_user(db, args.user)
+    caller_id = _get_session_user()
     result = remove_maintainer_from_article(db, args.article_id, args.target_user, caller_id)
     db.commit()
     if args.json:

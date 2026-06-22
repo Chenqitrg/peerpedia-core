@@ -59,7 +59,6 @@ publishing.  Every article lives in its own git repository on your machine.
 
 [bold]Tips[/]
   • Use [muted]--json[/] on any command for machine-readable output.
-  • Use [muted]--user @name[/] to act as a specific user.
   • Type [muted]peerpedia[/] with no arguments to enter the REPL.
   • Run [muted]peerpedia <command> --help[/] to see all options for a command.
 

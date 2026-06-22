@@ -17,8 +17,8 @@ import sys
 import tempfile
 from pathlib import Path
 
-from peerpedia_core.cli.display import console, theme
-from peerpedia_core.commands import db_session, get_user_by_name
+from peerpedia_core.cli.display import console, theme, display_article as _render_article
+from peerpedia_core.commands import db_session, get_author_ids, get_user_by_name, parse_frontmatter
 from peerpedia_core.config.paths import ARTICLES_DIR as DEFAULT_ARTICLES_DIR, DB_PATH, DB_URL, SESSION_FILE
 
 
@@ -108,50 +108,75 @@ def _find_article_file(article_id: str) -> Path:
     _die(f"No source file found for article {article_id}")
 
 
-def _resolve_user(db, user_ref: str | None) -> str:
+def _resolve_and_display_article(db, article) -> None:
+    """Resolve full article metadata from DB + source file, then display.
+
+    Internal helper used by ``create``, ``show``, ``search``, ``feed``, and
+    ``mine`` handlers.  Reads the article source file to extract frontmatter,
+    resolves author UUIDs to names, then delegates to the pure
+    ``display_article`` renderer in ``cli/display.py``.
+    """
+    raw = _find_article_file(article.id).read_text()
+    fm = parse_frontmatter(raw)
+    _render_article(
+        title=fm.get("title", article.title),
+        status=article.status,
+        authors=get_author_ids(db, article.id),
+        score=article.score,
+        abstract=fm.get("abstract", article.abstract),
+    )
+
+
+def _read_session() -> dict | None:
+    """Read the session file, or None if not logged in."""
+    if SESSION_FILE.exists():
+        return json.loads(SESSION_FILE.read_text())
+    return None
+
+
+def _write_session(user_id: str, name: str, private_key_hex: str) -> None:
+    """Write session file with chmod 600."""
+    SESSION_FILE.parent.mkdir(parents=True, exist_ok=True)
+    SESSION_FILE.write_text(json.dumps({
+        "user_id": user_id,
+        "name": name,
+        "private_key_hex": private_key_hex,
+    }))
+    os.chmod(SESSION_FILE, 0o600)
+
+
+def _get_session_user() -> str:
+    """Return the current user ID, or die if not logged in."""
+    s = _read_session()
+    if s:
+        return s["user_id"]
+    _die("No user specified. Register first:\n"
+         "  peerpedia account register --name <your-name>")
+
+
+def _resolve_user(db, user_ref: str) -> str:
     """Resolve a user reference to a user ID.
 
-    ``None`` → read current user from ``~/.peerpedia/session.json``.
     ``@name`` → look up username in local DB.
-    UUID or UUID prefix → pass through directly (no DB check).
+    UUID or UUID prefix → pass through directly.
     """
-    if user_ref is None:
-        session_file = SESSION_FILE
-        if session_file.exists():
-            session = json.loads(session_file.read_text())
-            user_ref = session.get("user_id")
-            if user_ref:
-                return user_ref
-        _die("No user specified. Register first:\n"
-             "  peerpedia account register --name <your-name>\n"
-             "Or pass an explicit user:\n"
-             "  --user @name  or  --user <uuid>")
     if user_ref.startswith("@"):
         u = get_user_by_name(db, user_ref[1:])
         if u:
             return u.id
         _die(f"User '@{user_ref[1:]}' not found.\n"
              f"  Register: peerpedia account register --name {user_ref[1:]}")
-    # UUID or UUID prefix — pass through.
     return user_ref
 
 
-def _resolve_user_with_key(db, user_ref: str | None) -> tuple[str, bytes | None]:
-    """Resolve user reference to (user_id, private_key_bytes | None).
-
-    Like _resolve_user, but also reads the private key from the session file.
-    Returns None for the key if no session exists or the session has no key
-    (e.g., pre-auth-migration sessions).
-    """
-    user_id = _resolve_user(db, user_ref)
-    session_file = SESSION_FILE
-    key_bytes = None
-    if session_file.exists():
-        session = json.loads(session_file.read_text())
-        key_hex = session.get("private_key_hex")
+def _get_session_key() -> bytes | None:
+    """Return the current user's private key from the session file, or None."""
+    s = _read_session()
+    if s:
+        key_hex = s.get("private_key_hex")
         if key_hex:
-            key_bytes = bytes.fromhex(key_hex)
-    return user_id, key_bytes
+            return bytes.fromhex(key_hex)
+    return None
 
 
 def _parse_scores(scores_str: str | None) -> dict | None:

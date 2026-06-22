@@ -13,7 +13,7 @@ from peerpedia_core.compiler import compile_article
 def _cmd_compile(args):
     """Compile an article to PDF/SVG/PNG/HTML.
 
-    args: id [positional], --format [pdf|svg|png|html], --user, --json
+    args: id [positional], --format [pdf|svg|png|html], --json
     """
     source = _find_article_file(args.id)
 

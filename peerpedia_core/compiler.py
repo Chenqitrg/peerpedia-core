@@ -4,11 +4,6 @@
 r"""Compiler backends for Typst, Markdown, and bTeX.
 
 Converts article source files into rendered output (HTML, PDF, SVG, PNG).
-
-TODO(compile-errors): surface compiler errors to the user.  Currently
-Typst/Markdown failures may be silent; the CLI ``compile`` command should
-catch and display stderr (missing binary, syntax error, timeout).
-
 The backend is selected based on the article's format field.
 
 Architecture

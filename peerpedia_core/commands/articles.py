@@ -98,7 +98,8 @@ from peerpedia_core.storage.db.crud_article import (
 )
 from peerpedia_core.storage.db.crud_maintainer import add_maintainer, get_maintainer_ids
 from peerpedia_core.storage.db.crud_review import get_review, upsert_review
-from peerpedia_core.storage.db.crud_user import get_user
+from peerpedia_core.storage.db.crud_bookmark import is_bookmarked as _is_bookmarked
+from peerpedia_core.storage.db.crud_user import get_following as _get_following, get_user
 from peerpedia_core.crypto import write_temp_key
 from peerpedia_core.storage.git_backend import (
     DEFAULT_ARTICLES_DIR,
@@ -546,9 +547,30 @@ def get_article(db: Session, article_id: str):
     return _get_article(db, article_id)
 
 
-def list_articles(db: Session, **kwargs):
-    """List articles with optional filters."""
-    return _list(db, **kwargs)
+def list_articles(
+    db: Session,
+    status: str | set[str] | None = None,
+    search_query: str | None = None,
+    author_id: str | None = None,
+    viewer_id: str | None = None,
+    bookmarked_by: str | None = None,
+    limit: int | None = None,
+    offset: int = 0,
+) -> list:
+    """List articles with AND filters. Pipeline: SQL first, then Python narrowing."""
+    articles = _list(db, status=status, search_query=search_query)
+    if author_id:
+        articles = [a for a in articles if author_id in _get_author_ids(db, a.id)]
+    if viewer_id:
+        followed = {u.id for u in _get_following(db, viewer_id)}
+        articles = [a for a in articles if any(aid in followed for aid in _get_author_ids(db, a.id))]
+    if bookmarked_by:
+        articles = [a for a in articles if _is_bookmarked(db, bookmarked_by, a.id)]
+    if offset:
+        articles = articles[offset:]
+    if limit is not None:
+        articles = articles[:limit]
+    return articles
 
 
 def count_articles(db: Session, **kwargs) -> int:
@@ -558,7 +580,7 @@ def count_articles(db: Session, **kwargs) -> int:
 
 def get_author_ids(db: Session, article_id: str) -> list[str]:
     """Return ordered author IDs for an article."""
-    return __get_author_ids(db, article_id)
+    return _get_author_ids(db, article_id)
 
 
 def delete_article(db: Session, article_id: str, *, user_id: str) -> None:

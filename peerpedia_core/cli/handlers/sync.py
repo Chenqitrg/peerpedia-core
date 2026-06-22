@@ -15,7 +15,7 @@ from peerpedia_core.sync import is_online, count as pending_count, sync_article 
 def _cmd_sync_status(args):
     """Check connection to a peer server and count pending sync operations.
 
-    args: --server, --user, --json
+    args: --server, --json
     """
     server = _sync_server(args)
     online = is_online(server)
@@ -34,7 +34,7 @@ def _cmd_sync_status(args):
 def _cmd_sync_push(db, args):
     """Push all pending offline operations to a peer server.
 
-    args: --server, --user, --json
+    args: --server, --json
     """
     server = _sync_server(args)
     if not is_online(server):

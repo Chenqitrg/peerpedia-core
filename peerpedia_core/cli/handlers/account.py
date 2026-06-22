@@ -14,37 +14,29 @@ sync (social graph transport, not git bundle).
 from __future__ import annotations
 
 import getpass
-import json
-import os
-from pathlib import Path
 
 import bcrypt
 
-from peerpedia_core.cli.helpers import _with_db, _ok, _die, _json_out
-from peerpedia_core.cli.display import console
-from peerpedia_core.commands import (
-    create_user, get_user_by_name, update_user_public_key, update_user_salt,
+from peerpedia_core.cli.helpers import (
+    _with_db, _read_session, _write_session, _ok, _die, _json_out,
 )
-from peerpedia_core.config.paths import SESSION_FILE
+from peerpedia_core.cli.display import display_user as _render_user, console
+from peerpedia_core.commands import (
+    create_user, get_user_by_name, search_users,
+    update_user_public_key, update_user_salt,
+)
 from peerpedia_core.crypto import derive_key_pair, new_salt
 
 
-def _write_session(user_id: str, name: str, private_key_hex: str) -> None:
-    """Write session file with chmod 600."""
-    _SESSION_FILE.parent.mkdir(parents=True, exist_ok=True)
-    _SESSION_FILE.write_text(json.dumps({
-        "user_id": user_id,
-        "name": name,
-        "private_key_hex": private_key_hex,
-    }))
-    os.chmod(_SESSION_FILE, 0o600)
-
-
-def _read_session() -> dict | None:
-    """Read session file, or None if not logged in."""
-    if not _SESSION_FILE.exists():
-        return None
-    return json.loads(_SESSION_FILE.read_text())
+def _display_user(u) -> None:
+    """Display user metadata — extract data, delegate to pure render."""
+    _render_user(
+        name=u.name,
+        affiliation=u.affiliation or "",
+        expertise=u.expertise or [],
+        reputation=u.reputation or {},
+        user_id=u.id,
+    )
 
 
 @_with_db
@@ -130,3 +122,20 @@ def _cmd_whoami(db, args):
             _json_out({"status": "not logged in"})
         else:
             console.print("[muted]Not logged in. Use register or login.[/]")
+
+
+@_with_db
+def _cmd_account_search(db, args):
+    """Fuzzy search users by name.
+
+    args: query [positional], --json
+    """
+    users = search_users(db, args.query, limit=20)
+    if args.json:
+        _json_out([{"id": u.id, "name": u.name} for u in users])
+        return
+    if not users:
+        console.print(f"[muted]No users match {args.query!r}[/]")
+        return
+    for u in users:
+        _display_user(u)

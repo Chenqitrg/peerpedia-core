@@ -51,6 +51,31 @@ def _status_badge(status: str) -> str:
     return f"[{colors.get(status, 'white')}]{status}[/]"
 
 
+def display_article(title: str, status: str, authors: list[str], score: dict | None, abstract: str | None) -> None:
+    """Render article metadata panel — pure display, zero side effects."""
+    scores_str = _stars(score) if score else "[muted]no scores[/]"
+    body = (
+        f"[bold info]{title}[/]      {_status_badge(status)}\n"
+        f"Authors: {', '.join(authors)}\n"
+        f"Score:   {scores_str}\n"
+        f"Abstract: {abstract or '[muted]none[/]'}"
+    )
+    _print_panel("Article", body)
+
+
+def display_user(name: str, affiliation: str, expertise: list[str], reputation: dict | None, user_id: str) -> None:
+    """Render user metadata panel — pure display, zero side effects."""
+    body = f"[bold info]{name}[/]"
+    if affiliation:
+        body += f"\nAffiliation: {affiliation}"
+    if expertise:
+        body += f"\nExpertise: {', '.join(expertise)}"
+    if reputation:
+        body += f"\nReputation: {_stars(reputation)}"
+    body += f"\nID: [accent]{user_id[:8]}[/]"
+    _print_panel("User", body)
+
+
 def _stars(score: dict | None, dims: list[str] | None = None) -> str:
     """Render 5-dim scores as stars, e.g. ★★★★☆ 4/5."""
     if not score:

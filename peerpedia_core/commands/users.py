@@ -8,8 +8,14 @@ from __future__ import annotations
 from peerpedia_core.storage.db import Session
 from peerpedia_core.storage.db.crud_user import (
     create_user as _create,
+    follow_user as _follow,
+    get_followers as _get_followers,
+    get_following as _get_following,
     get_user as _get,
     get_user_by_name as _get_by_name,
+    search_users as _search_users,
+    is_following as _is_following,
+    unfollow_user as _unfollow,
     update_user_public_key as _update_pubkey,
     update_user_salt as _update_salt,
 )
@@ -38,3 +44,33 @@ def update_user_public_key(db: Session, user_id: str, pubkey_hex: str):
 def update_user_salt(db: Session, user_id: str, salt_hex: str):
     """Set the scrypt salt for a user."""
     return _update_salt(db, user_id, salt_hex)
+
+
+def follow_user(db: Session, follower_id: str, followed_id: str):
+    """Follow a user. Raises ValueError if self-follow."""
+    return _follow(db, follower_id, followed_id)
+
+
+def unfollow_user(db: Session, follower_id: str, followed_id: str):
+    """Unfollow a user. Idempotent."""
+    _unfollow(db, follower_id, followed_id)
+
+
+def is_following(db: Session, follower_id: str, followed_id: str) -> bool:
+    """Check if follower_id follows followed_id."""
+    return _is_following(db, follower_id, followed_id)
+
+
+def get_followers(db: Session, user_id: str) -> list:
+    """Return users following user_id."""
+    return _get_followers(db, user_id)
+
+
+def get_following(db: Session, user_id: str) -> list:
+    """Return users user_id follows."""
+    return _get_following(db, user_id)
+
+
+def search_users(db: Session, query: str, limit: int | None = None, offset: int = 0) -> list:
+    """Fuzzy search users by name."""
+    return _search_users(db, query, limit=limit, offset=offset)

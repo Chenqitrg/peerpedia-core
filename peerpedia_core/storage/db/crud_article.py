@@ -44,7 +44,7 @@ Reviewer's checklist
 from sqlalchemy.orm import Session
 
 from peerpedia_core.storage.db.models import (
-    Article, ArticleAuthor, Bookmark, Citation, Follow, MergeProposal, Review,
+    Article, ArticleAuthor, Bookmark, Citation, MergeProposal, Review,
     ScriptMaintainer,
 )
 
@@ -124,15 +124,6 @@ def create_article(
     return a
 
 
-# TODO(discovery-feed): feed of articles from followed users — ordered by
-# recent activity, filtered by status.  list_articles(follower_id=) exists
-# but needs a purpose-built function with proper scoring/ranking.
-# TODO(bookmark-feed): feed of bookmarked articles with status + recent updates.
-# TODO(search): fuzzy article search — match by partial title, author name,
-# or keywords.  Currently the only way to find an article is exact ID prefix.
-# Needed: search_articles(session, query) → list[Article] with ILIKE on
-# Article.title + join on User.name.  Then wire into CLI ``show`` command
-# (single match → show, multiple → list for user to pick, none → not found).
 def get_article(session: Session, article_id: str) -> Article | None:
     return session.get(Article, article_id)
 
@@ -140,19 +131,18 @@ def get_article(session: Session, article_id: str) -> Article | None:
 def list_articles(
     session: Session,
     status: str | set[str] | None = None,
-    author_id: str | None = None,
-    follower_id: str | None = None,
+    search_query: str | None = None,
     limit: int | None = None,
     offset: int = 0,
 ) -> list[Article]:
-    """List articles with optional filters, ordered by created_at desc.
+    """List articles with optional SQL-level AND filters, ordered by created_at desc.
+
+    Single-table only — cross-table joins belong in ``commands/``.
 
     Args:
-        status: Filter by Article.status. Pass a ``str`` for single status
-            (e.g. ``"published"``), a ``set[str]`` for multiple (e.g.
-            ``{"draft", "sedimentation"}``), or ``None`` for no filter.
-        author_id: Filter by author. None = no filter.
-        follower_id: Filter by follower of the author. None = no filter.
+        status: Filter by Article.status. ``str`` for single, ``set[str]``
+            for multiple, ``None`` for no filter.
+        search_query: Fuzzy title match (case-insensitive ILIKE).
         limit: Max results. None = unlimited.
         offset: Pagination offset.
     """
@@ -162,15 +152,8 @@ def list_articles(
             q = q.filter(Article.status.in_(list(status)))
     elif status:
         q = q.filter(Article.status == status)
-    if author_id:
-        q = q.join(ArticleAuthor, Article.id == ArticleAuthor.article_id).filter(ArticleAuthor.author_id == author_id)
-    if follower_id:
-        q = (
-            q.join(ArticleAuthor, Article.id == ArticleAuthor.article_id)
-            .join(Follow, ArticleAuthor.author_id == Follow.followed_id)
-            .filter(Follow.follower_id == follower_id)
-            .distinct()
-        )
+    if search_query:
+        q = q.filter(Article.title.ilike(f"%{search_query}%"))
     q = q.order_by(Article.created_at.desc())
     if limit is not None:
         q = q.limit(limit).offset(offset)

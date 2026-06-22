@@ -11,7 +11,7 @@ from peerpedia_core.storage.db.models import Article, Bookmark
 def add_bookmark(session: Session, user_id: str, article_id: str) -> Bookmark:
     b = Bookmark(user_id=user_id, article_id=article_id)
     session.add(b)
-    session.commit()
+    session.flush()
     return b
 
 
@@ -19,7 +19,7 @@ def remove_bookmark(session: Session, user_id: str, article_id: str) -> None:
     b = session.query(Bookmark).filter(Bookmark.user_id == user_id, Bookmark.article_id == article_id).first()
     if b:
         session.delete(b)
-        session.commit()
+        session.flush()
 
 
 def is_bookmarked(session: Session, user_id: str, article_id: str) -> bool:

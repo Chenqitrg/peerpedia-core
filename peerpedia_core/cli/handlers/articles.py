@@ -6,16 +6,15 @@
 from __future__ import annotations
 
 from peerpedia_core.cli.helpers import (
-    _with_db, _resolve_user, _resolve_user_with_key, _find_article_file, _open_editor,
+    _with_db, _get_session_user, _get_session_key, _resolve_and_display_article,
+    _find_article_file, _open_editor,
     _prompt_commit_message, _parse_scores, _page, _ok, _die, _json_out,
 )
-from peerpedia_core.cli.display import (
-    _print_panel, _print_table, _status_badge, _stars, console,
-)
+from peerpedia_core.cli.display import console
 from peerpedia_core.cli.sync_utils import _try_sync
 from peerpedia_core.commands import (
-    create_article_with_content, get_article, get_author_ids,
-    list_articles, parse_frontmatter, publish_article,
+    create_article_with_content, get_article,
+    list_articles, publish_article,
     publish_ready_articles, delete_article, update_article_content, get_user,
 )
 
@@ -25,15 +24,15 @@ def _cmd_article_create(db, args):
     """Create a new article.
 
     args: --title, --format [markdown|typst], --content, --no-editor,
-          --publish, --scores, --user, --json
+          --publish, --scores, --json
 
-    1. Resolve the author from --user.
-    2. Get content from --content, editor, or empty (--no-editor).
+    1. Get content from --content, editor, or empty (--no-editor).
     3. Create article + initial git commit via commands layer.
     4. Optionally publish immediately (--publish).
     5. Display result (rich panel or JSON).
     """
-    user_id, key_bytes = _resolve_user_with_key(db, args.user)
+    user_id = _get_session_user()
+    key_bytes = _get_session_key()
     user = get_user(db, user_id)
     if user is None:
         _die(f"User '{user_id}' not found — DB inconsistency.")
@@ -56,25 +55,16 @@ def _cmd_article_create(db, args):
     if args.json:
         _json_out(result)
     else:
-        _print_panel("Article Created",
-            f"[bold]{result['title']}[/]\n"
-            f"ID:     [accent]{result['id'][:8]}[/]\n"
-            f"Status: {_status_badge(result['status'])}\n"
-            f"Hash:   [accent]{result['commit_hash'][:7]}[/]")
+        article = get_article(db, result["id"])
+        _resolve_and_display_article(db, article)
 
 
 @_with_db
 def _cmd_article_show(db, args):
     """Show article details: title, status, authors, score, abstract, content.
 
-    args: id [positional], --show [full|meta|content], --user, --json
+    args: id [positional], --show [full|meta|content], --json
 
-    TODO(search): accept partial title, author name, or keywords instead
-    of requiring the full article ID.  Match against local articles; if
-    multiple hits, show a brief list so the user can refine the query.
-    This is the #1 UX gap — every command that takes an article ID
-    (show, edit, publish, delete, review submit, fork, bookmark, merge)
-    is unusable without prior knowledge of UUIDs.
     """
     article = get_article(db, args.id)
     if not article:
@@ -83,58 +73,70 @@ def _cmd_article_show(db, args):
         _json_out({"id": article.id, "title": article.title, "status": article.status})
         return
 
-    show_mode = getattr(args, "show", "full")
-
-    if show_mode == "content":
-        raw = _find_article_file(article.id).read_text()
-        _page(raw)
-        return
-
-    raw = _find_article_file(article.id).read_text()
-    fm = parse_frontmatter(raw)
-    title = fm.get("title", article.title)
-    abstract = fm.get("abstract", article.abstract)
-
-    scores_str = _stars(article.score) if article.score else "[muted]no scores[/]"
-    body = (
-        f"[bold info]{title}[/]      {_status_badge(article.status)}\n"
-        f"Authors: {', '.join(get_author_ids(db, article.id))}\n"
-        f"Score:   {scores_str}\n"
-        f"Abstract: {abstract or '[muted]none[/]'}"
-    )
-    _print_panel("Article", body)
-
+    show_mode = getattr(args, "show", "meta")
+    _resolve_and_display_article(db, article)
     if show_mode == "full":
+        raw = _find_article_file(article.id).read_text()
         console.print("\n[bold]── Content ──[/]")
         _page(raw)
 
 
 @_with_db
 def _cmd_article_list(db, args):
-    """List articles, optionally filtered by status or author. Shows first 20.
+    """List articles with optional AND filters.
 
-    args: --status, --user, --json
+    args: --search, --status, --feed, --mine, --bookmarked, --json
     """
-    author_id = _resolve_user(db, args.user) if args.user is not None else None
-    articles = list_articles(db, status=args.status or None, author_id=author_id)
+    author_id = None
+    viewer_id = None
+    bookmarked_by = None
+    me = _get_session_user()
+    if args.feed:
+        viewer_id = me
+    if args.mine:
+        author_id = me
+    if args.bookmarked:
+        bookmarked_by = me
+
+    # Default: only public articles.  Drafts require --mine.
+    if args.mine:
+        status = args.status or None
+    elif args.status:
+        if args.status == "draft":
+            _die("--status draft requires --mine")
+        status = args.status
+    else:
+        status = {"published", "sedimentation"}
+
+    articles = list_articles(
+        db,
+        status=status,
+        search_query=args.search or None,
+        author_id=author_id,
+        viewer_id=viewer_id,
+        bookmarked_by=bookmarked_by,
+        limit=20,
+    )
     if args.json:
         _json_out([{"id": a.id, "title": a.title, "status": a.status} for a in articles])
         return
-    rows = [[a.id[:8], a.title, _status_badge(a.status)]
-            for a in articles[:20]]
-    _print_table(["ID", "Title", "Status"], rows,
-                 title=f"{len(articles)} article(s)" + (f" — {args.status}" if args.status else ""))
+    if not articles:
+        console.print("[muted]No articles.[/]")
+        return
+    for a in articles:
+        _resolve_and_display_article(db, a)
 
 
 @_with_db
 def _cmd_article_edit(db, args):
     """Edit an article's content or title. Author only.
 
-    args: id [positional], --content, --title, --no-editor, --user, --json
+    args: id [positional], --content, --title, --no-editor, --json
     """
     import difflib
 
-    user_id, key_bytes = _resolve_user_with_key(db, args.user)
+    user_id = _get_session_user()
+    key_bytes = _get_session_key()
     user = get_user(db, user_id)
     if user is None:
         _die(f"User '{user_id}' not found — DB inconsistency.")
@@ -175,15 +177,17 @@ def _cmd_article_edit(db, args):
         _json_out(result)
     else:
         _ok(f"Updated [accent]{args.id[:8]}[/] — {result['title']}")
+        article = get_article(db, args.id)
+        _resolve_and_display_article(db, article)
 
 
 @_with_db
 def _cmd_article_publish(db, args):
     """Publish an article into the sedimentation pool. Author only.
 
-    args: id [positional], --scores, --user, --json
+    args: id [positional], --scores, --json
     """
-    user_id = _resolve_user(db, args.user)
+    user_id = _get_session_user()
     scores = _parse_scores(args.scores)
     result = publish_article(db, args.id, user_id, scores)
     db.commit()
@@ -192,16 +196,17 @@ def _cmd_article_publish(db, args):
         _json_out(result)
     else:
         _ok(f"Published [accent]{args.id[:8]}[/] to sedimentation pool")
-        console.print(_stars(scores))
+        article = get_article(db, result["id"])
+        _resolve_and_display_article(db, article)
 
 
 @_with_db
 def _cmd_article_delete(db, args):
     """Delete an article.
 
-    args: id [positional], --user, --json
+    args: id [positional], --json
     """
-    user_id = _resolve_user(db, args.user)
+    user_id = _get_session_user()
     article = get_article(db, args.id)
     if not article:
         _die(f"Article [accent]{args.id}[/] not found")
@@ -223,7 +228,7 @@ def _cmd_article_delete(db, args):
 def _cmd_article_scan(db, args):
     """Manually trigger sedimentation → published transition.
 
-    args: (none beyond common --user, --json)
+    args: (none)
     """
     count = publish_ready_articles(db)
     db.commit()
@@ -231,3 +236,4 @@ def _cmd_article_scan(db, args):
         _json_out({"published": count})
     else:
         _ok(f"Published [accent]{count}[/] article(s)")
+        

@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from peerpedia_core.cli.helpers import (
-    _with_db, _resolve_user, _resolve_user_with_key, _parse_scores, _page, _ok, _die, _json_out,
+    _with_db, _get_session_user, _get_session_key, _parse_scores, _page, _ok, _die, _json_out,
     DEFAULT_ARTICLES_DIR,
 )
 from peerpedia_core.cli.display import _stars, console
@@ -18,10 +18,11 @@ from peerpedia_core.commands import submit_review, get_reviews_for_article, get_
 def _cmd_review_submit(db, args):
     """Submit a review with 5-dim scores + optional comment.
 
-    args: article_id [positional], --scores, --comment, --user, --json
+    args: article_id [positional], --scores, --comment, --json
     """
     scores = _parse_scores(args.scores)
-    reviewer_id, key_bytes = _resolve_user_with_key(db, args.user)
+    reviewer_id = _get_session_user()
+    key_bytes = _get_session_key()
     user = get_user(db, reviewer_id)
     result = submit_review(
         db, article_id=args.article_id, reviewer_id=reviewer_id,
@@ -43,7 +44,7 @@ def _cmd_review_submit(db, args):
 def _cmd_review_list(db, args):
     """List all reviews for an article.
 
-    args: article_id [positional], --show [meta|full], --user, --json
+    args: article_id [positional], --show [meta|full], --json
     """
     reviews = get_reviews_for_article(db, args.article_id)
     if args.json:

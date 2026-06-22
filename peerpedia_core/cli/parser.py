@@ -13,11 +13,14 @@ import argparse
 
 from peerpedia_core.cli.handlers import (
     _cmd_article_create, _cmd_article_delete, _cmd_article_edit,
-    _cmd_article_list, _cmd_article_publish, _cmd_article_scan,
+    _cmd_article_list,
+    _cmd_article_publish, _cmd_article_scan,
     _cmd_article_show,
-    _cmd_bookmark_add, _cmd_bookmark_list,
+    _cmd_bookmark_add, _cmd_bookmark_remove,
+    _cmd_follow_user, _cmd_unfollow_user,
     _cmd_compile,
     _cmd_fork,
+    _cmd_account_search,
     _cmd_login,
     _cmd_maintainer_add, _cmd_maintainer_list, _cmd_maintainer_remove,
     _cmd_merge_accept, _cmd_merge_propose,
@@ -35,7 +38,6 @@ from peerpedia_core.types.scores import SCORE_FORMAT_EXAMPLE
 # ═══════════════════════════════════════════════════════════════════════════════
 
 _COMMON_ARGS = [
-    (("--user",), {"default": None, "help": "User ID (omit to use current session user)"}),
     (("--json",), {"action": "store_true", "help": "Output as JSON"}),
 ]
 
@@ -69,6 +71,10 @@ COMMAND_GROUPS = [
         ("whoami", _cmd_whoami, [
             (("--json",), {"action": "store_true", "help": "Output as JSON"}),
         ]),
+        ("search", _cmd_account_search, [
+            (("query",), {"help": "Search query (partial name, case-insensitive)"}),
+            (("--json",), {"action": "store_true", "help": "Output as JSON"}),
+        ]),
     ]),
     ("article", "Article management", [
         ("create", _cmd_article_create, [
@@ -82,16 +88,19 @@ COMMAND_GROUPS = [
         ]),
         ("show", _cmd_article_show, [
             (("id",), {"help": "Article ID (or prefix)"}),
-            (("--show",), {"choices": ["meta", "full", "content"], "default": "meta",
-                           "help": "Display: meta (default), full (+content), content (source only)"}),
+            (("--show",), {"choices": ["meta", "full"], "default": "meta",
+                           "help": "Display: meta (default), full (+content)"}),
         ]),
         ("list", _cmd_article_list, [
+            (("--search",), {"help": "Fuzzy title search (case-insensitive)"}),
             (("--status",), {"choices": ["draft", "sedimentation", "published"],
                              "help": "Filter by status"}),
+            (("--feed",), {"action": "store_true", "help": "Articles from followed users"}),
+            (("--mine",), {"action": "store_true", "help": "My articles"}),
+            (("--bookmarked",), {"action": "store_true", "help": "My bookmarked articles"}),
         ]),
         # TODO(review-feed): ``article reviewable`` — list sedimentation articles
         # from my 1-hop social circle that I haven't reviewed yet.
-        # TODO(mine): ``article mine`` — shortcut for ``list --status all --user @me``.
         ("edit", _cmd_article_edit, [
             (("id",), {"help": "Article ID (or prefix)"}),
             (("--content",), {"help": "New article body (omit to open editor)"}),
@@ -135,8 +144,9 @@ COMMAND_GROUPS = [
         ("add", _cmd_bookmark_add, [
             (("article_id",), {"help": "Article ID (or prefix)"}),
         ]),
-        ("list", _cmd_bookmark_list, []),
-        # TODO(bookmark-remove): ``bookmark remove <id>`` — crud_bookmark has it, just needs CLI wiring.
+        ("remove", _cmd_bookmark_remove, [
+            (("article_id",), {"help": "Article ID (or prefix)"}),
+        ]),
     ]),
     ("sync", None, [
         ("status", _cmd_sync_status, [
@@ -150,12 +160,6 @@ COMMAND_GROUPS = [
         # TODO(social-graph): ``sync follow`` / ``sync unfollow`` — P2P follows.
         # TODO(social-graph): ``sync bookmarks`` — P2P bookmark sync.
     ]),
-    # TODO(follow): ``follow <user>`` / ``unfollow <user>`` — CRUD complete,
-    # just needs commands wrapper + CLI wiring.  Follows are a discovery mechanism.
-    # TODO(discovery-feed): ``article feed`` — articles from followed users,
-    # ordered by recent activity.  list_articles(follower_id=) already exists.
-    # TODO(bookmark-remove): ``bookmark remove <id>`` — crud + commands done,
-    # just CLI wiring.
     ("maintainer", None, [
         ("add", _cmd_maintainer_add, [
             (("article_id",), {"help": "Article ID"}),
@@ -180,6 +184,12 @@ TOP_LEVEL = [
         (("id",), {"help": "Article ID (or prefix)"}),
         (("--format",), {"choices": ["pdf", "svg", "png", "html"],
                          "help": "Output format (default: pdf)"}),
+    ]),
+    ("follow", _cmd_follow_user, [
+        (("user_identifier",), {"help": "User ID, @name, or UUID prefix"}),
+    ]),
+    ("unfollow", _cmd_unfollow_user, [
+        (("user_identifier",), {"help": "User ID, @name, or UUID prefix"}),
     ]),
     ("?Mother", _cmd_mother, []),
 ]

@@ -56,6 +56,8 @@ class TestListArticles:
         assert ids == {"a-lm5", "a-lm6"}
 
     def test_filters_by_author_id(self, db_engine):
+        """author_id filtering is now in commands layer, not CRUD."""
+        from peerpedia_core.commands.articles import list_articles as cmd_list
         s = get_session(db_engine)
         u = _user(id="u-lm-auth")
         s.add(u)
@@ -66,7 +68,7 @@ class TestListArticles:
         s.add(ArticleAuthor(article_id="a-lm9", author_id="u-lm-auth", position=0))
         s.commit()
 
-        result = list_articles(s, status={"published"}, author_id="u-lm-auth")
+        result = cmd_list(s, status={"published"}, author_id="u-lm-auth")
         assert [r.id for r in result] == ["a-lm9"]
 
     def test_respects_limit_and_offset(self, db_engine):

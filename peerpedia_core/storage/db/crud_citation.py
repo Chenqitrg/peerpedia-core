@@ -29,7 +29,7 @@ def create_or_update_citation(
             backward_prob=backward,
         )
         session.add(c)
-    session.commit()
+    session.flush()
     return c
 
 

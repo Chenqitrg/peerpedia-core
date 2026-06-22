@@ -122,6 +122,15 @@ def list_users(session: Session) -> list[User]:
     return session.query(User).order_by(User.created_at.desc()).all()
 
 
+def search_users(session: Session, query: str, limit: int | None = None, offset: int = 0) -> list[User]:
+    """Fuzzy search users by name (case-insensitive ILIKE)."""
+    q = session.query(User).filter(User.name.ilike(f"%{query}%"))
+    q = q.order_by(User.created_at.desc())
+    if limit is not None:
+        q = q.limit(limit).offset(offset)
+    return q.all()
+
+
 def get_users_by_ids(session: Session, user_ids: set[str]) -> list[User]:
     """Return User records for the given IDs.
 

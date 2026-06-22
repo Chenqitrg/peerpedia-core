@@ -39,6 +39,8 @@ def _with_db(func):
 
     @functools.wraps(func)
     def wrapper(args):
+        # TODO(perf): mkdir syscall on every command invocation.  After the
+        # first call the directory exists — cache with a module-level boolean.
         DB_PATH.parent.mkdir(parents=True, exist_ok=True)
         try:
             with db_session(DB_URL) as db:
@@ -205,6 +207,8 @@ def _prompt_commit_message(diff: str = "") -> str:
     )
     if diff:
         header += "# Changes:\n#\n"
+        # TODO(perf): string += in loop is O(n²) for large diffs.  Use
+        # "# " + "\n# ".join(diff.splitlines()) instead.
         for line in diff.splitlines():
             header += f"# {line}\n"
     editor = os.environ.get("EDITOR", "vim")

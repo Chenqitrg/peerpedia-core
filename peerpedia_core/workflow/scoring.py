@@ -55,6 +55,9 @@ def aggregate_review_scores(
     self_weight = params.score.self_review_weight
     community_weight = params.score.community_weight
 
+    # TODO(perf): _reviewer_mult(r) called 5× per review (once per dimension),
+    # but the weight is constant across dimensions.  Pre-compute once per review
+    # before the dimension loop to reduce from 5*R to R function calls.
     def _reviewer_mult(review: dict) -> float:
         w = 1.0
         if reviewer_weights is not None:

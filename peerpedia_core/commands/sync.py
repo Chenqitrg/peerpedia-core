@@ -256,6 +256,9 @@ def _verify_new_commits(db: Session, repo_path: Path, *, since_hash: str) -> Non
 
         # TOFU pubkey consistency — check against stored pubkey.
         user_id = _extract_user_id_from_email(author_email)
+        # TODO(perf): per-commit get_user query without batch or cache.  If a
+        # bundle brings 50 commits from 30 users, that's 50 DB queries.  Batch
+        # user lookups by collecting unique user_ids first, then query once.
         user = get_user(db, user_id)
         if user is None:
             # First encounter: user record doesn't exist locally yet.

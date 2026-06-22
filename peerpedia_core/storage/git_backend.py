@@ -281,6 +281,9 @@ def get_diff_between(repo_path: Path, hash1: str, hash2: str) -> dict:
     total_deletions = 0
     diff_files: dict[str, dict[str, int]] = {}
 
+    # TODO(perf): diff content loaded twice — once in diff_parts and once for
+    # line counting.  Iterate patch lines once, building diff_text and counting
+    # insertions/deletions in a single pass.
     for d in c1.diff(c2, create_patch=True):
         fname = d.a_path or d.b_path or ""
         if d.a_path:
@@ -339,6 +342,8 @@ def merge_git_repos(target: Path, fork: Path, author_name: str) -> str:
     remote_name = f"fork-{fork.name}"
     try:
         target_repo.create_remote(remote_name, str(fork))
+        # TODO(perf): fetch pulls ALL refs from fork repo.  Use --single-branch
+        # since we only need the default branch.
         target_repo.git.fetch(remote_name)
 
         # Fork repos have exactly one branch — take the first remote ref
@@ -470,6 +475,10 @@ def verify_commit_signature(
         f.write(f"{author_email} {pubkey_ssh_line}\n")
     signers_path = Path(f.name)
     try:
+        # TODO(perf/bug): repo.git.config() permanently writes to .git/config,
+        # overwriting gpg.format and pointing allowedSignersFile to a temp file
+        # that disappears in finally.  Use GIT_CONFIG_COUNT env vars (like
+        # commit_article lines 134-143 does) instead of persistent config.
         repo = git.Repo(repo_path)
         repo.git.config("gpg.format", "ssh")
         repo.git.config("gpg.ssh.allowedSignersFile", str(signers_path))

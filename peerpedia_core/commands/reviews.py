@@ -118,6 +118,9 @@ def submit_review(
 
     recompute_article_score(db, article_id)
 
+    # TODO(perf): sequential per-author reputation recompute — N DB round-trips.
+    # For 10 co-authors, that's 10 sequential get_user + get_articles_by_author
+    # queries.  Batch: load all users + all articles in 2 queries.
     for aid in author_ids:
         recompute_author_reputation(db, aid)
 

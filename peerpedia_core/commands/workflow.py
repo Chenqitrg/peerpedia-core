@@ -92,6 +92,8 @@ def publish_ready_articles(db: Session) -> int:
 
         st = article.sink_start
         if st.tzinfo is None:
+            # TODO(perf): import timezone inside loop — Python caches after
+            # first iteration, but module-level import is cleaner.
             from datetime import timezone
             st = st.replace(tzinfo=timezone.utc)
         eta = st + timedelta(days=article.sink_duration_days)
@@ -103,6 +105,9 @@ def publish_ready_articles(db: Session) -> int:
         # This function no longer imports from sync to avoid circular dependency.
 
         # Compute score by aggregating all reviews
+        # TODO(perf): recompute_article_score already fetches reviews internally
+        # (line 156).  The get_reviews_for_article call on line 109 duplicates
+        # that query.  Either pass reviews through or fetch once.
         score = recompute_article_score(db, article.id)
 
         # Check for community reviews and apply penalty if none
@@ -174,6 +179,8 @@ def recompute_article_score(db: Session, article_id: str) -> dict | None:
         }
         for r in all_reviews
     ]
+    # TODO(perf): two iterations over all_reviews (review_dicts + reviewer_weights)
+    # could be merged into a single pass.
     reviewer_weights = {r.reviewer_id: user_weight_map.get(r.reviewer_id, 1.0) for r in all_reviews}
 
     scope_weights = {
@@ -192,6 +199,9 @@ def recompute_author_reputation(db: Session, user_id: str) -> ReputationScores:
 
     Raises ValueError if the user does not exist.
     """
+    # TODO(perf): when called from recalculate_all_reputations, the user was
+    # already loaded by list_users.  This get_user re-fetches it — 2N+1 queries
+    # instead of N+2.  Accept the User object directly or batch-load.
     user = get_user(db, user_id)
     if user is None:
         raise ValueError(f"User not found: {user_id}")

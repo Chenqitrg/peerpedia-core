@@ -558,6 +558,10 @@ def list_articles(
     offset: int = 0,
 ) -> list:
     """List articles with AND filters. Pipeline: SQL first, then Python narrowing."""
+    # TODO(perf): limit/offset not pushed to SQL — fetches ALL matching rows
+    # then slices in Python.  Pass limit/offset to _list().
+    # TODO(perf): per-article _get_author_ids() is N+1.  Use get_author_ids_batch
+    # (already implemented in crud_article.py) to fetch all author IDs in one query.
     articles = _list(db, status=status, search_query=search_query)
     if author_id:
         articles = [a for a in articles if author_id in _get_author_ids(db, a.id)]

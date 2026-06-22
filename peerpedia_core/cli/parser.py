@@ -99,8 +99,6 @@ COMMAND_GROUPS = [
             (("--mine",), {"action": "store_true", "help": "My articles"}),
             (("--bookmarked",), {"action": "store_true", "help": "My bookmarked articles"}),
         ]),
-        # TODO(review-feed): ``article reviewable`` — list sedimentation articles
-        # from my 1-hop social circle that I haven't reviewed yet.
         ("edit", _cmd_article_edit, [
             (("id",), {"help": "Article ID (or prefix)"}),
             (("--content",), {"help": "New article body (omit to open editor)"}),

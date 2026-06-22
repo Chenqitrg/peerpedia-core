@@ -44,6 +44,11 @@ Reviewer's checklist
 
 import httpx
 
+# TODO(perf): every function uses standalone httpx.get/post() — no connection
+# pooling.  Each sync_article cycle makes up to 14 HTTP calls, each paying
+# TCP+TLS handshake (~50ms RTT × 14 = 700ms vs ~150ms with keep-alive).
+# Fix: create a shared httpx.Client() instance and reuse it across all calls.
+
 
 def _api_url(server: str, article_id: str) -> str:
     """Build the REST base URL for an article on a remote server."""
@@ -74,6 +79,8 @@ def fetch_head(server: str, article_id: str) -> str | None:
     try:
         resp = httpx.get(f"{_api_url(server, article_id)}/head", timeout=30)
         if resp.status_code == 200:
+            # TODO(perf): resp.json() parses full JSON for a single field.
+            # Use resp.text and simple extraction for the "hash" value.
             return resp.json().get("hash")
     except Exception:
         pass

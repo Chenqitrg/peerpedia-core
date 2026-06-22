@@ -58,6 +58,7 @@ def _cmd_review_list(db, args):
 
     for r in reviews:
         ts = r.created_at.strftime("%Y-%m-%d %H:%M") if r.created_at else "unknown"
+        # TODO(perf): N+1 — per-review get_user query.  Batch with get_users_by_ids.
         reviewer = get_user(db, r.reviewer_id)
         label = reviewer.name if reviewer else r.reviewer_id[:8]
         console.print(f"[bold]{label}[/]  [muted]{ts}[/]  {_stars(r.scores)}")

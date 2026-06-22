@@ -123,6 +123,9 @@ def _cmd_article_list(db, args):
     if not articles:
         console.print("[muted]No articles.[/]")
         return
+    # TODO(perf): per-article _resolve_and_display_article does a disk read +
+    # DB query for author IDs (N+1).  Use get_author_ids_batch for the display
+    # loop and cache file reads.
     for a in articles:
         _resolve_and_display_article(db, a)
 

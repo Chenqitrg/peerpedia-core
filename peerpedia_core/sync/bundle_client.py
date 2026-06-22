@@ -194,6 +194,9 @@ def create_remote_article(server: str, article_id: str) -> bool:
     if not (rp / ".git").is_dir():
         return False
 
+    # TODO(perf): tar.gz BytesIO → bytes → base64 str — three copies coexist
+    # in memory.  For a 5MB compressed tar, peak memory ~17MB.  Stream
+    # compression + base64 to reduce peak memory by 50%.
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w:gz") as tar:
         tar.add(str(rp), arcname=article_id)

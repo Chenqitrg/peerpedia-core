@@ -27,6 +27,9 @@ def is_bookmarked(session: Session, user_id: str, article_id: str) -> bool:
 
 
 def get_bookmarks_for_user(session: Session, user_id: str) -> list[Article]:
+    # TODO(perf): two queries + ORDER BY lost.  Use JOIN to get articles in
+    # bookmark creation order:
+    #   session.query(Article).join(Bookmark).filter(Bookmark.user_id==user_id).order_by(Bookmark.created_at.desc())
     article_ids = (
         session.query(Bookmark.article_id).filter(Bookmark.user_id == user_id).order_by(Bookmark.created_at.desc()).all()
     )

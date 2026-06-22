@@ -101,6 +101,9 @@ def ingest_bundle(repo_path: Path, bundle_bytes: bytes) -> None:
 
     repo = git.Repo(repo_path)
 
+    # TODO(perf): ingest_bundle leaks temp files — delete=False but no cleanup
+    # in finally.  Every pull/push-receive leaves a .bundle file in the system
+    # temp directory.  Fix: add a finally block with Path(f.name).unlink().
     with tempfile.NamedTemporaryFile(suffix=".bundle", delete=False) as f:
         f.write(bundle_bytes)
         f.flush()
@@ -136,6 +139,9 @@ def create_bundle(repo_path: Path, since_hash: str | None = None) -> bytes:
     repo = git.Repo(repo_path)
     rev_range = f"{since_hash}..HEAD" if since_hash else "HEAD"
 
+    # TODO(perf): create_bundle writes bundle to disk then reads it back
+    # (double I/O + double memory).  Use repo.git.bundle("create", ...) with
+    # as_process=True to pipe stdout directly, eliminating the temp file.
     with tempfile.NamedTemporaryFile(suffix=".bundle", delete=False) as f:
         bundle_path = f.name
     try:
@@ -194,14 +200,21 @@ def find_common_ancestor(
         raise ValueError(f"Repo has no commits: {repo_path}")
 
     # ── Fast path: local-ahead ───────────────────────────────────────────
+    # TODO(perf): is_ancestor also creates a git.Repo(repo_path) internally.
+    # Pass repo directly to avoid opening .git/ twice for the fast-path check.
     if server_head is not None and is_ancestor(repo_path, server_head):
         return server_head
 
+    # TODO(perf): list() materializes up to 20k Commit objects (4-8 MB) but
+    # the k-exponential search only probes ~10 of them.  Replace with lazy
+    # indexable sequence or rev-list --skip to avoid 1000x allocation waste.
     commits = list(repo.iter_commits(max_count=max_depth + 1))
 
     def probe_at(dist: int) -> bool | None:
         """Map index to commit hash, wrap with retries."""
         h = commits[dist].hexsha
+        # TODO(perf): retries with no backoff — transient network blips get
+        # no recovery time.  Add exponential backoff (0.5s, 1s, 2s).
         for _ in range(retries + 1):
             result = probe(h)
             if result is not None:

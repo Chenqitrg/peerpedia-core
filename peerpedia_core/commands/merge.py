@@ -76,6 +76,9 @@ def accept_merge(db: Session, article_id: str, proposal_id: str, user_id: str) -
         raise NotFoundError(f"Fork article repo not found: {mp.fork_article_id}")
 
     # G2b: check status before merge — if published, trigger re-sedimentation
+    # TODO(perf): article already fetched at line 64; reuse it instead of
+    # re-querying.  If the refetch is meant to catch concurrent changes,
+    # use session.refresh() instead.
     article = get_article(db, article_id)
     was_published = article is not None and article.status == "published"
 

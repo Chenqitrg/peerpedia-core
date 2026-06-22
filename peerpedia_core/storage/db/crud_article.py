@@ -153,6 +153,8 @@ def list_articles(
     elif status:
         q = q.filter(Article.status == status)
     if search_query:
+        # TODO(perf): ILIKE %term% cannot use a B-tree index — full table scan.
+        # Use SQLite FTS5 for fuzzy title search when article count grows.
         q = q.filter(Article.title.ilike(f"%{search_query}%"))
     q = q.order_by(Article.created_at.desc())
     if limit is not None:
@@ -193,6 +195,9 @@ def update_article_status(session: Session, article_id: str, new_status: str) ->
     _VALID_STATUSES = {"draft", "sedimentation", "published"}
     if new_status not in _VALID_STATUSES:
         raise ValueError(f"Invalid status {new_status!r}, must be one of {_VALID_STATUSES}")
+    # TODO(perf): loads full Article (including compiled_output which may be
+    # 100KB+) just to set one field.  Use targeted UPDATE:
+    #   session.query(Article).filter(Article.id==article_id).update({"status": new_status})
     a = session.get(Article, article_id)
     if a is None:
         raise ValueError(f"Article {article_id} not found")
@@ -203,6 +208,8 @@ def update_article_status(session: Session, article_id: str, new_status: str) ->
 
 def update_article_score(session: Session, article_id: str, score: dict) -> Article:
     """Set the computed score for an article. Raises ValueError if not found."""
+    # TODO(perf): loads full Article (including compiled_output) just for score.
+    # Use targeted UPDATE.
     a = session.get(Article, article_id)
     if a is None:
         raise ValueError(f"Article {article_id} not found")
@@ -212,6 +219,8 @@ def update_article_score(session: Session, article_id: str, score: dict) -> Arti
 
 
 def increment_fork_count(session: Session, article_id: str) -> Article:
+    # TODO(perf): loads full Article just for ++fork_count.  Use atomic update:
+    #   session.query(Article).filter(Article.id==article_id).update({"fork_count": Article.fork_count + 1})
     a = session.get(Article, article_id)
     if a is None:
         raise ValueError(f"Article {article_id} not found")
@@ -223,6 +232,7 @@ def increment_fork_count(session: Session, article_id: str) -> Article:
 def set_sink_start(session: Session, article_id: str, duration_days: int) -> Article:
     from datetime import datetime, timezone
 
+    # TODO(perf): loads full Article for 3-field update. Use targeted UPDATE.
     a = session.get(Article, article_id)
     if a is None:
         raise ValueError(f"Article {article_id} not found")
@@ -243,6 +253,8 @@ def delete_article(session: Session, article_id: str) -> None:
 
     Raises ValueError if the article does not exist.
     """
+    # TODO(perf): loads full Article just for existence check. Use
+    # session.query(Article.id).filter(Article.id==article_id).first().
     a = session.get(Article, article_id)
     if a is None:
         raise ValueError(f"Article {article_id} not found")
@@ -269,6 +281,7 @@ def extend_sink(session: Session, article_id: str, extra_days: int, max_days: in
     """
     if extra_days <= 0:
         raise ValueError(f"extra_days must be positive, got {extra_days}")
+    # TODO(perf): loads full Article for 2-field update. Use targeted UPDATE.
     a = session.get(Article, article_id)
     if a is None:
         raise ValueError(f"Article {article_id} not found")

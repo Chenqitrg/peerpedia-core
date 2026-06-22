@@ -84,6 +84,8 @@ def search_monotonic_boundary(
     # Phase 1 — k-exponential probe: k^0, k^1, k^2, …
     i = 0
     while True:
+        # TODO(perf): k ** i recomputes power via exponentiation each iteration.
+        # Use running product: dist *= k (with dist starting at 1).
         dist = k ** i   # 1, k, k², …
         if dist > max_index:
             break

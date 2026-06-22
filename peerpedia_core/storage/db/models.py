@@ -36,6 +36,7 @@ class Article(Base):
     abstract = Column(String, nullable=True)
     keywords = Column(JSONList, nullable=True)
     categories = Column(JSONList, nullable=True)
+    # TODO(perf): missing index on status — filtered queries do full table scan.
     status = Column(String, nullable=False, default="draft")  # draft|sedimentation|published
     score = Column(JSONDict, nullable=True)  # FiveDimScores as dict
     compiled_format = Column(String, nullable=True)  # "html" | "svg"
@@ -44,6 +45,7 @@ class Article(Base):
     sink_start = Column(DateTime, nullable=True)
     sink_duration_days = Column(Integer, nullable=False, default=7)
     sink_extended_count = Column(Integer, nullable=False, default=0)
+    # TODO(perf): missing index on forked_from — fork lookups scan all rows.
     forked_from = Column(String, nullable=True)
     fork_count = Column(Integer, nullable=False, default=0)
     last_author_rebuild_hash = Column(String, nullable=True)  # HEAD commit hash of last author rebuild
@@ -78,6 +80,8 @@ class ArticleAuthor(Base):
     __table_args__ = (UniqueConstraint("article_id", "author_id", name="uq_article_author"),)
 
     article_id = Column(String, ForeignKey("articles.id", ondelete="CASCADE"), primary_key=True)
+    # TODO(perf): composite PK does not cover author_id-only queries. Add
+    # index=True so get_articles_by_author doesn't full-scan.
     author_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
     position = Column(Integer, default=0)
 
@@ -151,6 +155,8 @@ class MergeProposal(Base):
     __tablename__ = "merge_proposals"
 
     id = Column(String, primary_key=True, default=_new_id)
+    # TODO(perf): missing indexes on target_article_id and fork_article_id —
+    # delete_article and get_merge_proposals do full table scans.
     fork_article_id = Column(String, ForeignKey("articles.id"), nullable=False)
     target_article_id = Column(String, ForeignKey("articles.id"), nullable=False)
     proposer_id = Column(String, ForeignKey("users.id"), nullable=False)
@@ -167,6 +173,8 @@ class Citation(Base):
     __table_args__ = (UniqueConstraint("from_article_id", "to_article_id", name="uq_citation"),)
 
     from_article_id = Column(String, ForeignKey("articles.id"), primary_key=True)
+    # TODO(perf): composite PK does not cover to_article_id-only queries
+    # (get_cited_by). Add index=True.
     to_article_id = Column(String, ForeignKey("articles.id"), primary_key=True)
     forward_prob = Column(Float, nullable=False, default=0.0)
     backward_prob = Column(Float, nullable=False, default=0.0)

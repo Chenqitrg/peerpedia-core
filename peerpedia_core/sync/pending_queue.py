@@ -65,6 +65,9 @@ def _write(ops: list[PendingOp]) -> None:
 
 def add(op_type: OpType, article_id: str) -> None:
     """Add an operation to the pending queue."""
+    # TODO(perf): every operation does a full _read() + _write() cycle — reads
+    # the entire file, parses JSON, modifies list, serializes, writes to disk.
+    # Fine for single-digit queue sizes; if the queue grows, cache in memory.
     ops = _read()
     # Don't duplicate — if same article_id + op_type already pending, skip
     for op in ops:

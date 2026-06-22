@@ -95,3 +95,23 @@ def get_reviews_for_article(
         .order_by(Review.created_at.desc())
         .all()
     )
+
+
+def get_review(
+    session: Session,
+    article_id: str,
+    reviewer_id: str,
+    scope: str,
+    commit_hash: str,
+) -> Review | None:
+    """Return a specific review by composite key, or None."""
+    return (
+        session.query(Review)
+        .filter(
+            Review.article_id == article_id,
+            Review.reviewer_id == reviewer_id,
+            Review.scope == scope,
+            Review.commit_hash == commit_hash,
+        )
+        .first()
+    )

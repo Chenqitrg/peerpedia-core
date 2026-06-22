@@ -31,7 +31,7 @@ Reviewer's checklist
 
 from __future__ import annotations
 
-from sqlalchemy.orm import Session
+from peerpedia_core.storage.db import Session
 
 from peerpedia_core.config.params import params
 from peerpedia_core.exceptions import BadRequestError, NotFoundError
@@ -82,9 +82,10 @@ def accept_merge(db: Session, article_id: str, proposal_id: str, user_id: str) -
     if was_published:
         set_sink_start(db, article_id, params.sink.edit_article_default_days)
 
+    from peerpedia_core.storage.git_backend import get_head_hash
+
     mp = accept_merge_proposal(db, proposal_id)
-    import git
-    head_hash = git.Repo(target_repo).head.commit.hexsha
+    head_hash = get_head_hash(target_repo)
     return {"id": article.id, "title": article.title, "status": article.status,
             "commit_hash": head_hash}
 

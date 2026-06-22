@@ -109,6 +109,8 @@ class User(Base):
     id = Column(String, primary_key=True)
     name = Column(String, unique=True, nullable=False)
     password_hash = Column(String, nullable=False)  # bcrypt hash
+    public_key = Column(String, nullable=True)  # Ed25519 pubkey hex (from password-derived key pair)
+    salt = Column(String, nullable=True)  # hex-encoded scrypt salt (16 bytes)
     email = Column(String, nullable=True)  # format-validated
     affiliation = Column(String, nullable=False, default="")
     expertise = Column(JSONList, nullable=False, default=list)

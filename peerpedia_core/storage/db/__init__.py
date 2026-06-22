@@ -7,6 +7,7 @@ from peerpedia_core.storage.db.engine import (  # noqa: F401 — facade re-expor
     Base,
     JSONDict,
     JSONList,
+    Session,
     get_engine,
     get_session,
     init_db,

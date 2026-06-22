@@ -55,8 +55,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-import git as gitmod
-from sqlalchemy.orm import Session
+from peerpedia_core.storage.db import Session
 
 from peerpedia_core.exceptions import BadRequestError, ConflictError, NotAuthorizedError, NotFoundError
 from peerpedia_core.storage.db.crud_article import get_article, get_author_ids
@@ -285,8 +284,7 @@ def require_self_review_for_publish(
     current_user: User,
 ) -> None:
     """Raise if the current HEAD lacks a self-review by *current_user*."""
-    from peerpedia_core.storage.db.models import Review
-    from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR
+    from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, get_head_hash
 
     rp = DEFAULT_ARTICLES_DIR / article_id
     if not (rp / ".git").is_dir():
@@ -294,8 +292,9 @@ def require_self_review_for_publish(
             "self_review is required before publishing — no git repo found",
         )
 
-    repo = gitmod.Repo(rp)
-    if not repo.head.is_valid():
+    try:
+        head = get_head_hash(rp)
+    except ValueError:
         raise BadRequestError(
             "self_review is required before publishing — no commits yet",
         )
@@ -303,18 +302,8 @@ def require_self_review_for_publish(
     article = get_article(db, article_id)
     if article is None:
         raise BadRequestError("Article not found")
-
-    head = repo.head.commit.hexsha
-    existing = (
-        db.query(Review)
-        .filter(
-            Review.article_id == article_id,
-            Review.reviewer_id == current_user.id,
-            Review.scope == article.status,
-            Review.commit_hash == head,
-        )
-        .first()
-    )
+    from peerpedia_core.storage.db.crud_review import get_review
+    existing = get_review(db, article_id, current_user.id, article.status, head)
     if existing is None:
         raise BadRequestError("self_review is required before publishing")
 

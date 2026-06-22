@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy.orm import Session
+from peerpedia_core.storage.db import Session
 
 
 def create_user(db: Session, *, name: str, affiliation: str = "", password_hash: str = "", email: str = ""):

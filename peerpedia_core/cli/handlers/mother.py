@@ -43,6 +43,20 @@ publishing.  Every article lives in its own git repository on your machine.
   [accent]sync status[/]              Check connection to a peer
   [accent]sync push[/]                Send your changes to a peer server
 
+[bold]Identity & signing[/]
+  [accent]account login --name <name>[/]
+      Log in to load your signing key for this session.
+      PeerPedia signs every commit you make with your private key.
+      Remote peers verify signatures — unsigned commits are rejected.
+
+  [bold yellow]⚠  Do NOT use raw git commands to commit.[/]
+      Commits made with [muted]git commit[/] instead of [accent]peerpedia article edit[/]
+      or [accent]review submit[/] will have no Pubkey trailer and no signature.
+      They will not be tracked in the local database, and remote peers
+      will reject them during [accent]sync[/].
+
+  [accent]account whoami[/]            Show your current session identity
+
 [bold]Tips[/]
   • Use [muted]--json[/] on any command for machine-readable output.
   • Use [muted]--user @name[/] to act as a specific user.

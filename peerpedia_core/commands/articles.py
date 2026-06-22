@@ -65,8 +65,7 @@ from __future__ import annotations
 import uuid
 from pathlib import Path
 
-import git as gitmod
-from sqlalchemy.orm import Session
+from peerpedia_core.storage.db import Session
 
 from peerpedia_core.config.params import params
 from peerpedia_core.exceptions import BadRequestError, ConflictError, NotAuthorizedError, NotFoundError
@@ -87,10 +86,14 @@ from peerpedia_core.storage.db.crud_article import (
 )
 from peerpedia_core.storage.db.crud_maintainer import add_maintainer
 from peerpedia_core.storage.db.crud_user import get_user
+from peerpedia_core.storage.crypto import _make_temp_key
 from peerpedia_core.storage.git_backend import (
     DEFAULT_ARTICLES_DIR,
+    checkout_files,
+    clone_article_repo,
     commit_article,
     get_commit_authors,
+    get_head_hash,
     init_article_repo,
 )
 from peerpedia_core.storage.locks import get_article_lock
@@ -111,7 +114,7 @@ def rebuild_article_authors(db: Session, article_id: str, since_hash: str | None
         raise NotFoundError(f"Article not found: {article_id}")
 
     rp = DEFAULT_ARTICLES_DIR / article_id
-    head_hash = gitmod.Repo(rp).head.commit.hexsha
+    head_hash = get_head_hash(rp)
     new_ids = get_commit_authors(rp, since_hash=since_hash)
 
     existing = set(get_author_ids(db, article_id))
@@ -148,7 +151,7 @@ def fork_article(db: Session, article_id: str, user_id: str) -> dict:
     src = DEFAULT_ARTICLES_DIR / article_id
     dst = DEFAULT_ARTICLES_DIR / fork_id
 
-    gitmod.Repo.clone_from(str(src), str(dst))
+    clone_article_repo(src, dst)
 
     # Derive authors from git first, then write DB — git is the SOT.
     # Original authors from git history remain as ArticleAuthor
@@ -179,7 +182,14 @@ def fork_article(db: Session, article_id: str, user_id: str) -> dict:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-def rollback_article(db: Session, article_id: str, target_hash: str, user_id: str) -> dict:
+def rollback_article(
+    db: Session,
+    article_id: str,
+    target_hash: str,
+    user_id: str,
+    signing_key_bytes: bytes | None = None,
+    pubkey_hex: str | None = None,
+) -> dict:
     """Rollback to a previous commit (creates a new revert commit, not force-push).
 
     Returns:
@@ -199,13 +209,18 @@ def rollback_article(db: Session, article_id: str, target_hash: str, user_id: st
     if not (rp / ".git").is_dir():
         raise NotFoundError("Article repo not found")
 
-    repo = gitmod.Repo(rp)
-    repo.git.checkout(target_hash, "--", ".")
+    checkout_files(rp, target_hash)
 
     author_name = user.name
-    new_hash = commit_article(
-        rp, f"Rollback to {target_hash[:8]}", author_name, f"{user_id}@peerpedia",
-    )
+    key_path = _make_temp_key(signing_key_bytes) if signing_key_bytes else None
+    try:
+        new_hash = commit_article(
+            rp, f"Rollback to {target_hash[:8]}", author_name, f"{user_id}@peerpedia",
+            signing_key=key_path, pubkey_hex=pubkey_hex,
+        )
+    finally:
+        if key_path:
+            key_path.unlink(missing_ok=True)
 
     # G3: only trigger sedimentation for published articles
     if old_status == "published":
@@ -235,11 +250,16 @@ def create_article_with_content(
     abstract: str | None = None,
     keywords: str | None = None,
     categories: str | None = None,
+    signing_key_bytes: bytes | None = None,
+    pubkey_hex: str | None = None,
 ) -> dict:
     """Create an article as a draft.
 
     Articles are always created as ``draft``.  To publish with self-review
     and start the sink timer, call ``publish_article``.
+
+    If *signing_key_bytes* and *pubkey_hex* are provided, the initial commit
+    is signed via SSH and the pubkey is embedded in the commit message.
 
     Returns:
         {"id": <article_id>, "title": ..., "status": "draft", "commit_hash": ...}
@@ -277,9 +297,15 @@ def create_article_with_content(
     fm = make_article_frontmatter(title, abstract, keywords, categories)
     (rp / f"article{ext}").write_text(fm + content)
     user = get_user(db, author_ids[0])
-    commit_hash = commit_article(
-        rp, "Initial submission", user.name, f"{user.id}@peerpedia",
-    )
+    key_path = _make_temp_key(signing_key_bytes) if signing_key_bytes else None
+    try:
+        commit_hash = commit_article(
+            rp, "Initial submission", user.name, f"{user.id}@peerpedia",
+            signing_key=key_path, pubkey_hex=pubkey_hex,
+        )
+    finally:
+        if key_path:
+            key_path.unlink(missing_ok=True)
 
     # Then DB — git is the SOT.
     a = create_article(
@@ -320,6 +346,8 @@ def update_article_content(
     categories: str | None = None,
     message: str,
     user_id: str,
+    signing_key_bytes: bytes | None = None,
+    pubkey_hex: str | None = None,
 ) -> dict:
     """Edit an article: update content/metadata, commit to git.
 
@@ -362,7 +390,15 @@ def update_article_content(
     article_path.write_text(new_fm + body)
 
     # Git commit first — then sync DB.
-    commit_hash = commit_article(rp, message, user.name, f"{user_id}@peerpedia")
+    key_path = _make_temp_key(signing_key_bytes) if signing_key_bytes else None
+    try:
+        commit_hash = commit_article(
+            rp, message, user.name, f"{user_id}@peerpedia",
+            signing_key=key_path, pubkey_hex=pubkey_hex,
+        )
+    finally:
+        if key_path:
+            key_path.unlink(missing_ok=True)
 
     # DB metadata follows git.
     if title is not None:

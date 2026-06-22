@@ -140,6 +140,24 @@ def _resolve_user(db, user_ref: str | None) -> str:
     return user_ref
 
 
+def _resolve_user_with_key(db, user_ref: str | None) -> tuple[str, bytes | None]:
+    """Resolve user reference to (user_id, private_key_bytes | None).
+
+    Like _resolve_user, but also reads the private key from the session file.
+    Returns None for the key if no session exists or the session has no key
+    (e.g., pre-auth-migration sessions).
+    """
+    user_id = _resolve_user(db, user_ref)
+    session_file = Path.home() / ".peerpedia" / "session.json"
+    key_bytes = None
+    if session_file.exists():
+        session = json.loads(session_file.read_text())
+        key_hex = session.get("private_key_hex")
+        if key_hex:
+            key_bytes = bytes.fromhex(key_hex)
+    return user_id, key_bytes
+
+
 def _parse_scores(scores_str: str | None) -> dict | None:
     """Parse "orig=4,rigor=3,..." from command-line into a dict."""
     if not scores_str:

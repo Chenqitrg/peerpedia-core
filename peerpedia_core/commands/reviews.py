@@ -48,7 +48,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from sqlalchemy.orm import Session
+from peerpedia_core.storage.db import Session
 
 from peerpedia_core.exceptions import ConflictError, NotFoundError
 from peerpedia_core.policies.articles import assert_can_submit_review
@@ -67,6 +67,8 @@ def submit_review(
     scores: dict,
     *,
     comment: str = "",
+    signing_key_bytes: bytes | None = None,
+    pubkey_hex: str | None = None,
 ) -> dict:
     """Submit or update a review for an article.
 
@@ -74,13 +76,8 @@ def submit_review(
     Recomputes article score and author reputations.
     The commit_hash for the DB cache is taken from the new git commit.
 
-    TODO(integrity): key derivation and signing flow.
-    Each user has a key pair derived from their password (Argon2 → seed →
-    Ed25519).  ``submit_review`` looks up the user's key from the DB and
-    passes it to ``_write_review_to_git`` → ``commit_article`` for signing.
-    The user only needs to enter their password once per session (not per
-    commit).  Model after Signal: password → deterministic key, no key
-    management burden on the user.
+    If *signing_key_bytes* and *pubkey_hex* are provided, the review commit
+    is signed via SSH and the pubkey is embedded.
     """
     user = get_user(db, reviewer_id)
     if user is None:
@@ -91,17 +88,20 @@ def submit_review(
     author_ids = get_author_ids(db, article_id)
 
     if article.status == "sedimentation":
-        # Anonymous: derive a stable anonymous ID so the reviewer's identity
-        # is not exposed in the git directory structure.  The same
-        # (article, reviewer) pair always maps to the same anonymous ID.
         anon_id = _derive_anonymous_id(article_id, reviewer_id)
         display_name = derive_anonymous_name(anon_id)
         email = f"anon-{anon_id}@peerpedia"
-        commit_hash = _write_review_to_git(article_id, anon_id, scores, comment, display_name, email)
+        commit_hash = _write_review_to_git(
+            article_id, anon_id, scores, comment, display_name, email,
+            signing_key_bytes=signing_key_bytes, pubkey_hex=pubkey_hex,
+        )
     else:
         display_name = user.name
         email = f"{reviewer_id}@peerpedia"
-        commit_hash = _write_review_to_git(article_id, reviewer_id, scores, comment, display_name, email)
+        commit_hash = _write_review_to_git(
+            article_id, reviewer_id, scores, comment, display_name, email,
+            signing_key_bytes=signing_key_bytes, pubkey_hex=pubkey_hex,
+        )
 
     r = upsert_review(
         db, article_id=article_id, commit_hash=commit_hash,
@@ -134,6 +134,8 @@ def _write_review_to_git(
     comment: str,
     display_name: str,
     email: str,
+    signing_key_bytes: bytes | None = None,
+    pubkey_hex: str | None = None,
 ) -> str:
     """Write review to git: a folder per reviewer with ``scores.json`` and
     a ``threads/`` subdirectory of timestamped Markdown files.
@@ -167,16 +169,20 @@ def _write_review_to_git(
     acquired = lock.acquire(timeout=10)
     if not acquired:
         raise ConflictError("Article busy — retry later")
+    from peerpedia_core.storage.crypto import _make_temp_key
+
     try:
-        h = commit_article(rp, f"[review] {display_name}", display_name, email)
+        key_path = _make_temp_key(signing_key_bytes) if signing_key_bytes else None
+        try:
+            h = commit_article(
+                rp, f"[review] {display_name}", display_name, email,
+                signing_key=key_path, pubkey_hex=pubkey_hex,
+            )
+        finally:
+            if key_path:
+                key_path.unlink(missing_ok=True)
     finally:
         lock.release()
-
-    # TODO(integrity): sign this commit with the reviewer's key.
-    # Model after Signal: user remembers one password → derive key pair via
-    # Argon2 + Ed25519.  ``commit_article`` should accept an optional signing
-    # key and produce a signed commit (git commit -S equivalent).  The key
-    # never leaves the local machine; only the public key is published.
     return h
 
 

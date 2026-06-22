@@ -24,7 +24,7 @@ to ensure at least one maintainer exists at all times.
 
 from __future__ import annotations
 
-from sqlalchemy.orm import Session
+from peerpedia_core.storage.db import Session
 
 from peerpedia_core.exceptions import ConflictError, NotAuthorizedError, NotFoundError
 from peerpedia_core.policies.articles import get_article_or_raise, _is_maintainer

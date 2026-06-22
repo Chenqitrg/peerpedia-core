@@ -122,6 +122,22 @@ def list_users(session: Session) -> list[User]:
     return session.query(User).order_by(User.created_at.desc()).all()
 
 
+def get_users_by_ids(session: Session, user_ids: set[str]) -> list[User]:
+    """Return User records for the given IDs.
+
+    Raises ValueError if any *user_ids* are not found — missing users
+    at this point means data corruption (review from nonexistent user).
+    """
+    if not user_ids:
+        return []
+    users = session.query(User).filter(User.id.in_(user_ids)).all()
+    found = {u.id for u in users}
+    missing = user_ids - found
+    if missing:
+        raise ValueError(f"Users not found: {', '.join(sorted(missing))}")
+    return users
+
+
 def update_user_reputation(session: Session, user_id: str, reputation: dict) -> User:
     u = session.get(User, user_id)
     if u is None:

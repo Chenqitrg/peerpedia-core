@@ -23,9 +23,9 @@ peerpedia_core/
 │   │                          #   + list_review_dirs / read_review_scores
 │   ├── locks.py               #   文件锁（并发写保护）
 │   └── db/
-│       ├── __init__.py
-│       ├── engine.py          #   SQLAlchemy 引擎 + JSONList/JSONDict 类型 + init_db
-│       ├── models.py          #   ORM 模型（Article、User、Review、Follow…）
+│       ├── __init__.py          #   Facade：re-export Session + engine 工具
+│       ├── engine.py            #   SQLAlchemy 引擎 + JSONList/JSONDict 类型 + init_db
+│       ├── models.py            #   ORM 模型（Article、User、Review、Follow…）
 │       ├── session_utils.py   #   事务包装（commit/rollback 生命周期）
 │       ├── crud_article.py    #   Article CRUD
 │       ├── crud_user.py       #   User + Follow CRUD
@@ -132,10 +132,10 @@ sync/bundle_server.py                    sync/git_bundle.py
 
 | 文件 | 可以 import | 不可以 import |
 |------|-----------|-------------|
-| `commands/` | `storage/`、`policies/`、`workflow/`、`config/`、`exceptions/`、`types/` | `sync/` |
+| `commands/` | `storage/`、`policies/`、`workflow/`、`config/`、`exceptions/`、`types/` | `sync/`、**GitPython**、**直接 `sqlalchemy`** |
 | `storage/db/` | `models.py`、`engine.py`、SQLAlchemy | `commands/`、`git_backend.py`、`sync/` |
-| `storage/git_backend.py` | GitPython、`pathlib` | `storage/db/`、`commands/`、`sync/` |
-| `policies/` | `storage/db/`、`exceptions/` | `commands/`、`sync/` |
+| `storage/git_backend.py` | GitPython、`pathlib`、stdlib | `storage/db/`、任何 `peerpedia_core` 模块** |
+| `policies/` | `storage/db/`、`exceptions/` | `commands/`、`sync/`、**GitPython**、**直接 `sqlalchemy`** |
 | `workflow/` | `config/`、`types/` | `storage/`、`commands/`、`Session`、`sync/` |
 | `sync/bundle_client.py` | `commands/`（仅 `apply_sync_bundle`）、`sync/git_bundle.py`、`sync/transport/` | `storage/`、`policies/`、`workflow/` |
 | `sync/bundle_server.py` | `commands/`（仅 `apply_sync_bundle`）、`sync/git_bundle.py` | `storage/`、`policies/`、`workflow/` |
@@ -147,6 +147,10 @@ sync/bundle_server.py                    sync/git_bundle.py
 **workflow/ 是纯计算**——不 import `storage/`、不 import `Session`。所有数据由 `commands/` 传入。
 
 **Sync Domain 自包含**——`git_bundle.py` 和 `monotonic_search.py` 零依赖 `storage/` 和 `commands/`。只通过 GitPython 操作裸 git 仓库。
+
+**硬约束 — import git**——除 `storage/git_backend.py` 和 `sync/git_bundle.py`（含 `bundle_client` / `bundle_server`）外，任何模块不得 `import git`（GitPython）。所有 git 操作必须经过这两个模块的函数接口。
+
+**硬约束 — 数据库库**——除 `storage/db/` 外，任何模块不得直接 `import sqlalchemy`。`Session` 类型通过 `storage/db/__init__.py` facade 转发（`from peerpedia_core.storage.db import Session`），不得通过 `sqlalchemy.orm` 直接导入。任何 `db.query()` / `session.query()` / `db.get(Model, id)` 调用必须封装为 CRUD 函数。
 
 ## 状态机
 

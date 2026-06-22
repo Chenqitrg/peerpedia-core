@@ -51,3 +51,7 @@ class ConflictError(PeerpediaError):
 
 class BadRequestError(PeerpediaError):
     """Input is invalid or missing required data."""
+
+
+class SignatureVerificationError(PeerpediaError):
+    """Commit signature is invalid, missing, or key mismatch (TOFU)."""

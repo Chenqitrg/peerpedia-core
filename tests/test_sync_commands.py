@@ -40,6 +40,88 @@ def _create_user(db: Session, user_id: str, name: str = "Test Author"):
     return u
 
 
+def _make_signed_commit(
+    repo_path: Path, message: str, author_name: str, author_email: str,
+) -> str:
+    """Create an SSH-signed commit with a Pubkey trailer. Returns commit hash.
+
+    Generates a temporary Ed25519 key pair, signs the commit, and cleans up.
+    Used in sync tests to produce commits that pass the TOFU verify loop.
+    """
+    import hashlib
+    import os
+    import subprocess
+    import tempfile
+
+    import git as gitmod
+
+    # Derive a deterministic test key pair
+    seed = hashlib.scrypt(b"test-password", salt=b"test-salt-16bytes",
+                          n=2**14, r=8, p=1, dklen=32)
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import ed25519
+    priv = ed25519.Ed25519PrivateKey.from_private_bytes(seed)
+    # Derive the real public key hex — this must match the signing key
+    # so that signature verification succeeds.
+    real_pubkey_hex = priv.public_key().public_bytes_raw().hex()
+
+    # Write private key in OpenSSH format (required by ssh-keygen)
+    priv_pem = priv.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.OpenSSH,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
+    fd, priv_path = tempfile.mkstemp(suffix="_peerpedia_test_ed25519")
+    with os.fdopen(fd, "wb") as f:
+        f.write(priv_pem)
+    os.chmod(priv_path, 0o600)
+    priv_path = Path(priv_path)
+
+    # Derive SSH public key
+    pub_path = priv_path.with_suffix(priv_path.suffix + ".pub")
+    result = subprocess.run(
+        ["ssh-keygen", "-y", "-f", str(priv_path)],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"ssh-keygen failed: {result.stderr}")
+    pub_path.write_text(result.stdout.strip())
+
+    # Write allowed_signers
+    fd, signers_path = tempfile.mkstemp(suffix="_allowed_signers")
+    with os.fdopen(fd, "w") as f:
+        f.write(f"{author_email} {result.stdout.strip()}\n")
+    signers_path = Path(signers_path)
+
+    try:
+        repo = gitmod.Repo(repo_path)
+        # Stage and write index
+        repo.git.add(A=True)
+        repo.index.write()
+        full_msg = f"{message}\n\nPubkey: {real_pubkey_hex}"
+        # Use GIT_CONFIG_COUNT env vars — -c after 'commit' means
+        # --reedit-message to git >= 2.44, not a config override.
+        sign_env = {
+            **os.environ,
+            "GIT_CONFIG_COUNT": "2",
+            "GIT_CONFIG_KEY_0": "gpg.format",
+            "GIT_CONFIG_VALUE_0": "ssh",
+            "GIT_CONFIG_KEY_1": "user.signingkey",
+            "GIT_CONFIG_VALUE_1": str(pub_path),
+        }
+        repo.git.commit(
+            S=True, gpg_sign=str(pub_path),
+            m=full_msg,
+            author=f"{author_name} <{author_email}>",
+            env=sign_env,
+        )
+        return repo.head.commit.hexsha
+    finally:
+        priv_path.unlink(missing_ok=True)
+        pub_path.unlink(missing_ok=True)
+        signers_path.unlink(missing_ok=True)
+
+
 @pytest.fixture
 def db(engine):
     """Session from temporary SQLite."""
@@ -278,20 +360,18 @@ class TestApplySyncBundle:
         (rp / "article.md").write_text("# Bundle Test\n")
         h1 = commit_article(rp, "Initial", "Alice", "alice@peerpedia")
 
-        # Create a "remote" commit and set it as FETCH_HEAD
+        # Create a "remote" signed commit and set it as FETCH_HEAD
         remote_dir = articles_dir / "remote-clone"
         import git as gitmod
         import shutil
-        # Clone to simulate remote
         clone_repo = gitmod.Repo.clone_from(str(rp), str(remote_dir))
         (remote_dir / "article.md").write_text("# Updated\n\nFrom remote.")
-        clone_repo.index.add(["article.md"])
-        clone_repo.index.commit("Remote update", author=gitmod.Actor("Alice", "alice@peerpedia"),
-                                 committer=gitmod.Actor("Alice", "alice@peerpedia"))
+        remote_head = _make_signed_commit(
+            remote_dir, "Remote update", "Alice", "alice@peerpedia",
+        )
 
         # Point FETCH_HEAD to the remote's HEAD
         repo = gitmod.Repo(rp)
-        remote_head = clone_repo.head.commit.hexsha
         (rp / ".git" / "FETCH_HEAD").write_text(
             f"{remote_head}\t\tbranch 'main' of remote\n"
         )

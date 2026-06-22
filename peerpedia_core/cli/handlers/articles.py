@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from peerpedia_core.cli.helpers import (
-    _with_db, _resolve_user, _find_article_file, _open_editor,
+    _with_db, _resolve_user, _resolve_user_with_key, _find_article_file, _open_editor,
     _prompt_commit_message, _parse_scores, _page, _ok, _die, _json_out,
 )
 from peerpedia_core.cli.display import (
@@ -33,13 +33,18 @@ def _cmd_article_create(db, args):
     4. Optionally publish immediately (--publish).
     5. Display result (rich panel or JSON).
     """
-    user_id = _resolve_user(db, args.user)
+    user_id, key_bytes = _resolve_user_with_key(db, args.user)
+    user = get_user(db, user_id)
+    if user is None:
+        _die(f"User '{user_id}' not found — DB inconsistency.")
     content = args.content or ""
     if not content and not args.no_editor:
         content = _open_editor("")
     result = create_article_with_content(
         db, title=args.title, content=content, format=args.format,
         author_ids=[user_id],
+        signing_key_bytes=key_bytes,
+        pubkey_hex=user.public_key,
     )
     if args.publish:
         self_review = _parse_scores(args.scores) if args.scores else None
@@ -126,7 +131,10 @@ def _cmd_article_edit(db, args):
     """
     import difflib
 
-    user_id = _resolve_user(db, args.user)
+    user_id, key_bytes = _resolve_user_with_key(db, args.user)
+    user = get_user(db, user_id)
+    if user is None:
+        _die(f"User '{user_id}' not found — DB inconsistency.")
     raw = _find_article_file(args.id).read_text()
 
     if args.content is not None:
@@ -156,6 +164,7 @@ def _cmd_article_edit(db, args):
     result = update_article_content(
         db, args.id, content=new_content, title=args.title, user_id=user_id,
         message=message,
+        signing_key_bytes=key_bytes, pubkey_hex=user.public_key,
     )
     db.commit()
     _try_sync(db)

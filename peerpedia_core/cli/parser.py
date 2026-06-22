@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import argparse
 
-from peerpedia_core.cli.handlers.account import _cmd_register, _cmd_whoami
+from peerpedia_core.cli.handlers.account import _cmd_register, _cmd_login, _cmd_whoami
 from peerpedia_core.cli.handlers.articles import (
     _cmd_article_create, _cmd_article_show, _cmd_article_list,
     _cmd_article_edit, _cmd_article_publish, _cmd_article_delete,
@@ -57,6 +57,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--name", required=True, help="Your display name")
     p.add_argument("--json", action="store_true", help="Output as JSON")
     p.set_defaults(func=_cmd_register)
+
+    p = acct_subs.add_parser("login", help=_help(_cmd_login))
+    p.add_argument("--name", required=True, help="Your display name")
+    p.add_argument("--json", action="store_true", help="Output as JSON")
+    p.set_defaults(func=_cmd_login)
 
     p = acct_subs.add_parser("whoami", help=_help(_cmd_whoami))
     p.add_argument("--json", action="store_true", help="Output as JSON")

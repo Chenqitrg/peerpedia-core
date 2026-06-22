@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy.orm import Session
+from peerpedia_core.storage.db import Session
 
 
 def add_bookmark(db: Session, user_id: str, article_id: str):

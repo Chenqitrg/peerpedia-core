@@ -49,6 +49,8 @@ state.  Full historical review reconstruction from git history is deferred.
 
 from pathlib import Path
 
+import git
+
 DEFAULT_ARTICLES_DIR = Path.home() / ".peerpedia" / "articles"
 
 
@@ -63,8 +65,6 @@ def init_article_repo(repo_path: Path) -> Path:
     only as a building block for ``create_article_with_content``
     (and for tests that need a bare git repo).
     """
-    import git
-
     repo_path.mkdir(parents=True, exist_ok=True)
     git.Repo.init(repo_path)
     (repo_path / "reviews").mkdir(exist_ok=True)
@@ -76,52 +76,138 @@ def commit_article(
     message: str,
     author_name: str,
     author_email: str,
+    signing_key: Path | None = None,
+    pubkey_hex: str | None = None,
 ) -> str:
     """Stage all changes and commit. Returns the commit hash.
 
     If the repo already has a HEAD and nothing changed, returns the
-    current HEAD hash without creating a new commit.  Always creates
-    an initial commit on an empty repo.
+    current HEAD hash without creating a new commit.
+
+    If *signing_key* and *pubkey_hex* are provided, the commit is signed
+    via git's SSH signing (``gpg.format=ssh``) and the pubkey is embedded
+    in the commit message as ``Pubkey: <hex>``.
     """
-    import git
+    import os
 
     repo = git.Repo(repo_path)
     repo.git.add(A=True)
 
-    # Nothing to commit — return current HEAD
+    # TODO: silently returning the existing HEAD hides the no-op from the
+    # caller.  The caller should decide whether to warn, skip downstream
+    # work, or reject.  Options: return (hash, was_new), raise, or let git
+    # create the empty commit when --allow-empty was the caller's intent.
     if not repo.is_dirty(untracked_files=True) and repo.head.is_valid():
         return repo.head.commit.hexsha  # type: ignore[union-attr]
 
-    # Create commit (initial commit or normal commit)
-    commit = repo.index.commit(
-        message,
-        author=git.Actor(author_name, author_email),
-        committer=git.Actor(author_name, author_email),
+    # Fail fast: pubkey requires signing key
+    if pubkey_hex and not signing_key:
+        raise ValueError(
+            "pubkey_hex provided but signing_key is None — "
+            "a commit with a Pubkey trailer MUST be signed"
+        )
+
+    # Append pubkey to message if provided
+    full_message = f"{message}\n\nPubkey: {pubkey_hex}" if pubkey_hex else message
+
+    # Write index (git.commit() does not auto-write; index.commit() does)
+    repo.index.write()
+
+    # Build commit kwargs
+    if signing_key:
+        pub_path = signing_key.with_suffix(signing_key.suffix + ".pub")
+        _write_ssh_pubkey(signing_key, pub_path)
+        allowed_signers = _write_allowed_signers(author_email, pub_path)
+        try:
+            # Use GIT_CONFIG_COUNT env vars instead of -c flags so the
+            # config is applied BEFORE the subcommand — git >= 2.44 rejects
+            # -c after 'commit' (it also means --reedit-message there).
+            sign_env = {
+                **os.environ,
+                "GIT_CONFIG_COUNT": "3",
+                "GIT_CONFIG_KEY_0": "gpg.format",
+                "GIT_CONFIG_VALUE_0": "ssh",
+                "GIT_CONFIG_KEY_1": "gpg.ssh.allowedSignersFile",
+                "GIT_CONFIG_VALUE_1": str(allowed_signers),
+                "GIT_CONFIG_KEY_2": "user.signingkey",
+                "GIT_CONFIG_VALUE_2": str(pub_path),
+            }
+            repo.git.commit(
+                S=True,
+                gpg_sign=str(pub_path),
+                m=full_message,
+                author=f"{author_name} <{author_email}>",
+                allow_empty=True,
+                env=sign_env,
+            )
+        finally:
+            pub_path.unlink(missing_ok=True)
+            allowed_signers.unlink(missing_ok=True)
+    else:
+        repo.git.commit(
+            m=full_message,
+            author=f"{author_name} <{author_email}>",
+            allow_empty=True,
+        )
+
+    return repo.head.commit.hexsha
+
+
+def _write_ssh_pubkey(private_key_path: Path, pub_path: Path) -> None:
+    """Derive the SSH public key from a private key file using ssh-keygen.
+
+    Raises RuntimeError if ssh-keygen fails (e.g., malformed key).
+    """
+    import subprocess
+
+    result = subprocess.run(
+        ["ssh-keygen", "-y", "-f", str(private_key_path)],
+        capture_output=True, text=True,
     )
-    return commit.hexsha
+    if result.returncode != 0 or not result.stdout.strip():
+        raise RuntimeError(
+            f"ssh-keygen failed to derive public key: {result.stderr.strip()}"
+        )
+    pub_path.write_text(result.stdout.strip())
+
+
+def _write_allowed_signers(email: str, pub_path: Path) -> Path:
+    """Write a temporary allowed_signers file for git SSH signature verification."""
+    import os
+    import tempfile
+
+    pubkey_line = pub_path.read_text().strip()
+    fd, path = tempfile.mkstemp(suffix="_allowed_signers")
+    with os.fdopen(fd, "w") as f:
+        f.write(f"{email} {pubkey_line}\n")
+    return Path(path)
 
 
 def get_commit_history(
     repo_path: Path,
     max_count: int = 50,
+    since_hash: str | None = None,
 ) -> list[dict]:
     """Get commit history for an article.
+
+    If *since_hash* is given, only commits reachable from HEAD but not
+    from *since_hash* are included (``since_hash..HEAD``).
 
     Raises ValueError if the repo has no commits — the caller should
     commit before asking for history.
     """
-    import git
-
     repo = git.Repo(repo_path)
     if not repo.head.is_valid():
         raise ValueError(f"Repo has no commits: {repo_path}")
 
+    rev = f"{since_hash}..HEAD" if since_hash else None
     return [
         {
             "hash": c.hexsha,
             "parents": [p.hexsha for p in c.parents],
             "message": c.message.strip(),
             "author": str(c.author),
+            "author_email": (c.author.email or "").strip() if c.author else "",
             "timestamp": c.committed_datetime.isoformat(),
             "stats": {
                 "total": c.stats.total,
@@ -130,7 +216,7 @@ def get_commit_history(
                 "deletions": c.stats.total.get("deletions", 0) if isinstance(c.stats.total, dict) else 0,
             },
         }
-        for c in repo.iter_commits(max_count=max_count)
+        for c in repo.iter_commits(rev=rev, max_count=max_count)
     ]
 
 
@@ -161,9 +247,7 @@ def get_commit_authors(
     status-transition commits, merge commits, and commits authored by the
     system git config.
     """
-    import git as _git
-
-    repo = _git.Repo(repo_path)
+    repo = git.Repo(repo_path)
     rev = f"{since_hash}..HEAD" if since_hash else None
     return {
         c.author.email.split("@", 1)[0]
@@ -178,8 +262,6 @@ def get_diff_between(repo_path: Path, hash1: str, hash2: str) -> dict:
 
     hash1 is the "old" commit, hash2 is the "new" commit.
     """
-    import git
-
     repo = git.Repo(repo_path)
     c1 = repo.commit(hash1)
     c2 = repo.commit(hash2)
@@ -241,7 +323,6 @@ def merge_git_repos(target: Path, fork: Path, author_name: str) -> str:
 
     Raises MergeConflictError if the merge has conflicts.
     """
-    import git
     import os
 
     target_repo = git.Repo(target)
@@ -323,3 +404,90 @@ def delete_article_repo(repo_path: Path) -> None:
 
     if repo_path.exists():
         shutil.rmtree(str(repo_path))
+
+
+# ── Sync helpers ────────────────────────────────────────────────────────────
+
+
+def get_head_hash(repo_path: Path) -> str:
+    """Return the commit hash of HEAD.
+
+    Raises ValueError if the repo has no commits.
+    """
+    repo = git.Repo(repo_path)
+    if not repo.head.is_valid():
+        raise ValueError(f"Repo has no commits: {repo_path}")
+    return repo.head.commit.hexsha
+
+
+def merge_fetch_head(repo_path: Path, *, ff_only: bool = True) -> str:
+    """Merge FETCH_HEAD into the current branch. Returns the new HEAD hash.
+
+    Raises MergeConflictError if the merge fails (e.g. non-fast-forward
+    when *ff_only* is True).
+    """
+    repo = git.Repo(repo_path)
+    merge_args = ["FETCH_HEAD", "--ff-only"] if ff_only else ["FETCH_HEAD"]
+    try:
+        repo.git.merge(*merge_args)
+    except git.GitCommandError as e:
+        try:
+            repo.git.merge("--abort")
+        except git.GitCommandError:
+            pass
+        raise MergeConflictError(f"Merge failed: {e}") from e
+    return repo.head.commit.hexsha
+
+
+def verify_commit_signature(
+    repo_path: Path,
+    commit_hash: str,
+    pubkey_ssh_line: str,
+    author_email: str,
+) -> None:
+    """Verify that *commit_hash* has a valid Ed25519 signature from *author_email*.
+
+    *pubkey_ssh_line* must be a full SSH public key line
+    (``"ssh-ed25519 AAAAC3NzaC1..."``) — it is written to a temporary
+    allowed_signers file for git's verification.
+
+    Raises RuntimeError if verification fails.
+    """
+    import tempfile
+
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix="_verify_signers", delete=False
+    ) as f:
+        f.write(f"{author_email} {pubkey_ssh_line}\n")
+    signers_path = Path(f.name)
+    try:
+        repo = git.Repo(repo_path)
+        repo.git.config("gpg.format", "ssh")
+        repo.git.config("gpg.ssh.allowedSignersFile", str(signers_path))
+        repo.git.verify_commit(commit_hash)
+    except git.GitCommandError as e:
+        raise RuntimeError(
+            f"Commit {commit_hash[:8]} by {author_email} "
+            f"signature verification failed: {e.stderr.strip()}"
+        ) from e
+    finally:
+        signers_path.unlink(missing_ok=True)
+
+
+def clone_article_repo(src: Path, dst: Path) -> Path:
+    """Clone *src* git repository to *dst*. Returns *dst*.
+
+    *dst* must not already exist — git clone creates it.
+    """
+    git.Repo.clone_from(str(src), str(dst))
+    return dst
+
+
+def checkout_files(repo_path: Path, commit_hash: str) -> None:
+    """Checkout all files from *commit_hash* into the working tree.
+
+    Equivalent to ``git checkout <commit> -- .`` — restores the worktree
+    to the state at *commit_hash* without moving HEAD.
+    """
+    repo = git.Repo(repo_path)
+    repo.git.checkout(commit_hash, "--", ".")

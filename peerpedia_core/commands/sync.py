@@ -44,17 +44,24 @@ Reviewer's checklist
 
 from __future__ import annotations
 
-from sqlalchemy.orm import Session
+from pathlib import Path
 
-from peerpedia_core.exceptions import NotAuthorizedError
+from peerpedia_core.storage.db import Session
+
+from peerpedia_core.exceptions import NotAuthorizedError, SignatureVerificationError
 from peerpedia_core.storage.db.crud_article import get_article
 from peerpedia_core.storage.db.crud_maintainer import get_maintainer_ids
 from peerpedia_core.storage.db.crud_review import upsert_review
+from peerpedia_core.storage.crypto import pubkey_hex_to_ssh_line
 from peerpedia_core.storage.git_backend import (
     DEFAULT_ARTICLES_DIR,
     MergeConflictError,
+    get_commit_history,
+    get_head_hash,
     list_review_dirs,
+    merge_fetch_head,
     read_review_scores,
+    verify_commit_signature,
 )
 
 from peerpedia_core.commands.articles import rebuild_article_authors
@@ -89,8 +96,6 @@ def git_sync_status(db: Session, article_id: str) -> None:
     message has the form ``[status] <valid_status>``.
     The latest matching commit wins.
     """
-    import git
-
     article = get_article(db, article_id)
     if article is None:
         raise FileNotFoundError(f"Article not found: {article_id}")
@@ -99,12 +104,11 @@ def git_sync_status(db: Session, article_id: str) -> None:
     if not (rp / ".git").is_dir():
         raise FileNotFoundError(f"Git repo not found for article: {article_id}")
 
-    repo = git.Repo(rp)
     since = article.last_author_rebuild_hash
-    rev = f"{since}..HEAD" if since else None
-
-    for commit in repo.iter_commits(rev=rev):
-        new_status = _parse_status_tag(commit.message, commit.author.email)
+    for commit in get_commit_history(rp, since_hash=since):
+        new_status = _parse_status_tag(
+            commit["message"], commit["author_email"]
+        )
         if new_status:
             article.status = new_status
             break  # iter_commits returns newest first — first match is the latest status
@@ -121,10 +125,8 @@ def git_sync_reviews(db: Session, article_id: str) -> None:
 
     Fail fast: malformed or missing scores.json raises immediately.
     """
-    import git
-
     rp = DEFAULT_ARTICLES_DIR / article_id
-    head_hash = git.Repo(rp).head.commit.hexsha
+    head_hash = get_head_hash(rp)
 
     for dir_name in list_review_dirs(rp):
         scores = read_review_scores(rp, dir_name)
@@ -167,29 +169,18 @@ def apply_sync_bundle(
     Raises:
         MergeConflictError: merge conflict (ff-only rejected).
     """
-    import git
-
     rp = DEFAULT_ARTICLES_DIR / article_id
-    repo = git.Repo(rp)
 
-    merge_args = ["FETCH_HEAD", "--ff-only"] if ff_only else ["FETCH_HEAD"]
     try:
-        repo.git.merge(*merge_args)
-    except git.GitCommandError as e:
-        try:
-            repo.git.merge("--abort")
-        except git.GitCommandError:
-            pass
-        raise MergeConflictError(f"Merge failed: {e}") from e
+        old_head = get_head_hash(rp)
+    except ValueError:
+        old_head = None
 
-    new_head = repo.head.commit.hexsha
+    new_head = merge_fetch_head(rp, ff_only=ff_only)
 
-    # TODO(integrity): verify review commit signatures before applying.
-    # After merge, walk new commits touching reviews/*/ and verify each was
-    # signed by the reviewer's public key.  Reject the bundle if any review
-    # commit is unsigned or signed by an unexpected key.
-    # This is the server-side check that closes the loop with the TODO in
-    # commands/reviews.py (signing side).
+    # Verify signatures on all new human-authored commits (TOFU model).
+    if old_head:
+        _verify_new_commits(db, rp, since_hash=old_head)
 
     # DB reconciliation — git state changed, DB must follow
     rebuild_article_authors(db, article_id)
@@ -226,3 +217,64 @@ def apply_sync_bundle(
     publish_ready_articles(db)
 
     return new_head
+
+
+def _verify_new_commits(db: Session, repo_path: Path, *, since_hash: str) -> None:
+    """Verify signatures on new human-authored commits (TOFU model).
+
+    Each commit message must contain a ``Pubkey: <hex>`` trailer.  The
+    signature (gpgsig header) is verified against that pubkey.  The pubkey
+    is checked for consistency with any previously-stored pubkey for the
+    same user_id (TOFU: first encounter stores, mismatch rejects).
+    Platform commits (author_email == system@peerpedia) are skipped.
+    """
+    from peerpedia_core.storage.db.crud_user import get_user
+
+    for commit in get_commit_history(repo_path, since_hash=since_hash):
+        author_email = commit["author_email"]
+        if author_email == _PLATFORM_EMAIL:
+            continue
+
+        commit_hash = commit["hash"]
+        pubkey_hex = _extract_pubkey_from_message(commit["message"])
+        if not pubkey_hex:
+            raise SignatureVerificationError(
+                f"Commit {commit_hash[:8]} by {author_email} "
+                "has no Pubkey trailer — unsigned human commit"
+            )
+
+        # Verify the git signature (allowed_signers needs SSH-format key).
+        ssh_line = pubkey_hex_to_ssh_line(pubkey_hex)
+        verify_commit_signature(repo_path, commit_hash, ssh_line, author_email)
+
+        # TOFU pubkey consistency — check against stored pubkey.
+        user_id = _extract_user_id_from_email(author_email)
+        user = get_user(db, user_id)
+        if user is None:
+            # First encounter: user record doesn't exist locally yet.
+            # Expected for brand-new peers; pubkey is recorded when the
+            # user is first created via serve_post_articles.
+            continue
+        if user.public_key is None:
+            user.public_key = pubkey_hex
+        elif user.public_key != pubkey_hex:
+            raise SignatureVerificationError(
+                f"Pubkey mismatch for {user_id}: "
+                f"expected {user.public_key[:16]}..., "
+                f"got {pubkey_hex[:16]}..."
+            )
+
+
+def _extract_pubkey_from_message(message: str) -> str | None:
+    """Extract ``Pubkey: <hex>`` from a commit message. Returns hex or None."""
+    for line in message.splitlines():
+        if line.startswith("Pubkey: "):
+            candidate = line.split("Pubkey: ", 1)[1].strip()
+            if candidate:
+                return candidate
+    return None
+
+
+def _extract_user_id_from_email(email: str) -> str:
+    """Extract user_id from ``{user_id}@peerpedia`` format."""
+    return email.split("@")[0]

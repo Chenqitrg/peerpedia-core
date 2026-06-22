@@ -51,7 +51,7 @@ import tarfile
 from pathlib import Path
 
 import git as _git
-from sqlalchemy.orm import Session
+from peerpedia_core.storage.db import Session
 
 from peerpedia_core.commands import apply_sync_bundle
 from peerpedia_core.sync.git_bundle import (

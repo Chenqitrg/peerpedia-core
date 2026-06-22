@@ -51,13 +51,12 @@ from __future__ import annotations
 
 from datetime import timedelta
 
-from sqlalchemy.orm import Session
+from peerpedia_core.storage.db import Session
 
 from peerpedia_core.config.params import params
-from peerpedia_core.storage.db.crud_article import get_article, get_articles_by_author, get_author_ids
+from peerpedia_core.storage.db.crud_article import get_article, get_articles_by_author, get_author_ids, list_articles
 from peerpedia_core.storage.db.crud_review import get_reviews_for_article, upsert_review
-from peerpedia_core.storage.db.crud_user import update_user_reputation
-from peerpedia_core.storage.db.models import Article, User
+from peerpedia_core.storage.db.crud_user import get_user, get_users_by_ids, list_users, update_user_reputation
 from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, list_review_dirs, read_review_scores
 from peerpedia_core.types.scores import ReputationScores
 from peerpedia_core.workflow.reputation import (
@@ -81,7 +80,7 @@ def publish_ready_articles(db: Session) -> int:
 
     Returns the number of articles published in this call.
     """
-    articles = db.query(Article).filter(Article.status == "sedimentation").all()
+    articles = list_articles(db, status="sedimentation")
 
     published_count = 0
     all_author_ids: set[str] = set()
@@ -170,7 +169,7 @@ def recompute_article_score(db: Session, article_id: str) -> dict | None:
     authors = get_author_ids(db, article_id)
     # Batch-load all reviewer users in one query
     reviewer_ids = {r.reviewer_id for r in all_reviews}
-    reviewer_users = db.query(User).filter(User.id.in_(reviewer_ids)).all()
+    reviewer_users = get_users_by_ids(db, reviewer_ids)
     user_weight_map: dict[str, float] = {}
     for u in reviewer_users:
         user_weight_map[u.id] = get_reviewer_weight(u.reputation if u.reputation else None)
@@ -202,7 +201,7 @@ def recompute_author_reputation(db: Session, user_id: str) -> ReputationScores:
 
     Raises ValueError if the user does not exist.
     """
-    user = db.get(User, user_id)
+    user = get_user(db, user_id)
     if user is None:
         raise ValueError(f"User not found: {user_id}")
 
@@ -225,7 +224,7 @@ def recalculate_all_reputations(db: Session) -> int:
 
     Returns the number of users whose reputation was (re)computed.
     """
-    users = db.query(User).all()
+    users = list_users(db)
     for user in users:
         recompute_author_reputation(db, user.id)
     return len(users)

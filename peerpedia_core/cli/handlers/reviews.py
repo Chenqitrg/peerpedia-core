@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from peerpedia_core.cli.helpers import (
-    _with_db, _resolve_user, _parse_scores, _page, _ok, _die, _json_out,
+    _with_db, _resolve_user, _resolve_user_with_key, _parse_scores, _page, _ok, _die, _json_out,
     DEFAULT_ARTICLES_DIR,
 )
 from peerpedia_core.cli.display import _stars, console
@@ -21,10 +21,14 @@ def _cmd_review_submit(db, args):
     args: article_id [positional], --scores, --comment, --user, --json
     """
     scores = _parse_scores(args.scores)
+    reviewer_id, key_bytes = _resolve_user_with_key(db, args.user)
+    user = get_user(db, reviewer_id)
     result = submit_review(
-        db, article_id=args.article_id, reviewer_id=_resolve_user(db, args.user),
+        db, article_id=args.article_id, reviewer_id=reviewer_id,
         scores=scores,
         comment=args.comment or "",
+        signing_key_bytes=key_bytes,
+        pubkey_hex=user.public_key if user else None,
     )
     db.commit()
     _try_sync(db)

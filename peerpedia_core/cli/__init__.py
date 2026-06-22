@@ -7,6 +7,13 @@ r"""PeerPedia CLI — terminal-based frontend for the PeerPedia backend.
 data access goes through ``commands/`` facade.  Handlers import from
 ``cli.handlers`` (facade), not from individual handler modules.
 
+TODO(release): production readiness checklist —
+  - ``--version`` flag
+  - README with install + quickstart
+  - ``pip install`` smoke test (verify pyproject.toml deps)
+  - data migration strategy for schema evolution
+  - first-run wizard: ``peerpedia account register`` → ``article create``
+
 Sub-packages:
   ``display``     — Rich terminal formatting (Layer 0)
   ``helpers``     — DB, editor, user resolution, messaging (Layer 1)

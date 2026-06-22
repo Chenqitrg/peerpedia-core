@@ -92,6 +92,10 @@ def commit_article(
     If *signing_key* and *pubkey_hex* are provided, the commit is signed
     via git's SSH signing (``gpg.format=ssh``) and the pubkey is embedded
     in the commit message as ``Pubkey: <hex>``.
+
+    TODO(security): signing_key is optional — commits can be created without
+    a signature.  Unsigned commits are rejected on sync but pollute local
+    history.  Should eventually require signing for all non-platform commits.
     """
     import os
 

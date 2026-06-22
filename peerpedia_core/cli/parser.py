@@ -136,6 +136,7 @@ COMMAND_GROUPS = [
             (("article_id",), {"help": "Article ID (or prefix)"}),
         ]),
         ("list", _cmd_bookmark_list, []),
+        # TODO(bookmark-remove): ``bookmark remove <id>`` — crud_bookmark has it, just needs CLI wiring.
     ]),
     ("sync", None, [
         ("status", _cmd_sync_status, [
@@ -144,9 +145,17 @@ COMMAND_GROUPS = [
         ("push", _cmd_sync_push, [
             (("--server",), {"help": "Peer server URL (or set PEERPEDIA_SERVER env var)"}),
         ]),
-        # TODO(sync): add ``sync pull`` command.
-        # TODO(sync): add ``sync discover`` command.
+        # TODO(sync-pull): ``sync pull`` — git bundle pull (articles + reviews).
+        # TODO(social-graph): ``sync discover`` — P2P social graph discovery.
+        # TODO(social-graph): ``sync follow`` / ``sync unfollow`` — P2P follows.
+        # TODO(social-graph): ``sync bookmarks`` — P2P bookmark sync.
     ]),
+    # TODO(follow): ``follow <user>`` / ``unfollow <user>`` — CRUD complete,
+    # just needs commands wrapper + CLI wiring.  Follows are a discovery mechanism.
+    # TODO(discovery-feed): ``article feed`` — articles from followed users,
+    # ordered by recent activity.  list_articles(follower_id=) already exists.
+    # TODO(bookmark-remove): ``bookmark remove <id>`` — crud + commands done,
+    # just CLI wiring.
     ("maintainer", None, [
         ("add", _cmd_maintainer_add, [
             (("article_id",), {"help": "Article ID"}),
@@ -181,6 +190,12 @@ TOP_LEVEL = [
 
 
 def build_parser() -> argparse.ArgumentParser:
+    # TODO(version): ``--version`` flag — print version + exit.
+    # TODO(release): README + install guide — currently zero onboarding docs.
+    # TODO(release): pip install smoke test — verify deps are declared correctly.
+    # TODO(release): data migration — schema evolves, need upgrade path for users.
+    # TODO(ux-onboarding): first-run wizard — register + create first article flow.
+    # TODO(ux-onboarding): group commands in --help (Account / Article / Review).
     parser = argparse.ArgumentParser(
         "peerpedia", description="PeerPedia — peer review from the terminal",
     )

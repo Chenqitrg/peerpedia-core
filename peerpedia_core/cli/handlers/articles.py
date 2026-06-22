@@ -72,6 +72,9 @@ def _cmd_article_show(db, args):
     TODO(search): accept partial title, author name, or keywords instead
     of requiring the full article ID.  Match against local articles; if
     multiple hits, show a brief list so the user can refine the query.
+    This is the #1 UX gap — every command that takes an article ID
+    (show, edit, publish, delete, review submit, fork, bookmark, merge)
+    is unusable without prior knowledge of UUIDs.
     """
     article = get_article(db, args.id)
     if not article:

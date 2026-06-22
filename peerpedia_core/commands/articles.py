@@ -58,6 +58,11 @@ Reviewer's checklist
 - Does the state machine transition match the docstring and architecture.md?
 - For published→sedimentation triggers: is ``old_status`` captured *before*
   any status mutation?
+
+TODO(security): local integrity check — on article access (show, edit,
+publish), verify git commits are signed and DB matches git SOT.  If
+unsigned commits or DB tampering are detected, refuse operations and
+force a repair from git history.
 """
 
 from __future__ import annotations

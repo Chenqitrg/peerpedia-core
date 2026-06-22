@@ -40,6 +40,13 @@ Reviewer's checklist
   reconciliation?  (A sync might bring reviews that make an article
   publishable.)
 - Fail fast: are malformed scores.json files raised, not skipped?
+
+TODO(security): sync-time signature verification catches forged commits,
+but there is no local integrity check — if someone bypasses the CLI and
+edits the git repo directly (unsigned commits) or tampers with the DB,
+the platform won't detect it until the next sync.  Should add a local
+integrity check on article access (show/edit/publish) that validates
+git history and DB consistency.
 """
 
 from __future__ import annotations
@@ -202,15 +209,16 @@ def apply_sync_bundle(
     # Sync status transitions from commit messages (P2P status transport).
     sync_status_from_git(db, article_id)
 
-    # TODO(sync): social graph sync + pull — two independent transports:
+    # TODO(social-graph): P2P social graph sync — the missing half of P2P.
+    # Git bundles handle articles + reviews (content).  The social graph
+    # (follows, bookmarks, user profiles) needs an independent DB-to-DB
+    # transport: GET/POST follows per user, GET bookmarks per user.
+    # Without this there is no peer discovery — you must already know every
+    # peer's address.  Reachable articles = 2-hop social circle.
+    # Reviewable articles = 1-hop social circle.
     #
-    # 1. Social graph (DB-to-DB, no git): follow relationships, bookmarks,
-    #    user profiles.  GET/POST follows, GET bookmarks per user.
-    #    Reachable articles = 2-hop social circle.  Reviewable = 1-hop.
-    #
-    # 2. ``sync pull`` command: bundle_client already has pull_incremental,
-    #    just needs CLI wiring.  Server side needs HTTP transport (see
-    #    bundle_server.py TODO).
+    # TODO(sync-pull): ``sync pull`` — bundle_client already has
+    # pull_incremental, just needs CLI wiring + server HTTP transport.
 
     recompute_article_score(db, article_id)
 

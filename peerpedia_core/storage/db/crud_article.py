@@ -124,6 +124,10 @@ def create_article(
     return a
 
 
+# TODO(discovery-feed): feed of articles from followed users — ordered by
+# recent activity, filtered by status.  list_articles(follower_id=) exists
+# but needs a purpose-built function with proper scoring/ranking.
+# TODO(bookmark-feed): feed of bookmarked articles with status + recent updates.
 # TODO(search): fuzzy article search — match by partial title, author name,
 # or keywords.  Currently the only way to find an article is exact ID prefix.
 # Needed: search_articles(session, query) → list[Article] with ILIKE on

@@ -32,6 +32,7 @@ def seed(db_url: str, articles_dir: Path):
         set_sink_start,
         update_article_status,
     )
+    from peerpedia_core.storage.db.crud_maintainer import add_maintainer
     from peerpedia_core.storage.db.crud_review import upsert_review
     from peerpedia_core.storage.db.engine import get_engine, init_db
     from peerpedia_core.storage.db.models import (
@@ -894,6 +895,9 @@ $$
             continue
 
         a = create_article(session, authors=all_authors, status="draft", title=ad["title"])
+        # Seed maintainers: all authors are initial maintainers.
+        for aid in all_authors:
+            add_maintainer(session, a.id, aid)
 
         try:
             rp = init_article_repo(articles_dir / a.id)
@@ -1014,6 +1018,8 @@ program and data. This is the von Neumann architecture.""",
         fork = create_article(
             session, authors=[forker.id], status="draft", title=f"{parent.title} — Fork by {forker_name}", forked_from=parent.id
         )
+        # Seed maintainer: only the forker manages the fork.
+        add_maintainer(session, fork.id, forker.id)
         try:
             rp = init_article_repo(articles_dir / fork.id)
             (rp / "article.md").write_text(make_article_frontmatter(fork.title) + content)

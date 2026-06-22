@@ -21,6 +21,7 @@ from peerpedia_core.commands.sync import (
     git_sync_status,
 )
 from peerpedia_core.storage.db.crud_article import create_article, get_article
+from peerpedia_core.storage.db.crud_maintainer import add_maintainer
 from peerpedia_core.storage.db.crud_review import get_reviews_for_article
 from peerpedia_core.storage.db.engine import get_session
 from peerpedia_core.storage.db.models import User
@@ -122,6 +123,7 @@ class TestGitSyncReviews:
         _create_user(db, "reviewer-1", "Reviewer One")  # must exist for FK
 
         article = create_article(db, id="art-1", title="Test", authors=["alice"], status="published")
+        add_maintainer(db, "art-1", "alice")
         db.flush()
 
         rp = articles_dir / "art-1"
@@ -150,6 +152,7 @@ class TestGitSyncReviews:
         _create_user(db, "alice", "Alice")
 
         create_article(db, id="art-2", title="Test", authors=["alice"], status="published")
+        add_maintainer(db, "art-2", "alice")
         db.flush()
 
         rp = articles_dir / "art-2"
@@ -165,6 +168,7 @@ class TestGitSyncReviews:
         _create_user(db, "alice", "Alice")
 
         create_article(db, id="art-3", title="Test", authors=["alice"], status="published")
+        add_maintainer(db, "art-3", "alice")
         db.flush()
 
         rp = articles_dir / "art-3"
@@ -197,6 +201,7 @@ class TestGitSyncStatus:
         _create_user(db, "alice", "Alice")
 
         article = create_article(db, id="art-status-1", title="Test", authors=["alice"], status="sedimentation")
+        add_maintainer(db, "art-status-1", "alice")
         db.flush()
 
         rp = articles_dir / "art-status-1"
@@ -220,6 +225,7 @@ class TestGitSyncStatus:
         _create_user(db, "alice", "Alice")
 
         article = create_article(db, id="art-status-2", title="Test", authors=["alice"], status="sedimentation")
+        add_maintainer(db, "art-status-2", "alice")
         db.flush()
 
         rp = articles_dir / "art-status-2"
@@ -248,6 +254,7 @@ class TestGitSyncStatus:
         """Article exists in DB but no git repo on disk."""
         _create_user(db, "alice", "Alice")
         create_article(db, id="art-no-repo", title="Test", authors=["alice"], status="draft")
+        add_maintainer(db, "art-no-repo", "alice")
         db.flush()
 
         with pytest.raises(FileNotFoundError, match="Git repo not found"):
@@ -263,6 +270,7 @@ class TestApplySyncBundle:
         _create_user(db, "alice", "Alice")
 
         create_article(db, id="art-bundle-1", title="Bundle Test", authors=["alice"], status="published")
+        add_maintainer(db, "art-bundle-1", "alice")
         db.flush()
 
         rp = articles_dir / "art-bundle-1"
@@ -301,6 +309,7 @@ class TestApplySyncBundle:
         _create_user(db, "alice", "Alice")
 
         create_article(db, id="art-conflict-1", title="Conflict Test", authors=["alice"], status="published")
+        add_maintainer(db, "art-conflict-1", "alice")
         db.flush()
 
         rp = articles_dir / "art-conflict-1"

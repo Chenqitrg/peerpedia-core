@@ -19,6 +19,7 @@ from peerpedia_core.commands.merge import accept_merge, create_merge_proposal
 from peerpedia_core.storage.db.crud_article import create_article, get_article
 from peerpedia_core.storage.db.crud_merge import create_merge_proposal as _db_create_mp
 from peerpedia_core.storage.db.engine import get_session
+from peerpedia_core.storage.db.crud_maintainer import add_maintainer
 from peerpedia_core.storage.db.models import User
 import peerpedia_core.storage.git_backend as git_backend
 from peerpedia_core.storage.git_backend import init_article_repo, commit_article, MergeConflictError
@@ -68,9 +69,14 @@ def articles_dir():
 
 
 def _build_article_with_repo(db, articles_dir, article_id, authors, status="published"):
-    """Create an article DB record and a matching git repo with one commit."""
+    """Create an article DB record and a matching git repo with one commit.
+
+    Seeds all authors as maintainers (matching create_article_with_content).
+    """
     article = create_article(db, id=article_id, title="Test Article", authors=authors, status=status)
     db.flush()
+    for aid in authors:
+        add_maintainer(db, article_id, aid)
 
     rp = articles_dir / article_id
     init_article_repo(rp)
@@ -144,7 +150,7 @@ class TestAcceptMerge:
         mp = _db_create_mp(db, "art-fork", target.id, "bob")
         db.flush()
 
-        with pytest.raises(NotAuthorizedError, match="Only article authors"):
+        with pytest.raises(NotAuthorizedError, match="is not a maintainer"):
             accept_merge(db, target.id, mp.id, "bob")
 
     def test_target_repo_not_found(self, db, articles_dir):
@@ -158,6 +164,7 @@ class TestAcceptMerge:
         # Only DB record — no git repo on disk
         target_id = "art-no-target-repo"
         target = create_article(db, id=target_id, title="Target", authors=["alice"], status="published")
+        add_maintainer(db, target_id, "alice")
         db.flush()
 
         _build_article_with_repo(db, articles_dir, "art-fork-no-target", ["alice"], status="draft")
@@ -216,8 +223,8 @@ class TestAcceptMerge:
         assert article.sink_start is not None
         assert article.sink_duration_days == 3
 
-    def test_sedimentation_target_stays_in_sedimentation(self, db, articles_dir):
-        """Merging into a sedimentation article stays in sedimentation for re-review."""
+    def test_merge_into_sedimentation_rejected(self, db, articles_dir):
+        """Merging into a sedimentation article is rejected — policy gate."""
         _create_user(db, "alice", "Alice")
 
         _build_article_with_repo(db, articles_dir, "art-target-sed", ["alice"], status="sedimentation")
@@ -225,11 +232,8 @@ class TestAcceptMerge:
         mp = _db_create_mp(db, "art-fork-sed", "art-target-sed", "alice")
         db.flush()
 
-        result = accept_merge(db, "art-target-sed", mp.id, "alice")
-
-        assert result["status"] != "conflict"
-        article = get_article(db, "art-target-sed")
-        assert article.status == "sedimentation"
+        with pytest.raises(NotAuthorizedError, match="Cannot accept merge"):
+            accept_merge(db, "art-target-sed", mp.id, "alice")
 
 
 # ── create_merge_proposal ─────────────────────────────────────────────────────

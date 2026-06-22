@@ -245,6 +245,7 @@ def delete_article(session: Session, article_id: str) -> None:
         Citation,
         MergeProposal,
         Review,
+        ScriptMaintainer,
     )
 
     a = session.get(Article, article_id)
@@ -253,6 +254,7 @@ def delete_article(session: Session, article_id: str) -> None:
 
     # Delete related records
     session.query(ArticleAuthor).filter(ArticleAuthor.article_id == article_id).delete()
+    session.query(ScriptMaintainer).filter(ScriptMaintainer.article_id == article_id).delete()
     session.query(Review).filter(Review.article_id == article_id).delete()
     session.query(Bookmark).filter(Bookmark.article_id == article_id).delete()
     session.query(Citation).filter((Citation.from_article_id == article_id) | (Citation.to_article_id == article_id)).delete()

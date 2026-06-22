@@ -46,7 +46,9 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
+from peerpedia_core.exceptions import NotAuthorizedError
 from peerpedia_core.storage.db.crud_article import get_article
+from peerpedia_core.storage.db.crud_maintainer import get_maintainer_ids
 from peerpedia_core.storage.db.crud_review import upsert_review
 from peerpedia_core.storage.git_backend import (
     DEFAULT_ARTICLES_DIR,
@@ -191,6 +193,15 @@ def apply_sync_bundle(
 
     # DB reconciliation — git state changed, DB must follow
     rebuild_article_authors(db, article_id)
+
+    # Fail fast: every article must have at least one maintainer.
+    # If this fires, the article creation path (POST /articles handler)
+    # did not seed ScriptMaintainer rows — fix it there, not here.
+    if not get_maintainer_ids(db, article_id):
+        raise NotAuthorizedError(
+            f"Script {article_id} has no maintainers — "
+            "creation path must seed at least one maintainer"
+        )
 
     # Sync reviews from git before scoring — git is the SOT (G5)
     git_sync_reviews(db, article_id)

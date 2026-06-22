@@ -24,7 +24,7 @@ from peerpedia_core.policies.articles import (
     visible_statuses_for_user,
 )
 from peerpedia_core.storage.db.engine import get_session
-from peerpedia_core.storage.db.models import Article, ArticleAuthor, User
+from peerpedia_core.storage.db.models import Article, ArticleAuthor, ScriptMaintainer, User
 
 
 def _user(**kwargs):
@@ -115,6 +115,7 @@ class TestWritePermissions:
         s.add(a)
         s.flush()
         s.add(ArticleAuthor(article_id="a-sync", author_id="u-sync", position=0))
+        s.add(ScriptMaintainer(article_id="a-sync", user_id="u-sync"))
         s.commit()
 
         result = assert_can_sync_article(s, "a-sync", u)
@@ -271,7 +272,7 @@ class TestAnonymousRead:
 
 class TestAllAuthorOnlyWrappers:
     """Every assert_can_{edit,delete,rollback,publish,extend_sink}
-    delegates to the same _assert_is_author helper.  A parametrized
+    delegates to the same _assert_is_maintainer helper.  A parametrized
     smoke test ensures each wrapper dispatches correctly.
     """
 
@@ -293,7 +294,7 @@ class TestAllAuthorOnlyWrappers:
         s.add(a)
         s.commit()
 
-        with pytest.raises(NotAuthorizedError, match=f"Only authors can {action}"):
+        with pytest.raises(NotAuthorizedError, match="is not a maintainer"):
             func(s, f"a-{action}", u)
 
     @pytest.mark.parametrize(
@@ -313,6 +314,7 @@ class TestAllAuthorOnlyWrappers:
         s.add(a)
         s.flush()
         s.add(ArticleAuthor(article_id="a-auth-all", author_id="u-auth-all", position=0))
+        s.add(ScriptMaintainer(article_id="a-auth-all", user_id="u-auth-all"))
         s.commit()
 
         result = func(s, "a-auth-all", u)
@@ -327,6 +329,7 @@ class TestAllAuthorOnlyWrappers:
         s.add(a)
         s.flush()
         s.add(ArticleAuthor(article_id="a-ext-sink", author_id="u-ext-sink", position=0))
+        s.add(ScriptMaintainer(article_id="a-ext-sink", user_id="u-ext-sink"))
         s.commit()
 
         result = assert_can_extend_sink(s, "a-ext-sink", u)

@@ -133,8 +133,10 @@ def test_rollback_creates_revert_commit(db):
     """Rollback creates a new commit with zero-score review."""
     _create_user(db, "alice", "Alice")
     from peerpedia_core.storage.db.crud_article import create_article
+    from peerpedia_core.storage.db.crud_maintainer import add_maintainer
 
     create_article(db, id="art-1", title="Test", authors=["alice"], status="draft")
+    add_maintainer(db, "art-1", "alice")
     db.flush()
 
     from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, init_article_repo, commit_article

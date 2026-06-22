@@ -85,6 +85,7 @@ from peerpedia_core.storage.db.crud_article import (
     increment_fork_count,
     set_sink_start,
 )
+from peerpedia_core.storage.db.crud_maintainer import add_maintainer
 from peerpedia_core.storage.db.crud_user import get_user
 from peerpedia_core.storage.git_backend import (
     DEFAULT_ARTICLES_DIR,
@@ -150,12 +151,9 @@ def fork_article(db: Session, article_id: str, user_id: str) -> dict:
     gitmod.Repo.clone_from(str(src), str(dst))
 
     # Derive authors from git first, then write DB — git is the SOT.
-    # TODO(fork-ownership): ``get_commit_authors(dst)`` pulls in every
-    # original author (and reviewer — see review-author-leak) from the
-    # cloned git history.  These should remain as ArticleAuthor
-    # (they contributed content), but only the forker should be
-    # ScriptMaintainer (they manage the fork).  Add a separate
-    # ``ScriptMaintainer`` join table and write the forker as admin here.
+    # Original authors from git history remain as ArticleAuthor
+    # (they contributed content), but only the forker is ScriptMaintainer
+    # (they manage the fork).
     git_authors = get_commit_authors(dst) | {user_id}
 
     fork = create_article(
@@ -169,6 +167,8 @@ def fork_article(db: Session, article_id: str, user_id: str) -> dict:
         status="draft",
         forked_from=article_id,
     )
+    # Seed maintainer: only the forker manages the fork.
+    add_maintainer(db, fork_id, user_id)
     increment_fork_count(db, article_id)
 
     return {"id": fork.id, "forked_from": article_id, "status": "draft"}
@@ -293,6 +293,10 @@ def create_article_with_content(
         status="draft",
     )
     a.last_author_rebuild_hash = commit_hash
+
+    # Seed maintainers: all initial authors are also maintainers.
+    for aid in author_ids:
+        add_maintainer(db, article_id, aid)
 
     return {
         "id": article_id, "title": title, "status": "draft",

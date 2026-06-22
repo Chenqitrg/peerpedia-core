@@ -17,16 +17,17 @@ Permission matrix
 |             |                               | Author           | draft, sedimentation, published |
 | Download    | assert_can_download_content   | Anyone           | published               |
 |             |                               | Author           | any                     |
-| Edit        | assert_can_edit_article       | Author only      | draft, published        |
-| Delete      | assert_can_delete_article     | Author only      | draft, published        |
-| Publish     | assert_can_publish_article    | Author only      | draft, published        |
-| Rollback    | assert_can_rollback_article   | Author only      | draft, published        |
+| Edit        | assert_can_edit_article       | Maintainer only  | draft, published        |
+| Delete      | assert_can_delete_article     | Maintainer only  | draft, published        |
+| Publish     | assert_can_publish_article    | Maintainer only  | draft, published        |
+| Rollback    | assert_can_rollback_article   | Maintainer only  | draft, published        |
 | Fork        | assert_can_fork_article       | Anyone (no dupe) | published               |
 | Review      | assert_can_submit_review      | Anyone           | sedimentation, published|
-| Extend sink | assert_can_extend_sink        | Author only      | sedimentation           |
-| Sync        | assert_can_sync_article       | Author only      | draft, published        |
+| Extend sink | assert_can_extend_sink        | Maintainer only  | sedimentation           |
+| Sync        | assert_can_sync_article       | Maintainer only  | draft, published        |
+| Accept merge| assert_can_accept_merge       | Maintainer only  | draft, published        |
 
-Key: sedimentation articles are immutable — even the author cannot edit,
+Key: sedimentation articles are immutable — even a maintainer cannot edit,
 delete, rollback, or sync during the peer-review window.
 
 Visibility rules
@@ -59,6 +60,7 @@ from sqlalchemy.orm import Session
 
 from peerpedia_core.exceptions import BadRequestError, ConflictError, NotAuthorizedError, NotFoundError
 from peerpedia_core.storage.db.crud_article import get_article, get_author_ids
+from peerpedia_core.storage.db.crud_maintainer import get_maintainer_ids
 from peerpedia_core.storage.db.models import Article, User
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -90,13 +92,24 @@ def get_article_or_raise(db: Session, article_id: str) -> Article:
 
 
 def _is_author(db: Session, article_id: str, user: Optional[User]) -> bool:
-    # TODO(fork-ownership): this checks authorship (content contribution),
-    # not admin permission.  Once ``ScriptMaintainer`` exists, add an
-    # ``_is_maintainer`` check and gate management operations (edit, delete,
-    # publish, sync) on admin role, not authorship.
+    """Check content contribution — user is an ArticleAuthor."""
     if user is None:
         return False
     return user.id in get_author_ids(db, article_id)
+
+
+def _is_maintainer(db: Session, article_id: str, user: User) -> bool:
+    """Check management authority — user is a ScriptMaintainer.
+
+    Maintainer is always explicitly granted; it is never derived from
+    authorship.  Management operations (edit/delete/publish/sync) are
+    gated on maintainer, not author.
+
+    *user* must be a resolved User object — callers must validate
+    existence before calling.  Passing None raises AttributeError
+    (fail fast, don't silently return False).
+    """
+    return user.id in get_maintainer_ids(db, article_id)
 
 
 def visible_statuses_for_user(current_user: Optional[User]) -> set[str]:
@@ -151,26 +164,27 @@ def assert_can_download_content(
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Write permissions — author-only, status-gated
+# Write permissions — maintainer-gated, status-gated
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# Sedimentation articles are immutable — even the author cannot edit, delete,
+# Sedimentation articles are immutable — even a maintainer cannot edit, delete,
 # rollback, or sync during the peer-review window.  Draft and published
 # articles accept writes (published will eventually go through a PR flow).
 _WRITABLE_STATUSES = {"draft", "published"}
 
 
-def _assert_is_author(
+def _assert_is_maintainer(
     db: Session,
     article_id: str,
     current_user: User,
     action: str,
     allowed_statuses: set[str] | None = None,
 ) -> Article:
+    """Gate management operations on maintainer role, not authorship."""
     eff = allowed_statuses if allowed_statuses is not None else _WRITABLE_STATUSES
     a = get_article_or_raise(db, article_id)
-    if not _is_author(db, article_id, current_user):
-        raise NotAuthorizedError(f"Only authors can {action} this article")
+    if not _is_maintainer(db, article_id, current_user):
+        raise NotAuthorizedError(f"User {current_user.id} is not a maintainer of script {article_id}")
     if a.status not in eff:
         raise NotAuthorizedError(
             f"Cannot {action} an article in {a.status} status"
@@ -179,32 +193,31 @@ def _assert_is_author(
 
 
 def assert_can_edit_article(db: Session, article_id: str, current_user: User) -> Article:
-    return _assert_is_author(db, article_id, current_user, "edit")
+    return _assert_is_maintainer(db, article_id, current_user, "edit")
 
 
 def assert_can_delete_article(db: Session, article_id: str, current_user: User) -> Article:
-    return _assert_is_author(db, article_id, current_user, "delete", allowed_statuses={"draft"})
+    return _assert_is_maintainer(db, article_id, current_user, "delete", allowed_statuses={"draft"})
 
 
 def assert_can_rollback_article(db: Session, article_id: str, current_user: User) -> Article:
-    return _assert_is_author(db, article_id, current_user, "rollback")
+    return _assert_is_maintainer(db, article_id, current_user, "rollback")
 
 
 def assert_can_publish_article(db: Session, article_id: str, current_user: User) -> Article:
-    # TODO: unanimous consent — all authors must confirm before publishing.
-    # Currently any single author can push a draft into the sedimentation pool,
+    # TODO: unanimous consent — all maintainers must confirm before publishing.
+    # Currently any single maintainer can push a draft into the sedimentation pool,
     # which is irreversible.  Needs a confirmation mechanism (new table or
-    # in-git sign-off) that gates the publish action on every author's approval.
-    return _assert_is_author(db, article_id, current_user, "publish")
+    # in-git sign-off) that gates the publish action on every maintainer's approval.
+    return _assert_is_maintainer(db, article_id, current_user, "publish")
 
 
 def assert_can_accept_merge(db: Session, article_id: str, current_user: User) -> Article:
-    # TODO: not every author should be able to accept a merge.  The current
-    # blanket "any author" check in accept_merge is a permission gap — merge
-    # acceptance should require explicit consent (e.g. the fork author is the
-    # only one who can propose a merge, and target authors must individually
-    # approve).  Needs a consent model before tightening.
-    return _assert_is_author(db, article_id, current_user, "accept merge")
+    # TODO: consent model — not every maintainer should be able to accept a merge
+    # unilaterally.  The current "any maintainer" check is a permission gap —
+    # merge acceptance should require explicit consent from all target
+    # maintainers.  Needs a consent model before tightening.
+    return _assert_is_maintainer(db, article_id, current_user, "accept merge")
 
 
 def assert_can_submit_review(db: Session, article_id: str) -> Article:
@@ -219,11 +232,11 @@ def assert_can_submit_review(db: Session, article_id: str) -> Article:
 
 
 def assert_can_extend_sink(db: Session, article_id: str, current_user: User) -> Article:
-    return _assert_is_author(db, article_id, current_user, "extend sink", allowed_statuses={"sedimentation"})
+    return _assert_is_maintainer(db, article_id, current_user, "extend sink", allowed_statuses={"sedimentation"})
 
 
 def assert_can_sync_article(db: Session, article_id: str, current_user: User) -> Article:
-    return _assert_is_author(db, article_id, current_user, "sync")
+    return _assert_is_maintainer(db, article_id, current_user, "sync")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

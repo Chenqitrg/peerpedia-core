@@ -34,7 +34,8 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 
 from peerpedia_core.config.params import params
-from peerpedia_core.exceptions import BadRequestError, NotAuthorizedError, NotFoundError
+from peerpedia_core.exceptions import BadRequestError, NotFoundError
+from peerpedia_core.policies.articles import assert_can_accept_merge
 from peerpedia_core.storage.db.crud_article import get_article, get_author_ids, set_sink_start
 from peerpedia_core.storage.db.crud_merge import accept_merge_proposal, get_merge_proposal
 from peerpedia_core.storage.db.crud_user import get_user
@@ -54,8 +55,7 @@ def accept_merge(db: Session, article_id: str, proposal_id: str, user_id: str) -
         raise NotFoundError("Merge proposal not found")
     if mp.target_article_id != article_id:
         raise BadRequestError("Proposal does not belong to this article")
-    if user_id not in get_author_ids(db, article_id):
-        raise NotAuthorizedError("Only article authors can accept/reject merges")
+    assert_can_accept_merge(db, article_id, user)
 
     target_repo = DEFAULT_ARTICLES_DIR / article_id
     fork_repo = DEFAULT_ARTICLES_DIR / mp.fork_article_id

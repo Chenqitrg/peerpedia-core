@@ -23,6 +23,7 @@ from peerpedia_core.cli.handlers.social import (
     _cmd_bookmark_add, _cmd_bookmark_list,
 )
 from peerpedia_core.cli.handlers.compile_ import _cmd_compile
+from peerpedia_core.cli.handlers.maintainers import _cmd_maintainer_add, _cmd_maintainer_remove, _cmd_maintainer_list
 from peerpedia_core.cli.handlers.sync import _cmd_sync_status, _cmd_sync_push
 from peerpedia_core.cli.handlers.mother import _cmd_mother
 
@@ -190,6 +191,28 @@ def build_parser() -> argparse.ArgumentParser:
 
     # TODO(sync): add ``sync pull`` command.
     # TODO(sync): add ``sync discover`` command.
+
+    # ── maintainer ───────────────────────────────────────────────────────
+
+    maintainer = subs.add_parser("maintainer")
+    maintainer_subs = maintainer.add_subparsers(dest="subcommand")
+
+    p = maintainer_subs.add_parser("add", help=_help(_cmd_maintainer_add))
+    p.add_argument("article_id", help="Article ID")
+    p.add_argument("--target-user", required=True, help="User ID to add as maintainer")
+    _add_common_args(p)
+    p.set_defaults(func=_cmd_maintainer_add)
+
+    p = maintainer_subs.add_parser("remove", help=_help(_cmd_maintainer_remove))
+    p.add_argument("article_id", help="Article ID")
+    p.add_argument("--target-user", required=True, help="User ID to remove from maintainers")
+    _add_common_args(p)
+    p.set_defaults(func=_cmd_maintainer_remove)
+
+    p = maintainer_subs.add_parser("list", help=_help(_cmd_maintainer_list))
+    p.add_argument("article_id", help="Article ID")
+    _add_common_args(p)
+    p.set_defaults(func=_cmd_maintainer_list)
 
     # ── ?Mother — user guide ───────────────────────────────────────────────
 

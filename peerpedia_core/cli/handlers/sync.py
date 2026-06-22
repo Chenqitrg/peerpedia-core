@@ -9,7 +9,7 @@ from peerpedia_core.cli.helpers import _with_db, _ok, _die
 from peerpedia_core.cli.display import _print_panel
 from peerpedia_core.cli.sync_utils import _sync_server
 from peerpedia_core.sync.pending_queue import list_all, remove as pop_pending
-from peerpedia_core.sync import is_online, count as pending_count, client_sync as sync_push
+from peerpedia_core.sync import is_online, count as pending_count, sync_article as sync_push
 
 
 def _cmd_sync_status(args):

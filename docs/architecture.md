@@ -37,9 +37,9 @@ peerpedia_core/
 ├── commands/                  # 编排层——唯一同时接触 git 和 db 的层
 │   ├── __init__.py            #   re-export 所有公共函数
 │   ├── articles.py            #   create、update、publish、fork、rollback、delete
-│   ├── reviews.py             #   submit_review、_write_review_to_git
+│   ├── reviews.py             #   submit_review、write_review_to_git
 │   ├── merge.py               #   accept_merge、create_merge_proposal
-│   ├── sync.py                #   apply_sync_bundle、git_sync_reviews、git_sync_status
+│   ├── sync.py                #   apply_sync_bundle、sync_reviews_from_worktree、sync_status_from_git
 │   ├── workflow.py            #   publish_ready_articles、recompute_*、recalculate_all_reputations
 │   ├── bookmarks.py           #   add_bookmark、list_bookmarks
 │   └── users.py               #   create_user、get_user 等读写包装
@@ -195,7 +195,7 @@ cli/handlers/reviews.py:
   2. submit_review(db, article_id, reviewer_id, scores, comment)
 
 commands/reviews.py → submit_review():
-  3. _write_review_to_git() → 写 reviews/{id}/scores.json + commit → 返回 commit_hash
+  3. write_review_to_git() → 写 reviews/{id}/scores.json + commit → 返回 commit_hash
   4. upsert_review() → 写 DB Review 缓存
   5. recompute_article_score() → 重新算文章总分
   6. recompute_author_reputation() → 更新作者声誉
@@ -214,8 +214,8 @@ ingest_bundle() → 验证 + fetch 对象到本地 repo
 apply_sync_bundle():
   1. git merge FETCH_HEAD
   2. rebuild_article_authors()        ← 从 git commits 重建作者列表
-  3. git_sync_reviews()               ← 读 reviews/*/scores.json → upsert_review
-  4. git_sync_status()                ← 从 commit messages 读状态变更
+  3. sync_reviews_from_worktree()               ← 读 reviews/*/scores.json → upsert_review
+  4. sync_status_from_git()                ← 从 commit messages 读状态变更
   5. recompute_article_score()        ← 基于最新 DB 缓存算分
   6. publish_ready_articles()         ← 检查是否有到期文章
 ```

@@ -18,10 +18,10 @@ Function mapping (client → server)::
 
     bundle_client                         bundle_server
     ─────────────                         ─────────────
-    client_find_merge_base  ──probe──►    serve_get_ancestor
-    client_pull_incremental ──GET──►      serve_get_bundle
-    client_push_incremental ──POST──►     serve_post_sync
-    client_create_article   ──POST──►     serve_post_articles
+    find_merge_base  ──probe──►    serve_get_ancestor
+    pull_incremental ──GET──►      serve_get_bundle
+    push_incremental ──POST──►     serve_post_sync
+    create_remote_article   ──POST──►     serve_post_articles
     (client asks for head)  ──GET──►      serve_get_head
 
 Call graph::

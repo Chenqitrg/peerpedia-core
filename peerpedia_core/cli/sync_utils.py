@@ -12,7 +12,7 @@ from __future__ import annotations
 import os
 
 from peerpedia_core.cli.helpers import DEFAULT_ARTICLES_DIR
-from peerpedia_core.sync import is_online, count as pending_count, client_sync as sync_push
+from peerpedia_core.sync import is_online, count as pending_count, sync_article as sync_push
 
 
 def _try_sync(db, server: str | None = None) -> None:

@@ -20,7 +20,7 @@ Call graph (► = calls, ▻ = deferred import)::
     publish_article
       ├► policies.assert_can_publish_article
       ├► assert old_status == "draft"          (G10 — draft only)
-      ├▻ commands.reviews._write_review_to_git (deferred import)
+      ├▻ commands.reviews.write_review_to_git (deferred import)
       ├► crud_review.upsert_review
       ├► crud_article.set_sink_start           (7 days for new, 3 for re-entry)
       ├► commands.workflow.recompute_article_score
@@ -94,7 +94,7 @@ from peerpedia_core.storage.db.crud_article import (
 from peerpedia_core.storage.db.crud_maintainer import add_maintainer, get_maintainer_ids
 from peerpedia_core.storage.db.crud_review import get_review, upsert_review
 from peerpedia_core.storage.db.crud_user import get_user
-from peerpedia_core.crypto import _make_temp_key
+from peerpedia_core.crypto import write_temp_key
 from peerpedia_core.storage.git_backend import (
     DEFAULT_ARTICLES_DIR,
     checkout_files,
@@ -106,7 +106,7 @@ from peerpedia_core.storage.git_backend import (
     init_article_repo,
 )
 from peerpedia_core.storage.locks import get_article_lock
-from peerpedia_core.commands.reviews import _write_review_to_git
+from peerpedia_core.commands.reviews import write_review_to_git
 from peerpedia_core.commands.workflow import recompute_article_score, recompute_author_reputation
 
 
@@ -230,7 +230,7 @@ def rollback_article(
     checkout_files(rp, target_hash)
 
     author_name = user.name
-    key_path = _make_temp_key(signing_key_bytes) if signing_key_bytes else None
+    key_path = write_temp_key(signing_key_bytes) if signing_key_bytes else None
     try:
         new_hash = commit_article(
             rp, f"Rollback to {target_hash[:8]}", author_name, f"{user_id}@peerpedia",
@@ -314,7 +314,7 @@ def create_article_with_content(
     fm = make_article_frontmatter(title, abstract, keywords, categories)
     (rp / f"article{ext}").write_text(fm + content)
     user = get_user(db, author_ids[0])
-    key_path = _make_temp_key(signing_key_bytes) if signing_key_bytes else None
+    key_path = write_temp_key(signing_key_bytes) if signing_key_bytes else None
     try:
         commit_hash = commit_article(
             rp, "Initial submission", user.name, f"{user.id}@peerpedia",
@@ -410,7 +410,7 @@ def update_article_content(
     article_path.write_text(new_fm + body)
 
     # Git commit first — then sync DB.
-    key_path = _make_temp_key(signing_key_bytes) if signing_key_bytes else None
+    key_path = write_temp_key(signing_key_bytes) if signing_key_bytes else None
     try:
         commit_hash = commit_article(
             rp, message, user.name, f"{user_id}@peerpedia",
@@ -484,7 +484,7 @@ def publish_article(
 
     # Write self-review to git — the publisher's own review (real name).
 
-    _write_review_to_git(
+    write_review_to_git(
         article_id, user_id, self_review, comment, user.name, f"{user_id}@peerpedia",
     )
 

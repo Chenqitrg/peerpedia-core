@@ -93,7 +93,7 @@ class TestArticle:
             assert a.status == status
         session.close()
 
-    def test_score_stores_dict(self, engine):
+    def test_score_stores_result(self, engine):
         """JSONDict column stores score as dict, FiveDimScores wraps it."""
         session = get_session(engine)
         user = _make_user(session, "u3")

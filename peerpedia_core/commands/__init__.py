@@ -28,7 +28,7 @@ articles.py
 reviews.py
     Review submission.  ``submit_review`` writes review files to the git
     worktree (scores.json + threads/*.md), commits, then caches scores in
-    the DB.  ``_write_review_to_git`` is the low-level git writer shared
+    the DB.  ``write_review_to_git`` is the low-level git writer shared
     with articles.py's ``publish_article``.
 
 merge.py
@@ -38,7 +38,7 @@ merge.py
 
 sync.py
     Sync bundle application.  ``apply_sync_bundle`` merges fetched git
-    objects and reconciles DB state.  ``git_sync_reviews`` reads every
+    objects and reconciles DB state.  ``sync_reviews_from_worktree`` reads every
     reviews/*/scores.json from the git worktree and upserts into the DB
     Review cache — closing the gap where sync'd reviews were invisible to
     scoring.
@@ -83,7 +83,7 @@ from peerpedia_core.commands.maintainers import (
 )
 from peerpedia_core.commands.merge import accept_merge, create_merge_proposal
 from peerpedia_core.commands.reviews import get_reviews_for_article, submit_review
-from peerpedia_core.commands.sync import apply_sync_bundle, git_sync_reviews
+from peerpedia_core.commands.sync import apply_sync_bundle, sync_reviews_from_worktree
 from peerpedia_core.commands.users import (
     create_user,
     get_user,
@@ -124,7 +124,7 @@ __all__ = [
     "get_reviews_for_article",
     "get_user",
     "get_user_by_name",
-    "git_sync_reviews",
+    "sync_reviews_from_worktree",
     "list_articles",
     "list_maintainers",
     "parse_frontmatter",

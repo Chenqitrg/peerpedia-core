@@ -38,7 +38,7 @@ class FiveDimScores:
             return 0.0
         return sum(v * w for v, w in zip(values, weights)) / total_weight
 
-    def to_dict(self) -> dict:
+    def to_result(self) -> dict:
         return {
             "originality": self.originality,
             "rigor": self.rigor,
@@ -60,7 +60,7 @@ class ReputationScores:
     def average(self) -> float:
         return (self.professionalism + self.objectivity + self.collaboration + self.pedagogy) / 4.0
 
-    def to_dict(self) -> dict:
+    def to_result(self) -> dict:
         return {
             "professionalism": self.professionalism,
             "objectivity": self.objectivity,

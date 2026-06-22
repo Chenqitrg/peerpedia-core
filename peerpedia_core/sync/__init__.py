@@ -51,8 +51,8 @@ The server exposes a bookmark index for each user it hosts; peers poll the
 bookmarks of followed users to discover new articles.
 """
 
-from peerpedia_core.sync.bundle_client import client_sync
+from peerpedia_core.sync.bundle_client import sync_article
 from peerpedia_core.sync.network import is_online
 from peerpedia_core.sync.pending_queue import add, clear, count, list_all, remove
 
-__all__ = ["client_sync", "is_online", "add", "clear", "count", "list_all", "remove"]
+__all__ = ["sync_article", "is_online", "add", "clear", "count", "list_all", "remove"]

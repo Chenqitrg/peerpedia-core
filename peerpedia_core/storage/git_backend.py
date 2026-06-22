@@ -39,13 +39,13 @@ Why read review files from the worktree?
 Reviews arrive through two paths:
 
 1. Local submission (``commands/reviews.py:submit_review``):
-   _write_review_to_git() → upsert_review(commit_hash=return_value)
+   write_review_to_git() → upsert_review(commit_hash=return_value)
    Both git and DB are updated atomically.
 
 2. Remote sync (``commands/sync.py:apply_sync_bundle``):
-   git merge FETCH_HEAD → ... → git_sync_reviews() → upsert_review()
+   git merge FETCH_HEAD → ... → sync_reviews_from_worktree() → upsert_review()
    The bundle merged new review files into git, but nobody told the DB.
-   ``git_sync_reviews`` closes this gap by reading every scores.json from
+   ``sync_reviews_from_worktree`` closes this gap by reading every scores.json from
    the worktree and upserting into the Review cache.
 
 This is NOT a full git-log traversal — it only reads the current worktree

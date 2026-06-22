@@ -92,7 +92,7 @@ def _load_public_key(key_bytes: bytes) -> ed25519.Ed25519PublicKey:
     return ed25519.Ed25519PublicKey.from_public_bytes(key_bytes)
 
 
-def _make_temp_key(private_key_bytes: bytes) -> Path:
+def write_temp_key(private_key_bytes: bytes) -> Path:
     """Write private key bytes to a chmod 600 temp file, return its path.
 
     Caller must unlink the returned path after use.

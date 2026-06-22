@@ -13,7 +13,7 @@ Call graph::
     publish_ready_articles
       ├► DB: query Article.status == "sedimentation"
       ├► for each ready article:
-      │     ├▻ commands.sync.git_sync_reviews    (deferred import)
+      │     ├▻ commands.sync.sync_reviews_from_worktree    (deferred import)
       │     ├► recompute_article_score
       │     ├► workflow.sedimentation.apply_no_review_penalty
       │     └► article.status = "published"
@@ -76,7 +76,7 @@ def publish_ready_articles(db: Session) -> int:
     commit.
 
     Before scoring, syncs reviews from git worktree into DB cache via
-    git_sync_reviews(), ensuring the DB reflects the latest state.
+    sync_reviews_from_worktree(), ensuring the DB reflects the latest state.
 
     Returns the number of articles published in this call.
     """
@@ -99,7 +99,7 @@ def publish_ready_articles(db: Session) -> int:
         if not is_ready_to_publish(eta):
             continue
 
-        # NOTE: caller must call git_sync_reviews() before publish_ready_articles().
+        # NOTE: caller must call sync_reviews_from_worktree() before publish_ready_articles().
         # This function no longer imports from sync to avoid circular dependency.
 
         # Compute score by aggregating all reviews
@@ -209,7 +209,7 @@ def recompute_author_reputation(db: Session, user_id: str) -> ReputationScores:
     existing_rep = user.reputation if user.reputation else {}
     blended = blend_reputation(existing_rep, new_rep)
 
-    update_user_reputation(db, user_id, blended.to_dict())
+    update_user_reputation(db, user_id, blended.to_result())
     return blended
 
 

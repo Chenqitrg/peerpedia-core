@@ -7,7 +7,7 @@ Call graph::
 
     submit_review
       ├► policies.assert_can_submit_review     (sedimentation or published)
-      ├► _write_review_to_git                  (git-first: scores.json + threads/*.md)
+      ├► write_review_to_git                  (git-first: scores.json + threads/*.md)
       │     ├► git_backend.commit_article      (returns commit_hash)
       │     └► storage.locks.get_article_lock  (serialize concurrent git writes)
       ├► crud_review.upsert_review             (DB cache, uses commit_hash from git)
@@ -17,7 +17,7 @@ Call graph::
     _derive_anonymous_id
       └► sha256(article_id:reviewer_id)[:12]   (deterministic, stable per article)
 
-    _write_review_to_git
+    write_review_to_git
       ├► Write reviews/{directory_id}/scores.json  (overwrite latest)
       ├► Write reviews/{directory_id}/threads/{nnn}.md  (append new file)
       └► git_backend.commit_article
@@ -35,8 +35,8 @@ through the commit — when the article publishes, the mapping can be resolved.
 
 Reviewer's checklist
 --------------------
-- Is ``_write_review_to_git`` called before ``upsert_review``?  (git-first)
-- Is ``commit_hash`` taken from the return value of ``_write_review_to_git``,
+- Is ``write_review_to_git`` called before ``upsert_review``?  (git-first)
+- Is ``commit_hash`` taken from the return value of ``write_review_to_git``,
   not from an external parameter?  (previous bug)
 - Are author reputations recomputed for every author after score changes?
 """
@@ -53,7 +53,7 @@ from peerpedia_core.storage.db import Session
 from peerpedia_core.exceptions import ConflictError, NotFoundError
 from peerpedia_core.policies.articles import assert_can_submit_review
 from peerpedia_core.storage.db.crud_article import get_article, get_author_ids
-from peerpedia_core.crypto import _make_temp_key
+from peerpedia_core.crypto import write_temp_key
 from peerpedia_core.storage.db.crud_review import get_reviews_for_article as _get, upsert_review
 from peerpedia_core.storage.db.crud_user import derive_anonymous_name, get_user
 from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, commit_article
@@ -95,14 +95,14 @@ def submit_review(
         anon_id = _derive_anonymous_id(article_id, reviewer_id)
         display_name = derive_anonymous_name(anon_id)
         email = f"anon-{anon_id}@peerpedia"
-        commit_hash = _write_review_to_git(
+        commit_hash = write_review_to_git(
             article_id, anon_id, scores, comment, display_name, email,
             signing_key_bytes=signing_key_bytes, pubkey_hex=pubkey_hex,
         )
     else:
         display_name = user.name
         email = f"{reviewer_id}@peerpedia"
-        commit_hash = _write_review_to_git(
+        commit_hash = write_review_to_git(
             article_id, reviewer_id, scores, comment, display_name, email,
             signing_key_bytes=signing_key_bytes, pubkey_hex=pubkey_hex,
         )
@@ -131,7 +131,7 @@ def _derive_anonymous_id(article_id: str, reviewer_id: str) -> str:
     return hashlib.sha256(seed.encode()).hexdigest()[:12]
 
 
-def _write_review_to_git(
+def write_review_to_git(
     article_id: str,
     directory_id: str,
     scores: dict,
@@ -175,7 +175,7 @@ def _write_review_to_git(
         raise ConflictError("Article busy — retry later")
 
     try:
-        key_path = _make_temp_key(signing_key_bytes) if signing_key_bytes else None
+        key_path = write_temp_key(signing_key_bytes) if signing_key_bytes else None
         try:
             h = commit_article(
                 rp, f"[review] {display_name}", display_name, email,

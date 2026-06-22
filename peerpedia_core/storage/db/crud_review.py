@@ -15,7 +15,7 @@ upsert_review(session, article_id, commit_hash, reviewer_id, scores) → Review
     Create or update the score cache for one review.  Keyed by
     (article_id, reviewer_id, scope, commit_hash).  Called AFTER review
     files are committed to git — from ``submit_review`` (local) and
-    ``git_sync_reviews`` (sync).
+    ``sync_reviews_from_worktree`` (sync).
 
     Scope is set to ``article.status`` at the time of the call — so
     reviews written during sedimentation are tagged ``scope="sedimentation"``

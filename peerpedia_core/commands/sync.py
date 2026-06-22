@@ -4,7 +4,7 @@
 r"""Sync orchestration — apply incoming git bundles and reconcile DB state.
 
 This module bridges the gap between git (SOT for review content) and the DB
-(score cache).  ``git_sync_reviews`` is the key function — it reads review
+(score cache).  ``sync_reviews_from_worktree`` is the key function — it reads review
 scores from the git worktree and writes them into the DB Review cache, so
 that ``recompute_article_score`` can see reviews that arrived via sync.
 
@@ -13,11 +13,11 @@ Call graph::
     apply_sync_bundle
       ├► git (merge FETCH_HEAD)
       ├► commands.articles.rebuild_article_authors
-      ├► git_sync_reviews                    ← G5 fix: sync before scoring
+      ├► sync_reviews_from_worktree                    ← G5 fix: sync before scoring
       ├► commands.workflow.recompute_article_score
       └▻ commands.workflow.publish_ready_articles  ← G4 trigger
 
-    git_sync_reviews
+    sync_reviews_from_worktree
       ├► git_backend.list_review_dirs        (list reviews/*/ directories)
       ├► for each dir:
       │     ├► git_backend.read_review_scores (parse scores.json)
@@ -26,7 +26,7 @@ Call graph::
 
 Key design decision — reviewer identity
 ----------------------------------------
-``git_sync_reviews`` uses the git directory name directly as ``reviewer_id``
+``sync_reviews_from_worktree`` uses the git directory name directly as ``reviewer_id``
 in the DB.  During sedimentation, reviews are stored under anonymous hashes
 (``sha256(article_id:reviewer_id)[:12]``).  These 12-char hex strings are
 valid DB ``reviewer_id`` values — ``derive_anonymous_name`` handles display.
@@ -34,7 +34,7 @@ When the article publishes, the real identity can be revealed separately.
 
 Reviewer's checklist
 --------------------
-- Is ``git_sync_reviews`` called before every ``recompute_article_score``
+- Is ``sync_reviews_from_worktree`` called before every ``recompute_article_score``
   that follows a git state change?
 - Does ``apply_sync_bundle`` trigger ``publish_ready_articles`` after
   reconciliation?  (A sync might bring reviews that make an article
@@ -89,7 +89,7 @@ def _parse_status_tag(message: str, author_email: str) -> str | None:
     return status if status in _VALID_STATUSES else None
 
 
-def git_sync_status(db: Session, article_id: str) -> None:
+def sync_status_from_git(db: Session, article_id: str) -> None:
     """Read status transitions from commit messages and update DB.
 
     Walks new commits since ``last_author_rebuild_hash``.  Only commits
@@ -115,7 +115,7 @@ def git_sync_status(db: Session, article_id: str) -> None:
             break  # iter_commits returns newest first — first match is the latest status
 
 
-def git_sync_reviews(db: Session, article_id: str) -> None:
+def sync_reviews_from_worktree(db: Session, article_id: str) -> None:
     """Sync review scores from git worktree into the DB Review cache.
 
     Reads every ``reviews/{dir}/scores.json`` in the article's git worktree
@@ -196,10 +196,10 @@ def apply_sync_bundle(
         )
 
     # Sync reviews from git before scoring — git is the SOT (G5)
-    git_sync_reviews(db, article_id)
+    sync_reviews_from_worktree(db, article_id)
 
     # Sync status transitions from commit messages (P2P status transport).
-    git_sync_status(db, article_id)
+    sync_status_from_git(db, article_id)
 
     # TODO(sync): social graph sync — independent of git bundle transport.
     # Git handles articles and reviews; follow relationships, bookmarks, and

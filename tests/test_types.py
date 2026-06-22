@@ -45,7 +45,7 @@ class TestFiveDimScores:
         )
         assert s.average() == 3.0
 
-    def test_to_dict(self):
+    def test_to_result(self):
         s = FiveDimScores(
             originality=4.0,
             rigor=3.0,
@@ -53,7 +53,7 @@ class TestFiveDimScores:
             pedagogy=2.0,
             impact=1.0,
         )
-        d = s.to_dict()
+        d = s.to_result()
         assert d == {
             "originality": 4.0,
             "rigor": 3.0,
@@ -153,9 +153,9 @@ class TestReputationScores:
         )
         assert s.average() == 4.0
 
-    def test_to_dict(self):
+    def test_to_result(self):
         s = ReputationScores(professionalism=3.0, objectivity=4.0, collaboration=2.0, pedagogy=5.0)
-        assert s.to_dict() == {
+        assert s.to_result() == {
             "professionalism": 3.0,
             "objectivity": 4.0,
             "collaboration": 2.0,

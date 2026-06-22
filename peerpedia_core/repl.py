@@ -108,7 +108,7 @@ FLAGS = ["--title", "--format", "--content", "--user", "--json", "--force",
 
 # ── REPL style ───────────────────────────────────────────────────────────
 
-repl_style = Style.from_dict({
+repl_style = Style.from_result({
     "prompt": "#06B6D4 bold",     # cyan
     "separator": "#64748B",       # dim
 })

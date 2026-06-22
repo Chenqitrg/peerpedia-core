@@ -1,8 +1,8 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""Tests for sync orchestration — _parse_status_tag, git_sync_reviews,
-git_sync_status, and apply_sync_bundle."""
+"""Tests for sync orchestration — _parse_status_tag, sync_reviews_from_worktree,
+sync_status_from_git, and apply_sync_bundle."""
 
 from __future__ import annotations
 
@@ -17,8 +17,8 @@ from sqlalchemy.orm import Session
 from peerpedia_core.commands.sync import (
     _parse_status_tag,
     apply_sync_bundle,
-    git_sync_reviews,
-    git_sync_status,
+    sync_reviews_from_worktree,
+    sync_status_from_git,
 )
 from peerpedia_core.storage.db.crud_article import create_article, get_article
 from peerpedia_core.storage.db.crud_maintainer import add_maintainer
@@ -195,7 +195,7 @@ class TestParseStatusTag:
         assert result is None
 
 
-# ── git_sync_reviews ─────────────────────────────────────────────────────────
+# ── sync_reviews_from_worktree ─────────────────────────────────────────────────────────
 
 
 class TestGitSyncReviews:
@@ -221,7 +221,7 @@ class TestGitSyncReviews:
         }))
         commit_article(rp, "Add review", "Reviewer", "reviewer-1@peerpedia")
 
-        git_sync_reviews(db, "art-1")
+        sync_reviews_from_worktree(db, "art-1")
 
         reviews = get_reviews_for_article(db, "art-1")
         assert len(reviews) >= 1
@@ -243,7 +243,7 @@ class TestGitSyncReviews:
         commit_article(rp, "Initial", "Alice", "alice@peerpedia")
 
         # No reviews written — should not crash
-        git_sync_reviews(db, "art-2")
+        sync_reviews_from_worktree(db, "art-2")
 
     def test_missing_scores_json_raises(self, db, articles_dir):
         """Fail fast: if a review directory has no scores.json, raise."""
@@ -264,10 +264,10 @@ class TestGitSyncReviews:
         commit_article(rp, "Add review dir", "Ghost", "ghost@peerpedia")
 
         with pytest.raises(FileNotFoundError, match="scores.json"):
-            git_sync_reviews(db, "art-3")
+            sync_reviews_from_worktree(db, "art-3")
 
 
-# ── git_sync_status ──────────────────────────────────────────────────────────
+# ── sync_status_from_git ──────────────────────────────────────────────────────────
 
 
 class TestGitSyncStatus:
@@ -277,7 +277,7 @@ class TestGitSyncStatus:
         commit_article only creates a commit when there are file changes
         (it checks is_dirty).  We change a file before the status commit
         to ensure the commit is actually created — mirroring production
-        where _write_review_to_git creates file changes before the
+        where write_review_to_git creates file changes before the
         "sedimentation"/"published" status commits.
         """
         _create_user(db, "alice", "Alice")
@@ -296,7 +296,7 @@ class TestGitSyncStatus:
         commit_article(rp, "[status] published", "PeerPedia", "system@peerpedia")
         db.flush()
 
-        git_sync_status(db, "art-status-1")
+        sync_status_from_git(db, "art-status-1")
         db.flush()
 
         art = get_article(db, "art-status-1")
@@ -322,7 +322,7 @@ class TestGitSyncStatus:
         commit_article(rp, "User edit", "Alice", "alice@peerpedia")
         db.flush()
 
-        git_sync_status(db, "art-status-2")
+        sync_status_from_git(db, "art-status-2")
         db.flush()
 
         art = get_article(db, "art-status-2")
@@ -330,7 +330,7 @@ class TestGitSyncStatus:
 
     def test_article_not_found_raises(self, db):
         with pytest.raises(FileNotFoundError, match="Article not found"):
-            git_sync_status(db, "nonexistent")
+            sync_status_from_git(db, "nonexistent")
 
     def test_repo_not_found_raises(self, db, articles_dir):
         """Article exists in DB but no git repo on disk."""
@@ -340,7 +340,7 @@ class TestGitSyncStatus:
         db.flush()
 
         with pytest.raises(FileNotFoundError, match="Git repo not found"):
-            git_sync_status(db, "art-no-repo")
+            sync_status_from_git(db, "art-no-repo")
 
 
 # ── apply_sync_bundle ────────────────────────────────────────────────────────

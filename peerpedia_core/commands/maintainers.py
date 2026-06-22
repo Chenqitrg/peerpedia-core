@@ -27,7 +27,6 @@ from __future__ import annotations
 from peerpedia_core.storage.db import Session
 
 from peerpedia_core.exceptions import ConflictError, NotAuthorizedError, NotFoundError
-from peerpedia_core.policies.articles import _is_maintainer
 from peerpedia_core.storage.db.crud_article import get_article
 from peerpedia_core.storage.db import crud_maintainer
 from peerpedia_core.storage.db.crud_user import get_user
@@ -92,8 +91,7 @@ def _assert_caller_is_maintainer(db: Session, article_id: str, caller_id: str) -
     article = get_article(db, article_id)
     if article is None:
         raise NotFoundError("Article not found")
-    mids = crud_maintainer.get_maintainer_ids(db, article_id)
-    if not _is_maintainer(mids, caller):
+    if not crud_maintainer.is_maintainer(db, article_id, caller_id):
         raise NotAuthorizedError(
             f"User {caller_id} is not a maintainer of script {article_id}"
         )

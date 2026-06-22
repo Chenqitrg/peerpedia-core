@@ -7,15 +7,15 @@ Client-side functions mirror the server-side handlers in ``bundle_server``::
 
       CLIENT (bundle_client)              SERVER (bundle_server)
       ─────────────────────               ──────────────────────
-      client_sync() → orchestrates        (HTTP routing layer, TBD)
-        ├─ client_find_merge_base()   ↔   serve_get_ancestor()
+      sync_article() → orchestrates        (HTTP routing layer, TBD)
+        ├─ find_merge_base()   ↔   serve_get_ancestor()
         │    └─ monotonic_search            └─ is_ancestor()
-        ├─ client_pull_incremental()   ↔   serve_get_bundle()
+        ├─ pull_incremental()   ↔   serve_get_bundle()
         │    └─ fetch_bundle(HTTP)          └─ create_bundle()
-        └─ client_push_incremental()   ↔   serve_post_sync()
+        └─ push_incremental()   ↔   serve_post_sync()
              └─ create_bundle()             └─ apply_bundle()
 
-Protocol flow (client_sync orchestrates)::
+Protocol flow (sync_article orchestrates)::
 
     1. GET  /api/v1/articles/{id}/head     → server HEAD (404 if unknown)
     2. If server has no article:
@@ -69,7 +69,7 @@ DEFAULT_ARTICLES_DIR = Path.home() / ".peerpedia" / "articles"
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-def client_sync(db: Session, server: str, article_id: str) -> dict:
+def sync_article(db: Session, server: str, article_id: str) -> dict:
     """Synchronize local article with the remote server.
 
     Finds the common ancestor, then acts on three cases:
@@ -95,33 +95,33 @@ def client_sync(db: Session, server: str, article_id: str) -> dict:
 
     # Server doesn't have this article yet — upload full repo
     if not server_head:
-        return _dict(client_create_article(server, article_id), local_head)
+        return _result(create_remote_article(server, article_id), local_head)
 
     # Already in sync
     if local_head == server_head:
         return {"synced": True, "head": local_head}
 
-    merge_base = client_find_merge_base(server, article_id, rp, server_head)
+    merge_base = find_merge_base(server, article_id, rp, server_head)
 
     # ── Case 1: Server ahead — pull only (ff) ────────────────────────────
     if merge_base == local_head:
-        new_head = client_pull_incremental(db, server, article_id, local_head)
-        return _dict(new_head is not None, new_head)
+        new_head = pull_incremental(db, server, article_id, local_head)
+        return _result(new_head is not None, new_head)
 
     # ── Case 2: Local ahead — push only ──────────────────────────────────
     if merge_base == server_head:
-        return _dict(
-            client_push_incremental(server, article_id, server_head, local_head) is not None,
+        return _result(
+            push_incremental(server, article_id, server_head, local_head) is not None,
             local_head,
         )
 
     # ── Case 3: Diverged — pull (non-ff merge), then push ────────────────
     if merge_base is not None:
-        new_head = client_pull_incremental(db, server, article_id, merge_base, ff_only=False)
+        new_head = pull_incremental(db, server, article_id, merge_base, ff_only=False)
         if not new_head:
             return {"synced": False, "head": None}
-        return _dict(
-            client_push_incremental(server, article_id, server_head, new_head) is not None,
+        return _result(
+            push_incremental(server, article_id, server_head, new_head) is not None,
             new_head,
         )
 
@@ -129,11 +129,11 @@ def client_sync(db: Session, server: str, article_id: str) -> dict:
     return {"synced": False, "head": None}
 
 
-def _dict(ok: bool, head: str) -> dict:
+def _result(ok: bool, head: str) -> dict:
     return {"synced": True, "head": head} if ok else {"synced": False, "head": None}
 
 
-def client_find_merge_base(
+def find_merge_base(
     server: str, article_id: str, repo_path: Path, server_head: str,
 ) -> str | None:
     """Find merge base by probing the server with candidate hashes.
@@ -150,7 +150,7 @@ def client_find_merge_base(
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-def client_pull_incremental(
+def pull_incremental(
     db: Session,
     server: str,
     article_id: str,
@@ -175,7 +175,7 @@ def client_pull_incremental(
     return apply_sync_bundle(db, article_id, ff_only=ff_only)
 
 
-def client_push_incremental(
+def push_incremental(
     server: str, article_id: str, since_hash: str, to_hash: str,
 ) -> str | None:
     """Push local commits from *since_hash* to *to_hash*.
@@ -189,7 +189,7 @@ def client_push_incremental(
     return None
 
 
-def client_create_article(server: str, article_id: str) -> bool:
+def create_remote_article(server: str, article_id: str) -> bool:
     """Upload a full repo tar.gz for a first-ever push."""
     rp = DEFAULT_ARTICLES_DIR / article_id
     if not (rp / ".git").is_dir():

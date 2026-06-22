@@ -1,13 +1,17 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""Tests for article permission policy functions."""
+"""Tests for article permission policy functions.
+
+All policy functions are now pure — they take pre-fetched data.
+Tests create model objects directly (no session needed for policy calls).
+"""
 
 import uuid
 
 import pytest
 
-from peerpedia_core.exceptions import ConflictError, NotAuthorizedError, NotFoundError
+from peerpedia_core.exceptions import ConflictError, NotAuthorizedError
 from peerpedia_core.policies.articles import (
     FORKABLE_STATUSES,
     PUBLIC_READABLE_STATUSES,
@@ -20,18 +24,26 @@ from peerpedia_core.policies.articles import (
     assert_can_read_article,
     assert_can_rollback_article,
     assert_can_sync_article,
-    get_article_or_raise,
     visible_statuses_for_user,
 )
-from peerpedia_core.storage.db.engine import get_session
-from peerpedia_core.storage.db.models import Article, ArticleAuthor, ScriptMaintainer, User
+from peerpedia_core.storage.db.models import Article, User
+
+
+def _article(**kwargs):
+    defaults = {"id": str(uuid.uuid4()), "title": "", "status": "draft", "fork_count": 0}
+    defaults.update(kwargs)
+    return Article(**defaults)
 
 
 def _user(**kwargs):
-    """Create a User with required fields filled in."""
     defaults = {"id": str(uuid.uuid4()), "password_hash": "", "name": "Test User", "affiliation": "Test"}
     defaults.update(kwargs)
     return User(**defaults)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Visibility rules
+# ═══════════════════════════════════════════════════════════════════════════════
 
 
 class TestVisibilityRules:
@@ -46,144 +58,81 @@ class TestVisibilityRules:
         assert result == {"sedimentation", "published"}
 
     def test_visible_statuses_authenticated(self):
-        u = _user(name="test")
+        u = _user()
         result = visible_statuses_for_user(u)
         assert result == {"draft", "sedimentation", "published"}
 
 
-class TestGetArticleOrRaise:
-    def test_returns_article_when_exists(self, db_engine):
-        s = get_session(db_engine)
-        a = Article(title="", id="a-exists", status="draft", fork_count=0)
-        s.add(a)
-        s.commit()
-
-        result = get_article_or_raise(s, "a-exists")
-        assert result.id == "a-exists"
-
-    def test_raises_not_found_when_missing(self, db_engine):
-        import pytest
-
-        s = get_session(db_engine)
-        with pytest.raises(NotFoundError, match="Article not found"):
-            get_article_or_raise(s, "nonexistent")
+# ═══════════════════════════════════════════════════════════════════════════════
+# Read permissions
+# ═══════════════════════════════════════════════════════════════════════════════
 
 
 class TestReadPermissions:
-    def test_can_read_published_article(self, db_engine):
-        s = get_session(db_engine)
-        a = Article(title="", id="a-pub", status="published", fork_count=0)
-        s.add(a)
-        s.commit()
-
-        result = assert_can_read_article(s, "a-pub", None)
+    def test_can_read_published_article(self):
+        a = _article(id="a-pub", status="published")
+        result = assert_can_read_article(a, [], None)
         assert result.id == "a-pub"
 
-    def test_can_read_own_draft(self, db_engine):
-        s = get_session(db_engine)
+    def test_can_read_own_draft(self):
         u = _user(id="u-draft")
-        s.add(u)
-        a = Article(title="", id="a-draft", status="draft", fork_count=0)
-        s.add(a)
-        s.flush()
-        s.add(ArticleAuthor(article_id="a-draft", author_id="u-draft", position=0))
-        s.commit()
-
-        result = assert_can_read_article(s, "a-draft", u)
+        a = _article(id="a-draft", status="draft")
+        result = assert_can_read_article(a, ["u-draft"], u)
         assert result.id == "a-draft"
 
-    def test_cannot_read_others_draft(self, db_engine):
-        import pytest
-
-        s = get_session(db_engine)
+    def test_cannot_read_others_draft(self):
         u = _user(id="u-other")
-        s.add(u)
-        a = Article(title="", id="a-other-draft", status="draft", fork_count=0)
-        s.add(a)
-        s.commit()
-
+        a = _article(id="a-other-draft", status="draft")
         with pytest.raises(NotAuthorizedError, match="Article is private"):
-            assert_can_read_article(s, "a-other-draft", u)
+            assert_can_read_article(a, [], u)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Write permissions — maintainer-gated
+# ═══════════════════════════════════════════════════════════════════════════════
 
 
 class TestWritePermissions:
-    def test_author_can_sync(self, db_engine):
-        s = get_session(db_engine)
+    def test_maintainer_can_sync(self):
         u = _user(id="u-sync")
-        s.add(u)
-        a = Article(title="", id="a-sync", status="draft", fork_count=0)
-        s.add(a)
-        s.flush()
-        s.add(ArticleAuthor(article_id="a-sync", author_id="u-sync", position=0))
-        s.add(ScriptMaintainer(article_id="a-sync", user_id="u-sync"))
-        s.commit()
-
-        result = assert_can_sync_article(s, "a-sync", u)
+        a = _article(id="a-sync", status="draft")
+        result = assert_can_sync_article(a, ["u-sync"], u)
         assert result.id == "a-sync"
 
-    def test_non_author_cannot_sync(self, db_engine):
-        import pytest
-
-        s = get_session(db_engine)
+    def test_non_maintainer_cannot_sync(self):
         u = _user(id="u-nosync")
-        s.add(u)
-        a = Article(title="", id="a-nosync", status="draft", fork_count=0)
-        s.add(a)
-        s.commit()
+        a = _article(id="a-nosync", status="draft")
+        with pytest.raises(NotAuthorizedError, match="is not a maintainer"):
+            assert_can_sync_article(a, [], u)
 
-        with pytest.raises(NotAuthorizedError):
-            assert_can_sync_article(s, "a-nosync", u)
+    def test_cannot_edit_sedimentation_article(self):
+        u = _user(id="u-edit-sed")
+        a = _article(id="a-edit-sed", status="sedimentation")
+        with pytest.raises(NotAuthorizedError, match="Cannot edit an article in sedimentation status"):
+            assert_can_edit_article(a, ["u-edit-sed"], u)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Fork permissions
+# ═══════════════════════════════════════════════════════════════════════════════
 
 
 class TestForkPermissions:
-    def test_can_fork_published(self, db_engine):
-        s = get_session(db_engine)
-        u = _user(id="u-fork")
-        s.add(u)
-        a = Article(title="", id="a-fork", status="published", fork_count=0)
-        s.add(a)
-        s.commit()
-
-        result = assert_can_fork_article(s, "a-fork", u)
+    def test_can_fork_published(self):
+        a = _article(id="a-fork", status="published")
+        result = assert_can_fork_article(a, None)
         assert result.id == "a-fork"
 
-    def test_cannot_fork_draft(self, db_engine):
-        import pytest
-
-        s = get_session(db_engine)
-        u = _user(id="u-nofork")
-        s.add(u)
-        a = Article(title="", id="a-nofork", status="draft", fork_count=0)
-        s.add(a)
-        s.commit()
-
+    def test_cannot_fork_draft(self):
+        a = _article(id="a-nofork", status="draft")
         with pytest.raises(NotAuthorizedError, match="Only published articles can be forked"):
-            assert_can_fork_article(s, "a-nofork", u)
+            assert_can_fork_article(a, None)
 
-    def test_cannot_fork_twice(self, db_engine):
-        import pytest
-
-        s = get_session(db_engine)
-        u = _user(id="u-dup")
-        s.add(u)
-        a = Article(title="", id="a-dup-fork", status="published", fork_count=0)
-        s.add(a)
-        s.flush()
-        # Simulate an existing fork by the same user
-        fork = Article(
-            title="Fork of General Relativity",
-            id="fork-existing",
-            status="draft",
-            fork_count=0,
-            forked_from="a-dup-fork",
-        )
-        s.add(fork)
-        s.flush()
-        s.add(ArticleAuthor(article_id="fork-existing", author_id="u-dup", position=0))
-        s.commit()
-
+    def test_cannot_fork_twice(self):
+        a = _article(id="a-dup-fork", status="published")
+        existing_fork = _article(id="fork-existing", status="draft", forked_from="a-dup-fork")
         with pytest.raises(ConflictError, match="Already forked"):
-            assert_can_fork_article(s, "a-dup-fork", u)
+            assert_can_fork_article(a, existing_fork)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -192,87 +141,54 @@ class TestForkPermissions:
 
 
 class TestDownloadPermissions:
-    def test_anyone_can_download_published(self, db_engine):
-        s = get_session(db_engine)
-        a = Article(title="", id="a-dl-pub", status="published", fork_count=0)
-        s.add(a)
-        s.commit()
-
-        result = assert_can_download_content(s, "a-dl-pub", None)
+    def test_anyone_can_download_published(self):
+        a = _article(id="a-dl-pub", status="published")
+        result = assert_can_download_content(a, [], None)
         assert result.id == "a-dl-pub"
 
-    def test_author_can_download_draft(self, db_engine):
-        s = get_session(db_engine)
+    def test_author_can_download_draft(self):
         u = _user(id="u-dl-author")
-        s.add(u)
-        a = Article(title="", id="a-dl-draft", status="draft", fork_count=0)
-        s.add(a)
-        s.flush()
-        s.add(ArticleAuthor(article_id="a-dl-draft", author_id="u-dl-author", position=0))
-        s.commit()
-
-        result = assert_can_download_content(s, "a-dl-draft", u)
+        a = _article(id="a-dl-draft", status="draft")
+        result = assert_can_download_content(a, ["u-dl-author"], u)
         assert result.id == "a-dl-draft"
 
-    def test_non_author_cannot_download_draft(self, db_engine):
-        s = get_session(db_engine)
+    def test_non_author_cannot_download_draft(self):
         u = _user(id="u-dl-nonauth")
-        s.add(u)
-        a = Article(title="", id="a-dl-draft2", status="draft", fork_count=0)
-        s.add(a)
-        s.commit()
-
+        a = _article(id="a-dl-draft2", status="draft")
         with pytest.raises(NotAuthorizedError, match="Content download not available"):
-            assert_can_download_content(s, "a-dl-draft2", u)
-
-    def test_raises_not_found_for_missing(self, db_engine):
-        s = get_session(db_engine)
-        with pytest.raises(NotFoundError, match="Article not found"):
-            assert_can_download_content(s, "nonexistent", None)
+            assert_can_download_content(a, [], u)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Anonymous read edge case
+# Anonymous read
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
 class TestAnonymousRead:
-    def test_anonymous_cannot_read_draft(self, db_engine):
-        s = get_session(db_engine)
-        a = Article(title="", id="a-anon-draft", status="draft", fork_count=0)
-        s.add(a)
-        s.commit()
-
+    def test_anonymous_cannot_read_draft(self):
+        a = _article(id="a-anon-draft", status="draft")
         with pytest.raises(NotAuthorizedError, match="Article is private"):
-            assert_can_read_article(s, "a-anon-draft", None)
+            assert_can_read_article(a, [], None)
 
-    def test_anonymous_can_read_published(self, db_engine):
-        s = get_session(db_engine)
-        a = Article(title="", id="a-anon-pub", status="published", fork_count=0)
-        s.add(a)
-        s.commit()
-
-        result = assert_can_read_article(s, "a-anon-pub", None)
+    def test_anonymous_can_read_published(self):
+        a = _article(id="a-anon-pub", status="published")
+        result = assert_can_read_article(a, [], None)
         assert result.id == "a-anon-pub"
 
-    def test_anonymous_can_read_sedimentation(self, db_engine):
-        s = get_session(db_engine)
-        a = Article(title="", id="a-anon-sed", status="sedimentation", fork_count=0)
-        s.add(a)
-        s.commit()
-
-        result = assert_can_read_article(s, "a-anon-sed", None)
+    def test_anonymous_can_read_sedimentation(self):
+        a = _article(id="a-anon-sed", status="sedimentation")
+        result = assert_can_read_article(a, [], None)
         assert result.id == "a-anon-sed"
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Author-only wrappers — parametrized smoke test
+# Maintainer-gated — parametrized smoke test
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-class TestAllAuthorOnlyWrappers:
+class TestAllMaintainerWrappers:
     """Every assert_can_{edit,delete,rollback,publish,extend_sink}
-    delegates to the same _assert_is_maintainer helper.  A parametrized
+    delegates to the same _assert_maintainer helper.  A parametrized
     smoke test ensures each wrapper dispatches correctly.
     """
 
@@ -286,16 +202,11 @@ class TestAllAuthorOnlyWrappers:
             (assert_can_extend_sink, "extend sink"),
         ],
     )
-    def test_non_author_raises(self, db_engine, func, action):
-        s = get_session(db_engine)
-        u = _user(id=f"u-{action}", )
-        s.add(u)
-        a = Article(title="", id=f"a-{action}", status="draft", fork_count=0)
-        s.add(a)
-        s.commit()
-
+    def test_non_maintainer_raises(self, func, action):
+        u = _user(id=f"u-{action}")
+        a = _article(id=f"a-{action}", status="draft")
         with pytest.raises(NotAuthorizedError, match="is not a maintainer"):
-            func(s, f"a-{action}", u)
+            func(a, [], u)
 
     @pytest.mark.parametrize(
         "func",
@@ -306,31 +217,22 @@ class TestAllAuthorOnlyWrappers:
             assert_can_publish_article,
         ],
     )
-    def test_author_succeeds(self, db_engine, func):
-        s = get_session(db_engine)
+    def test_maintainer_succeeds(self, func):
         u = _user(id="u-auth-all")
-        s.add(u)
-        a = Article(title="", id="a-auth-all", status="draft", fork_count=0)
-        s.add(a)
-        s.flush()
-        s.add(ArticleAuthor(article_id="a-auth-all", author_id="u-auth-all", position=0))
-        s.add(ScriptMaintainer(article_id="a-auth-all", user_id="u-auth-all"))
-        s.commit()
-
-        result = func(s, "a-auth-all", u)
+        a = _article(id="a-auth-all", status="draft")
+        result = func(a, ["u-auth-all"], u)
         assert result.id == "a-auth-all"
 
-    def test_author_can_extend_sink_on_sedimentation(self, db_engine):
+    def test_maintainer_can_extend_sink_on_sedimentation(self):
         """extend-sink requires sedimentation status (the pool period)."""
-        s = get_session(db_engine)
         u = _user(id="u-ext-sink")
-        s.add(u)
-        a = Article(title="", id="a-ext-sink", status="sedimentation", fork_count=0)
-        s.add(a)
-        s.flush()
-        s.add(ArticleAuthor(article_id="a-ext-sink", author_id="u-ext-sink", position=0))
-        s.add(ScriptMaintainer(article_id="a-ext-sink", user_id="u-ext-sink"))
-        s.commit()
-
-        result = assert_can_extend_sink(s, "a-ext-sink", u)
+        a = _article(id="a-ext-sink", status="sedimentation")
+        result = assert_can_extend_sink(a, ["u-ext-sink"], u)
         assert result.id == "a-ext-sink"
+
+    def test_delete_only_allows_draft(self):
+        """Delete is only allowed in draft status."""
+        u = _user(id="u-del-pub")
+        a = _article(id="a-del-pub", status="published")
+        with pytest.raises(NotAuthorizedError, match="Cannot delete"):
+            assert_can_delete_article(a, ["u-del-pub"], u)

@@ -208,6 +208,16 @@ def update_article_status(session: Session, article_id: str, new_status: str) ->
     return a
 
 
+def update_article_score(session: Session, article_id: str, score: dict) -> Article:
+    """Set the computed score for an article. Raises ValueError if not found."""
+    a = session.get(Article, article_id)
+    if a is None:
+        raise ValueError(f"Article {article_id} not found")
+    a.score = score
+    session.flush()
+    return a
+
+
 def increment_fork_count(session: Session, article_id: str) -> Article:
     a = session.get(Article, article_id)
     if a is None:

@@ -83,8 +83,9 @@ from peerpedia_core.storage.db.crud_article import (
     get_author_ids,
     increment_fork_count,
     set_sink_start,
+    update_article_status,
 )
-from peerpedia_core.storage.db.crud_maintainer import add_maintainer
+from peerpedia_core.storage.db.crud_maintainer import add_maintainer, get_maintainer_ids
 from peerpedia_core.storage.db.crud_user import get_user
 from peerpedia_core.storage.crypto import _make_temp_key
 from peerpedia_core.storage.git_backend import (
@@ -145,7 +146,12 @@ def fork_article(db: Session, article_id: str, user_id: str) -> dict:
     if user is None:
         raise NotFoundError("User not found")
 
-    original = assert_can_fork_article(db, article_id, user)
+    from peerpedia_core.storage.db.crud_article import get_article_by_fork_and_author
+    original = get_article(db, article_id)
+    if original is None:
+        raise NotFoundError("Article not found")
+    existing_fork = get_article_by_fork_and_author(db, forked_from=article_id, author_id=user.id)
+    assert_can_fork_article(original, existing_fork)
 
     fork_id = str(uuid.uuid4())
     src = DEFAULT_ARTICLES_DIR / article_id
@@ -203,7 +209,11 @@ def rollback_article(
     if user is None:
         raise NotFoundError("User not found")
 
-    article = assert_can_rollback_article(db, article_id, user)
+    article = get_article(db, article_id)
+    if article is None:
+        raise NotFoundError("Article not found")
+    mids = get_maintainer_ids(db, article_id)
+    assert_can_rollback_article(article, mids, user)
     old_status = article.status
     rp = DEFAULT_ARTICLES_DIR / article_id
     if not (rp / ".git").is_dir():
@@ -358,7 +368,11 @@ def update_article_content(
     if user is None:
         raise NotFoundError("User not found")
 
-    a = assert_can_edit_article(db, article_id, user)
+    a = get_article(db, article_id)
+    if a is None:
+        raise NotFoundError("Article not found")
+    mids = get_maintainer_ids(db, article_id)
+    assert_can_edit_article(a, mids, user)
     old_status = a.status
     rp = DEFAULT_ARTICLES_DIR / article_id
     if not (rp / ".git").is_dir():
@@ -447,12 +461,17 @@ def publish_article(
         BadRequestError: self-review missing or article already published
     """
     from peerpedia_core.policies.articles import require_self_review_for_publish
+    from peerpedia_core.storage.db.crud_review import get_review
 
     user = get_user(db, user_id)
     if user is None:
         raise NotFoundError("User not found")
 
-    a = assert_can_publish_article(db, article_id, user)
+    a = get_article(db, article_id)
+    if a is None:
+        raise NotFoundError("Article not found")
+    mids = get_maintainer_ids(db, article_id)
+    assert_can_publish_article(a, mids, user)
 
     # G10: publish only from draft
     old_status = a.status
@@ -475,7 +494,7 @@ def publish_article(
     )
 
     # Enter sedimentation so scope derivation works.
-    a.status = "sedimentation"
+    update_article_status(db, article_id, "sedimentation")
 
     from peerpedia_core.storage.db.crud_review import upsert_review
 
@@ -497,7 +516,15 @@ def publish_article(
     recompute_article_score(db, article_id)
 
     # G6: self-review must exist and score must be computed
-    require_self_review_for_publish(db, article_id, user)
+    rp = DEFAULT_ARTICLES_DIR / article_id
+    if not (rp / ".git").is_dir():
+        raise BadRequestError("self_review is required before publishing — no git repo found")
+    try:
+        head = get_head_hash(rp)
+    except ValueError:
+        raise BadRequestError("self_review is required before publishing — no commits yet")
+    existing_review = get_review(db, article_id, user.id, a.status, head)
+    require_self_review_for_publish(a, existing_review)
 
     return {"id": a.id, "title": a.title, "status": a.status, "commit_hash": commit_hash}
 
@@ -543,7 +570,11 @@ def delete_article(db: Session, article_id: str, *, user_id: str) -> None:
     user = get_user(db, user_id)
     if user is None:
         raise NotFoundError("User not found")
-    assert_can_delete_article(db, article_id, user)
+    article = get_article(db, article_id)
+    if article is None:
+        raise NotFoundError("Article not found")
+    mids = get_maintainer_ids(db, article_id)
+    assert_can_delete_article(article, mids, user)
 
     _delete(db, article_id)
     delete_article_repo(DEFAULT_ARTICLES_DIR / article_id)

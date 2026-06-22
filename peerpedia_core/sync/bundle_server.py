@@ -61,6 +61,7 @@ from peerpedia_core.storage.db import Session
 from peerpedia_core.commands import apply_sync_bundle
 from peerpedia_core.sync.git_bundle import (
     create_bundle,
+    get_head,
     ingest_bundle,
     is_ancestor,
 )
@@ -73,14 +74,9 @@ def serve_get_head(repo_path: Path) -> str | None:
 
     Called by the HTTP layer for ``GET /head``.
     """
-    import git
-
-    if not (repo_path / ".git").is_dir():
-        return None
-    repo = git.Repo(repo_path)
     try:
-        return repo.head.commit.hexsha
-    except (ValueError, git.GitError):
+        return get_head(repo_path)
+    except (FileNotFoundError, ValueError):
         return None
 
 
@@ -108,8 +104,6 @@ def serve_get_bundle(repo_path: Path, since_hash: str | None) -> bytes | None:
 
     Called by the HTTP layer for ``GET /bundle?since=``.
     """
-    if since_hash is None:
-        return _create_full_bundle(repo_path)
     return create_bundle(repo_path, since_hash)
 
 
@@ -140,23 +134,3 @@ def serve_post_articles(repo_path: Path, payload: dict) -> str:
 
     return serve_get_head(repo_path)
 
-
-# ── Internal helpers ─────────────────────────────────────────────────────────
-
-
-def _create_full_bundle(repo_path: Path) -> bytes:
-    """Create a full git bundle containing all commits (no since_hash)."""
-    import git
-    import tempfile
-
-    if not (repo_path / ".git").is_dir():
-        raise FileNotFoundError(f"Git repo not found: {repo_path}")
-
-    repo = git.Repo(repo_path)
-    with tempfile.NamedTemporaryFile(suffix=".bundle", delete=False) as f:
-        bundle_path = f.name
-    try:
-        repo.git.bundle("create", bundle_path, "HEAD")
-        return Path(bundle_path).read_bytes()
-    finally:
-        Path(bundle_path).unlink(missing_ok=True)

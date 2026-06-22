@@ -54,7 +54,7 @@ from datetime import timedelta
 from peerpedia_core.storage.db import Session
 
 from peerpedia_core.config.params import params
-from peerpedia_core.storage.db.crud_article import get_article, get_articles_by_author, get_author_ids, list_articles
+from peerpedia_core.storage.db.crud_article import get_article, get_articles_by_author, get_author_ids, list_articles, update_article_score, update_article_status
 from peerpedia_core.storage.db.crud_review import get_reviews_for_article, upsert_review
 from peerpedia_core.storage.db.crud_user import get_user, get_users_by_ids, list_users, update_user_reputation
 from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, list_review_dirs, read_review_scores
@@ -129,9 +129,9 @@ def publish_ready_articles(db: Session) -> int:
             )
 
         # Then DB.
-        article.status = "published"
+        update_article_status(db, article.id, "published")
         if score:
-            article.score = score
+            update_article_score(db, article.id, score)
 
         for author_id in authors:
             all_author_ids.add(author_id)
@@ -192,7 +192,7 @@ def recompute_article_score(db: Session, article_id: str) -> dict | None:
 
     score = aggregate_review_scores(review_dicts, reviewer_weights, scope_weights)
     if score is not None:
-        article.score = score
+        update_article_score(db, article.id, score)
     return score
 
 

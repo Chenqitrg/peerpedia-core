@@ -49,7 +49,7 @@ from pathlib import Path
 from peerpedia_core.storage.db import Session
 
 from peerpedia_core.exceptions import NotAuthorizedError, SignatureVerificationError
-from peerpedia_core.storage.db.crud_article import get_article
+from peerpedia_core.storage.db.crud_article import get_article, update_article_status
 from peerpedia_core.storage.db.crud_maintainer import get_maintainer_ids
 from peerpedia_core.storage.db.crud_review import upsert_review
 from peerpedia_core.storage.crypto import pubkey_hex_to_ssh_line
@@ -110,7 +110,7 @@ def git_sync_status(db: Session, article_id: str) -> None:
             commit["message"], commit["author_email"]
         )
         if new_status:
-            article.status = new_status
+            update_article_status(db, article_id, new_status)
             break  # iter_commits returns newest first — first match is the latest status
 
 
@@ -228,7 +228,7 @@ def _verify_new_commits(db: Session, repo_path: Path, *, since_hash: str) -> Non
     same user_id (TOFU: first encounter stores, mismatch rejects).
     Platform commits (author_email == system@peerpedia) are skipped.
     """
-    from peerpedia_core.storage.db.crud_user import get_user
+    from peerpedia_core.storage.db.crud_user import get_user, update_user_public_key
 
     for commit in get_commit_history(repo_path, since_hash=since_hash):
         author_email = commit["author_email"]
@@ -256,7 +256,7 @@ def _verify_new_commits(db: Session, repo_path: Path, *, since_hash: str) -> Non
             # user is first created via serve_post_articles.
             continue
         if user.public_key is None:
-            user.public_key = pubkey_hex
+            update_user_public_key(db, user_id, pubkey_hex)
         elif user.public_key != pubkey_hex:
             raise SignatureVerificationError(
                 f"Pubkey mismatch for {user_id}: "

@@ -50,13 +50,13 @@ import io
 import tarfile
 from pathlib import Path
 
-import git as _git
 from peerpedia_core.storage.db import Session
 
 from peerpedia_core.commands import apply_sync_bundle
 from peerpedia_core.sync.git_bundle import (
     create_bundle,
     find_common_ancestor,
+    get_head,
     ingest_bundle,
 )
 
@@ -87,9 +87,8 @@ def client_sync(db: Session, server: str, article_id: str) -> dict:
     """
     rp = DEFAULT_ARTICLES_DIR / article_id
     try:
-        repo = _git.Repo(rp)
-        local_head: str = repo.head.commit.hexsha
-    except (ValueError, _git.GitError):
+        local_head: str = get_head(rp)
+    except (FileNotFoundError, ValueError):
         return {"synced": False, "head": None}
 
     server_head = fetch_head(server, article_id)

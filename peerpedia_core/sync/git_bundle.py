@@ -56,6 +56,8 @@ import tempfile
 from collections.abc import Callable
 from pathlib import Path
 
+import git
+
 from peerpedia_core.sync.monotonic_search import search_monotonic_boundary
 
 
@@ -66,6 +68,20 @@ class MergeConflictError(Exception):
 
 
 # ── Bundle operations ────────────────────────────────────────────────────────
+
+
+def get_head(repo_path: Path) -> str:
+    """Return the HEAD commit hash.
+
+    Raises FileNotFoundError if no .git directory, ValueError if no commits.
+    """
+
+    if not (repo_path / ".git").is_dir():
+        raise FileNotFoundError(f"Git repo not found: {repo_path}")
+    repo = git.Repo(repo_path)
+    if not repo.head.is_valid():
+        raise ValueError(f"Repo has no commits: {repo_path}")
+    return repo.head.commit.hexsha
 
 
 def ingest_bundle(repo_path: Path, bundle_bytes: bytes) -> None:
@@ -79,7 +95,6 @@ def ingest_bundle(repo_path: Path, bundle_bytes: bytes) -> None:
         FileNotFoundError: repo_path/.git doesn't exist.
         ValueError: bundle is invalid or fetch failed.
     """
-    import git
 
     if not (repo_path / ".git").is_dir():
         raise FileNotFoundError(f"Git repo not found: {repo_path}")
@@ -101,31 +116,30 @@ def ingest_bundle(repo_path: Path, bundle_bytes: bytes) -> None:
             raise ValueError(f"Bundle fetch failed: {e}") from e
 
 
-def create_bundle(repo_path: Path, since_hash: str) -> bytes:
-    """Create an incremental git bundle from since_hash to HEAD.
+def create_bundle(repo_path: Path, since_hash: str | None = None) -> bytes:
+    """Create a git bundle from *since_hash* to HEAD.
 
-    Returns the bundle file bytes. The caller can stream this directly
-    as an HTTP response.
+    *since_hash=None* → full bundle (all commits from the beginning).
+    Otherwise creates an incremental bundle (``since_hash..HEAD``).
 
     Raises:
         FileNotFoundError: if repo_path/.git doesn't exist.
         ValueError: if since_hash is not an ancestor of HEAD.
     """
-    import git
 
     if not (repo_path / ".git").is_dir():
         raise FileNotFoundError(f"Git repo not found: {repo_path}")
 
-    if not is_ancestor(repo_path, since_hash):
+    if since_hash is not None and not is_ancestor(repo_path, since_hash):
         raise ValueError(f"since_hash {since_hash[:8]} is not an ancestor of HEAD")
 
     repo = git.Repo(repo_path)
+    rev_range = f"{since_hash}..HEAD" if since_hash else "HEAD"
 
     with tempfile.NamedTemporaryFile(suffix=".bundle", delete=False) as f:
         bundle_path = f.name
-
     try:
-        repo.git.bundle("create", bundle_path, f"{since_hash}..HEAD")
+        repo.git.bundle("create", bundle_path, rev_range)
         return Path(bundle_path).read_bytes()
     finally:
         Path(bundle_path).unlink(missing_ok=True)
@@ -136,7 +150,6 @@ def create_bundle(repo_path: Path, since_hash: str) -> bytes:
 
 def is_ancestor(repo_path: Path, maybe_ancestor: str) -> bool:
     """Check if *maybe_ancestor* exists in the repo and is an ancestor of HEAD."""
-    import git
 
     if not (repo_path / ".git").is_dir():
         raise FileNotFoundError(f"Git repo not found: {repo_path}")
@@ -175,7 +188,6 @@ def find_common_ancestor(
     Returns the common ancestor hash, or ``None`` if no common ancestor
     is found within *max_depth*.
     """
-    import git
 
     repo = git.Repo(repo_path)
     if not repo.head.is_valid():

@@ -138,6 +138,26 @@ def get_users_by_ids(session: Session, user_ids: set[str]) -> list[User]:
     return users
 
 
+def update_user_public_key(session: Session, user_id: str, pubkey_hex: str) -> User:
+    """Set the public_key for a user. Raises ValueError if user not found."""
+    u = session.get(User, user_id)
+    if u is None:
+        raise ValueError(f"User {user_id} not found")
+    u.public_key = pubkey_hex
+    session.flush()
+    return u
+
+
+def update_user_salt(session: Session, user_id: str, salt_hex: str) -> User:
+    """Set the scrypt salt for a user. Raises ValueError if user not found."""
+    u = session.get(User, user_id)
+    if u is None:
+        raise ValueError(f"User {user_id} not found")
+    u.salt = salt_hex
+    session.flush()
+    return u
+
+
 def update_user_reputation(session: Session, user_id: str, reputation: dict) -> User:
     u = session.get(User, user_id)
     if u is None:

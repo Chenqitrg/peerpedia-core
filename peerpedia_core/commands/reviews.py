@@ -52,7 +52,7 @@ from peerpedia_core.storage.db import Session
 
 from peerpedia_core.exceptions import ConflictError, NotFoundError
 from peerpedia_core.policies.articles import assert_can_submit_review
-from peerpedia_core.storage.db.crud_article import get_author_ids
+from peerpedia_core.storage.db.crud_article import get_article, get_author_ids
 from peerpedia_core.storage.db.crud_review import upsert_review
 from peerpedia_core.storage.db.crud_user import derive_anonymous_name, get_user
 from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, commit_article
@@ -83,7 +83,10 @@ def submit_review(
     if user is None:
         raise NotFoundError("Reviewer not found")
 
-    article = assert_can_submit_review(db, article_id)
+    article = get_article(db, article_id)
+    if article is None:
+        raise NotFoundError("Article not found")
+    assert_can_submit_review(article)
 
     author_ids = get_author_ids(db, article_id)
 

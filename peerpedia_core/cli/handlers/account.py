@@ -57,13 +57,15 @@ def _cmd_register(db, args):
     private_key_bytes, pubkey_bytes = derive_key_pair(password, salt_hex)
     pubkey_hex = pubkey_bytes.hex()
 
+    from peerpedia_core.storage.db.crud_user import update_user_public_key, update_user_salt
+
     user = create_user(
         db,
         name=args.name,
         password_hash=password_hash,
     )
-    user.public_key = pubkey_hex
-    user.salt = salt_hex
+    update_user_public_key(db, user.id, pubkey_hex)
+    update_user_salt(db, user.id, salt_hex)
     db.commit()
 
     _write_session(user.id, user.name, private_key_bytes.hex())

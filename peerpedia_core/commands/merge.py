@@ -37,6 +37,7 @@ from peerpedia_core.config.params import params
 from peerpedia_core.exceptions import BadRequestError, NotFoundError
 from peerpedia_core.policies.articles import assert_can_accept_merge
 from peerpedia_core.storage.db.crud_article import get_article, get_author_ids, set_sink_start
+from peerpedia_core.storage.db.crud_maintainer import get_maintainer_ids
 from peerpedia_core.storage.db.crud_merge import accept_merge_proposal, get_merge_proposal
 from peerpedia_core.storage.db.crud_user import get_user
 from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, MergeConflictError, merge_git_repos
@@ -55,7 +56,11 @@ def accept_merge(db: Session, article_id: str, proposal_id: str, user_id: str) -
         raise NotFoundError("Merge proposal not found")
     if mp.target_article_id != article_id:
         raise BadRequestError("Proposal does not belong to this article")
-    assert_can_accept_merge(db, article_id, user)
+    article = get_article(db, article_id)
+    if article is None:
+        raise NotFoundError("Article not found")
+    mids = get_maintainer_ids(db, article_id)
+    assert_can_accept_merge(article, mids, user)
 
     target_repo = DEFAULT_ARTICLES_DIR / article_id
     fork_repo = DEFAULT_ARTICLES_DIR / mp.fork_article_id

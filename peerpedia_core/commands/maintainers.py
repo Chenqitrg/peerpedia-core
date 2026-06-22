@@ -27,7 +27,8 @@ from __future__ import annotations
 from peerpedia_core.storage.db import Session
 
 from peerpedia_core.exceptions import ConflictError, NotAuthorizedError, NotFoundError
-from peerpedia_core.policies.articles import get_article_or_raise, _is_maintainer
+from peerpedia_core.policies.articles import _is_maintainer
+from peerpedia_core.storage.db.crud_article import get_article
 from peerpedia_core.storage.db import crud_maintainer
 from peerpedia_core.storage.db.crud_user import get_user
 
@@ -77,18 +78,22 @@ def remove_maintainer_from_article(
 
 def list_maintainers(db: Session, article_id: str) -> list[str]:
     """Return maintainer IDs for an article, ordered by created_at."""
-    get_article_or_raise(db, article_id)
+    article = get_article(db, article_id)
+    if article is None:
+        raise NotFoundError("Article not found")
     return crud_maintainer.get_maintainer_ids(db, article_id)
 
 
 def _assert_caller_is_maintainer(db: Session, article_id: str, caller_id: str) -> None:
     """Raise if *caller_id* is not a maintainer of *article_id*."""
-    # Resolve user to check existence
     caller = get_user(db, caller_id)
     if caller is None:
         raise NotFoundError("Caller not found")
-    get_article_or_raise(db, article_id)
-    if not _is_maintainer(db, article_id, caller):
+    article = get_article(db, article_id)
+    if article is None:
+        raise NotFoundError("Article not found")
+    mids = crud_maintainer.get_maintainer_ids(db, article_id)
+    if not _is_maintainer(mids, caller):
         raise NotAuthorizedError(
             f"User {caller_id} is not a maintainer of script {article_id}"
         )

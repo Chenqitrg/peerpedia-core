@@ -199,6 +199,7 @@ def _cmd_article_delete(db, args):
     args: id [positional], --user, --json
     """
     from peerpedia_core.policies.articles import assert_can_delete_article
+    from peerpedia_core.storage.db.crud_maintainer import get_maintainer_ids
 
     user_id = _resolve_user(db, args.user)
     article = get_article(db, args.id)
@@ -206,8 +207,9 @@ def _cmd_article_delete(db, args):
         _die(f"Article [accent]{args.id}[/] not found")
 
     user = get_user(db, user_id)
+    mids = get_maintainer_ids(db, args.id)
     try:
-        assert_can_delete_article(db, args.id, user)
+        assert_can_delete_article(article, mids, user)
     except Exception as e:
         _die(str(e))
 

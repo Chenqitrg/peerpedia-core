@@ -3,6 +3,10 @@
 
 r"""Review orchestration — submit reviews and write review files to git.
 
+TODO(review-feedback): after a review, the reviewer should be notified when
+the article publishes (outcome feedback loop).  Currently a reviewer writes
+a review and never learns whether their input mattered.
+
 Call graph::
 
     submit_review

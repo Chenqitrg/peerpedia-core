@@ -89,6 +89,9 @@ COMMAND_GROUPS = [
             (("--status",), {"choices": ["draft", "sedimentation", "published"],
                              "help": "Filter by status"}),
         ]),
+        # TODO(review-feed): ``article reviewable`` — list sedimentation articles
+        # from my 1-hop social circle that I haven't reviewed yet.
+        # TODO(mine): ``article mine`` — shortcut for ``list --status all --user @me``.
         ("edit", _cmd_article_edit, [
             (("id",), {"help": "Article ID (or prefix)"}),
             (("--content",), {"help": "New article body (omit to open editor)"}),

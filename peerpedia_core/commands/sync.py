@@ -202,15 +202,15 @@ def apply_sync_bundle(
     # Sync status transitions from commit messages (P2P status transport).
     sync_status_from_git(db, article_id)
 
-    # TODO(sync): social graph sync — independent of git bundle transport.
-    # Git handles articles and reviews; follow relationships, bookmarks, and
-    # user profiles travel through a separate social-graph API:
+    # TODO(sync): social graph sync + pull — two independent transports:
     #
-    #   Visit user profile → pull following/followers from remote →
-    #   discover new users → follow locally → push follow back to remote.
+    # 1. Social graph (DB-to-DB, no git): follow relationships, bookmarks,
+    #    user profiles.  GET/POST follows, GET bookmarks per user.
+    #    Reachable articles = 2-hop social circle.  Reviewable = 1-hop.
     #
-    # This is purely DB-to-DB sync (no git).  Needs its own transport layer
-    # and endpoints (GET/POST follows, GET bookmarks per user).
+    # 2. ``sync pull`` command: bundle_client already has pull_incremental,
+    #    just needs CLI wiring.  Server side needs HTTP transport (see
+    #    bundle_server.py TODO).
 
     recompute_article_score(db, article_id)
 

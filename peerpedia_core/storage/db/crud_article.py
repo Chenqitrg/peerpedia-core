@@ -44,7 +44,8 @@ Reviewer's checklist
 from sqlalchemy.orm import Session
 
 from peerpedia_core.storage.db.models import (
-    Article, ArticleAuthor, Bookmark, Citation, MergeProposal, Review, ScriptMaintainer,
+    Article, ArticleAuthor, Bookmark, Citation, Follow, MergeProposal, Review,
+    ScriptMaintainer,
 )
 
 # ── Author helpers (join table) ───────────────────────────────────────────
@@ -123,6 +124,11 @@ def create_article(
     return a
 
 
+# TODO(search): fuzzy article search — match by partial title, author name,
+# or keywords.  Currently the only way to find an article is exact ID prefix.
+# Needed: search_articles(session, query) → list[Article] with ILIKE on
+# Article.title + join on User.name.  Then wire into CLI ``show`` command
+# (single match → show, multiple → list for user to pick, none → not found).
 def get_article(session: Session, article_id: str) -> Article | None:
     return session.get(Article, article_id)
 
@@ -155,8 +161,6 @@ def list_articles(
     if author_id:
         q = q.join(ArticleAuthor, Article.id == ArticleAuthor.article_id).filter(ArticleAuthor.author_id == author_id)
     if follower_id:
-        from peerpedia_core.storage.db.models import Follow
-
         q = (
             q.join(ArticleAuthor, Article.id == ArticleAuthor.article_id)
             .join(Follow, ArticleAuthor.author_id == Follow.followed_id)

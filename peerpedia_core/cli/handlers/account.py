@@ -1,7 +1,15 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""Account commands — register, login, whoami."""
+"""Account commands — register, login, whoami.
+
+TODO(recovery): key recovery — ``account recover`` re-derives the Ed25519
+key from password+salt stored in DB.  Determinstic scrypt→Ed25519 means
+a user who remembers their password can recover their identity on any device.
+TODO(multi-device): ``account login`` on a new device.  Currently session
+is a local file; multi-device needs the recovered private key + P2P identity
+sync (social graph transport, not git bundle).
+"""
 
 from __future__ import annotations
 

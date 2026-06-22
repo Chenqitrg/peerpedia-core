@@ -11,21 +11,22 @@ from __future__ import annotations
 
 import argparse
 
-from peerpedia_core.cli.handlers.account import _cmd_register, _cmd_login, _cmd_whoami
-from peerpedia_core.cli.handlers.articles import (
-    _cmd_article_create, _cmd_article_show, _cmd_article_list,
-    _cmd_article_edit, _cmd_article_publish, _cmd_article_delete,
-    _cmd_article_scan,
-)
-from peerpedia_core.cli.handlers.reviews import _cmd_review_submit, _cmd_review_list
-from peerpedia_core.cli.handlers.social import (
-    _cmd_fork, _cmd_merge_propose, _cmd_merge_accept,
+from peerpedia_core.cli.handlers import (
+    _cmd_article_create, _cmd_article_delete, _cmd_article_edit,
+    _cmd_article_list, _cmd_article_publish, _cmd_article_scan,
+    _cmd_article_show,
     _cmd_bookmark_add, _cmd_bookmark_list,
+    _cmd_compile,
+    _cmd_fork,
+    _cmd_login,
+    _cmd_maintainer_add, _cmd_maintainer_list, _cmd_maintainer_remove,
+    _cmd_merge_accept, _cmd_merge_propose,
+    _cmd_mother,
+    _cmd_register,
+    _cmd_review_list, _cmd_review_submit,
+    _cmd_sync_push, _cmd_sync_status,
+    _cmd_whoami,
 )
-from peerpedia_core.cli.handlers.compile_ import _cmd_compile
-from peerpedia_core.cli.handlers.maintainers import _cmd_maintainer_add, _cmd_maintainer_remove, _cmd_maintainer_list
-from peerpedia_core.cli.handlers.sync import _cmd_sync_status, _cmd_sync_push
-from peerpedia_core.cli.handlers.mother import _cmd_mother
 
 
 # TODO(cli-split): split into peerpedia_core/cli/ — each subcommand

@@ -16,7 +16,7 @@ from peerpedia_core.cli.sync_utils import _try_sync
 from peerpedia_core.commands import (
     create_article_with_content, get_article, get_author_ids,
     list_articles, parse_frontmatter, publish_article,
-    delete_article, update_article_content, get_user,
+    publish_ready_articles, delete_article, update_article_content, get_user,
 )
 
 
@@ -198,20 +198,10 @@ def _cmd_article_delete(db, args):
 
     args: id [positional], --user, --json
     """
-    from peerpedia_core.policies.articles import assert_can_delete_article
-    from peerpedia_core.storage.db.crud_maintainer import get_maintainer_ids
-
     user_id = _resolve_user(db, args.user)
     article = get_article(db, args.id)
     if not article:
         _die(f"Article [accent]{args.id}[/] not found")
-
-    user = get_user(db, user_id)
-    mids = get_maintainer_ids(db, args.id)
-    try:
-        assert_can_delete_article(article, mids, user)
-    except Exception as e:
-        _die(str(e))
 
     console.print(f"[warning]Delete [bold]{article.title}[/] (id: {args.id[:8]})?[/]")
     try:
@@ -232,8 +222,6 @@ def _cmd_article_scan(db, args):
 
     args: (none beyond common --user, --json)
     """
-    from peerpedia_core.commands import publish_ready_articles
-
     count = publish_ready_articles(db)
     db.commit()
     if args.json:

@@ -40,7 +40,8 @@ from peerpedia_core.storage.db.crud_article import get_article, get_author_ids, 
 from peerpedia_core.storage.db.crud_maintainer import get_maintainer_ids
 from peerpedia_core.storage.db.crud_merge import accept_merge_proposal, get_merge_proposal
 from peerpedia_core.storage.db.crud_user import get_user
-from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, MergeConflictError, merge_git_repos
+from peerpedia_core.storage.db.crud_merge import create_merge_proposal as _create
+from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, MergeConflictError, get_head_hash, merge_git_repos
 
 from peerpedia_core.commands.articles import rebuild_article_authors
 
@@ -87,8 +88,6 @@ def accept_merge(db: Session, article_id: str, proposal_id: str, user_id: str) -
     if was_published:
         set_sink_start(db, article_id, params.sink.edit_article_default_days)
 
-    from peerpedia_core.storage.git_backend import get_head_hash
-
     mp = accept_merge_proposal(db, proposal_id)
     head_hash = get_head_hash(target_repo)
     return {"id": article.id, "title": article.title, "status": article.status,
@@ -100,5 +99,4 @@ def accept_merge(db: Session, article_id: str, proposal_id: str, user_id: str) -
 
 def create_merge_proposal(db: Session, fork_id: str, target_id: str, proposer_id: str):
     """Create a merge proposal from a fork to its original article."""
-    from peerpedia_core.storage.db.crud_merge import create_merge_proposal as _create
     return _create(db, fork_id, target_id, proposer_id)

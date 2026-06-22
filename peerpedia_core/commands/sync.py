@@ -52,7 +52,8 @@ from peerpedia_core.exceptions import NotAuthorizedError, SignatureVerificationE
 from peerpedia_core.storage.db.crud_article import get_article, update_article_status
 from peerpedia_core.storage.db.crud_maintainer import get_maintainer_ids
 from peerpedia_core.storage.db.crud_review import upsert_review
-from peerpedia_core.storage.crypto import pubkey_hex_to_ssh_line
+from peerpedia_core.storage.db.crud_user import get_user, update_user_public_key
+from peerpedia_core.crypto import pubkey_hex_to_ssh_line
 from peerpedia_core.storage.git_backend import (
     DEFAULT_ARTICLES_DIR,
     MergeConflictError,
@@ -65,7 +66,7 @@ from peerpedia_core.storage.git_backend import (
 )
 
 from peerpedia_core.commands.articles import rebuild_article_authors
-from peerpedia_core.commands.workflow import recompute_article_score
+from peerpedia_core.commands.workflow import publish_ready_articles, recompute_article_score
 
 
 _PLATFORM_EMAIL = "system@peerpedia"
@@ -213,7 +214,6 @@ def apply_sync_bundle(
     recompute_article_score(db, article_id)
 
     # Trigger auto-publish for any articles that may now be ready (G4)
-    from peerpedia_core.commands.workflow import publish_ready_articles
     publish_ready_articles(db)
 
     return new_head
@@ -228,8 +228,6 @@ def _verify_new_commits(db: Session, repo_path: Path, *, since_hash: str) -> Non
     same user_id (TOFU: first encounter stores, mismatch rejects).
     Platform commits (author_email == system@peerpedia) are skipped.
     """
-    from peerpedia_core.storage.db.crud_user import get_user, update_user_public_key
-
     for commit in get_commit_history(repo_path, since_hash=since_hash):
         author_email = commit["author_email"]
         if author_email == _PLATFORM_EMAIL:

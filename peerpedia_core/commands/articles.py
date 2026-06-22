@@ -69,35 +69,44 @@ from peerpedia_core.storage.db import Session
 
 from peerpedia_core.config.params import params
 from peerpedia_core.exceptions import BadRequestError, ConflictError, NotAuthorizedError, NotFoundError
+from peerpedia_core.frontmatter import make_article_frontmatter, strip_frontmatter
 from peerpedia_core.policies.articles import (
     assert_can_delete_article,
     assert_can_edit_article,
     assert_can_fork_article,
     assert_can_publish_article,
     assert_can_rollback_article,
+    require_self_review_for_publish,
 )
 from peerpedia_core.storage.db.crud_article import (
     add_article_authors,
+    count_articles as _count,
     create_article,
-    get_article,
-    get_author_ids,
+    delete_article as _delete,
+    get_article as _get_article,
+    get_article_by_fork_and_author,
+    get_author_ids as _get_author_ids,
     increment_fork_count,
+    list_articles as _list,
     set_sink_start,
     update_article_status,
 )
 from peerpedia_core.storage.db.crud_maintainer import add_maintainer, get_maintainer_ids
+from peerpedia_core.storage.db.crud_review import get_review, upsert_review
 from peerpedia_core.storage.db.crud_user import get_user
-from peerpedia_core.storage.crypto import _make_temp_key
+from peerpedia_core.crypto import _make_temp_key
 from peerpedia_core.storage.git_backend import (
     DEFAULT_ARTICLES_DIR,
     checkout_files,
     clone_article_repo,
     commit_article,
+    delete_article_repo,
     get_commit_authors,
     get_head_hash,
     init_article_repo,
 )
 from peerpedia_core.storage.locks import get_article_lock
+from peerpedia_core.commands.reviews import _write_review_to_git
 from peerpedia_core.commands.workflow import recompute_article_score, recompute_author_reputation
 
 
@@ -118,7 +127,7 @@ def rebuild_article_authors(db: Session, article_id: str, since_hash: str | None
     head_hash = get_head_hash(rp)
     new_ids = get_commit_authors(rp, since_hash=since_hash)
 
-    existing = set(get_author_ids(db, article_id))
+    existing = set(_get_author_ids(db, article_id))
     new_only = [a for a in new_ids if a not in existing]
     if new_only:
         add_article_authors(db, article_id, new_only)
@@ -146,7 +155,6 @@ def fork_article(db: Session, article_id: str, user_id: str) -> dict:
     if user is None:
         raise NotFoundError("User not found")
 
-    from peerpedia_core.storage.db.crud_article import get_article_by_fork_and_author
     original = get_article(db, article_id)
     if original is None:
         raise NotFoundError("Article not found")
@@ -287,7 +295,6 @@ def create_article_with_content(
     article_id = str(uuid.uuid4())
 
     # Git first — init repo, write article.md with frontmatter, commit.
-    from peerpedia_core.frontmatter import make_article_frontmatter
 
     rp = DEFAULT_ARTICLES_DIR / article_id
     init_article_repo(rp)
@@ -387,7 +394,6 @@ def update_article_content(
     article_path = rp / f"article{ext}"
 
     # Build new frontmatter from current values
-    from peerpedia_core.frontmatter import make_article_frontmatter, strip_frontmatter
 
     new_title = title if title is not None else a.title
     new_abstract = abstract if abstract is not None else a.abstract
@@ -460,8 +466,6 @@ def publish_article(
         NotAuthorizedError: user cannot publish this article
         BadRequestError: self-review missing or article already published
     """
-    from peerpedia_core.policies.articles import require_self_review_for_publish
-    from peerpedia_core.storage.db.crud_review import get_review
 
     user = get_user(db, user_id)
     if user is None:
@@ -479,7 +483,6 @@ def publish_article(
         raise NotAuthorizedError("Only draft articles can be published")
 
     # Write self-review to git — the publisher's own review (real name).
-    from peerpedia_core.commands.reviews import _write_review_to_git
 
     _write_review_to_git(
         article_id, user_id, self_review, comment, user.name, f"{user_id}@peerpedia",
@@ -496,7 +499,6 @@ def publish_article(
     # Enter sedimentation so scope derivation works.
     update_article_status(db, article_id, "sedimentation")
 
-    from peerpedia_core.storage.db.crud_review import upsert_review
 
     # Cache scores in DB.
     upsert_review(
@@ -536,26 +538,22 @@ def publish_article(
 
 def get_article(db: Session, article_id: str):
     """Return an article by ID, or None."""
-    from peerpedia_core.storage.db.crud_article import get_article as _get
-    return _get(db, article_id)
+    return _get_article(db, article_id)
 
 
 def list_articles(db: Session, **kwargs):
     """List articles with optional filters."""
-    from peerpedia_core.storage.db.crud_article import list_articles as _list
     return _list(db, **kwargs)
 
 
 def count_articles(db: Session, **kwargs) -> int:
     """Count articles with optional filters."""
-    from peerpedia_core.storage.db.crud_article import count_articles as _count
     return _count(db, **kwargs)
 
 
 def get_author_ids(db: Session, article_id: str) -> list[str]:
     """Return ordered author IDs for an article."""
-    from peerpedia_core.storage.db.crud_article import get_author_ids as _get_ids
-    return _get_ids(db, article_id)
+    return __get_author_ids(db, article_id)
 
 
 def delete_article(db: Session, article_id: str, *, user_id: str) -> None:
@@ -564,8 +562,6 @@ def delete_article(db: Session, article_id: str, *, user_id: str) -> None:
     Only callable from ``draft`` status by an author.  Sedimentation and
     published articles cannot be deleted.
     """
-    from peerpedia_core.storage.db.crud_article import delete_article as _delete
-    from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, delete_article_repo
 
     user = get_user(db, user_id)
     if user is None:

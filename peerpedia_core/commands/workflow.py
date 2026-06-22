@@ -57,7 +57,7 @@ from peerpedia_core.config.params import params
 from peerpedia_core.storage.db.crud_article import get_article, get_articles_by_author, get_author_ids, list_articles, update_article_score, update_article_status
 from peerpedia_core.storage.db.crud_review import get_reviews_for_article, upsert_review
 from peerpedia_core.storage.db.crud_user import get_user, get_users_by_ids, list_users, update_user_reputation
-from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, list_review_dirs, read_review_scores
+from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, commit_article, list_review_dirs, read_review_scores
 from peerpedia_core.types.scores import ReputationScores
 from peerpedia_core.workflow.reputation import (
     blend_reputation,
@@ -99,11 +99,8 @@ def publish_ready_articles(db: Session) -> int:
         if not is_ready_to_publish(eta):
             continue
 
-        # Sync reviews from git before scoring — git is the SOT.
-        from peerpedia_core.commands.sync import git_sync_reviews
-        rp = DEFAULT_ARTICLES_DIR / article.id
-        if (rp / ".git").is_dir():
-            git_sync_reviews(db, article.id)
+        # NOTE: caller must call git_sync_reviews() before publish_ready_articles().
+        # This function no longer imports from sync to avoid circular dependency.
 
         # Compute score by aggregating all reviews
         score = recompute_article_score(db, article.id)
@@ -116,12 +113,9 @@ def publish_ready_articles(db: Session) -> int:
             score = apply_no_review_penalty(score)
 
         # Git commit records the status transition for P2P sync.
-        # The commit message is searchable: grep git log for "[Publish]".
-        from peerpedia_core.storage.git_backend import commit_article as git_commit
-
         rp = DEFAULT_ARTICLES_DIR / article.id
         if (rp / ".git").is_dir():
-            git_commit(
+            commit_article(
                 rp,
                 "[status] published",
                 "PeerPedia",

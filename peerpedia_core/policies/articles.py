@@ -3,9 +3,14 @@
 
 r"""Article permission policy — pure authorization rules.
 
-All functions are **pure**: they take pre-fetched data and return or raise.
-They do NOT import ``storage/db/``, ``storage/git_backend``, or ``sqlalchemy``.
-Data fetching is the caller's responsibility (``commands/``).
+**Hard constraint**: this module only imports ``storage.db.models`` (type
+definitions) and ``exceptions``.  It does NOT import CRUD functions,
+``git_backend``, or any database operation library.  All data is passed
+in by the caller.
+
+Every function takes pre-fetched data (Article, author_ids, maintainer_ids)
+and either returns the article or raises a semantic exception.  The caller
+(``commands/``) is responsible for fetching data before calling.
 
 Permission matrix
 -----------------

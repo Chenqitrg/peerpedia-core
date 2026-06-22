@@ -43,7 +43,9 @@ Reviewer's checklist
 
 from sqlalchemy.orm import Session
 
-from peerpedia_core.storage.db.models import Article, ArticleAuthor
+from peerpedia_core.storage.db.models import (
+    Article, ArticleAuthor, Bookmark, Citation, MergeProposal, Review, ScriptMaintainer,
+)
 
 # ── Author helpers (join table) ───────────────────────────────────────────
 
@@ -250,14 +252,6 @@ def delete_article(session: Session, article_id: str) -> None:
 
     Raises ValueError if the article does not exist.
     """
-    from peerpedia_core.storage.db.models import (
-        Bookmark,
-        Citation,
-        MergeProposal,
-        Review,
-        ScriptMaintainer,
-    )
-
     a = session.get(Article, article_id)
     if a is None:
         raise ValueError(f"Article {article_id} not found")

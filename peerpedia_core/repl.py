@@ -73,6 +73,7 @@ from rich.console import Console
 from rich.theme import Theme
 
 from peerpedia_core.cli import build_parser
+from peerpedia_core.commands import get_user, get_user_by_name, publish_ready_articles
 from peerpedia_core.storage.db.engine import get_engine, get_session, init_db
 
 # ── Rich console (same theme as CLI) ─────────────────────────────────────
@@ -166,8 +167,6 @@ Flags: [muted]--json --user ...  (same as CLI)[/]
 
 def _meta_user(name):
     global _repl_user
-    from peerpedia_core.storage.db.crud_user import get_user, get_user_by_name
-
     db = _ensure_db()
     u = get_user(db, name) or get_user_by_name(db, name)
     if u:
@@ -325,7 +324,6 @@ def run():
             now = time.time()
             if now - _last_scan > 3600:
                 db = _ensure_db()
-                from peerpedia_core.commands import publish_ready_articles
                 count = publish_ready_articles(db)
                 db.commit()
                 if count > 0:

@@ -135,7 +135,7 @@ sync/bundle_server.py                    sync/git_bundle.py
 | `commands/` | `storage/`、`policies/`、`workflow/`、`config/`、`exceptions/`、`types/` | `sync/`、**GitPython**、**直接 `sqlalchemy`** |
 | `storage/db/` | `models.py`、`engine.py`、SQLAlchemy | `commands/`、`git_backend.py`、`sync/` |
 | `storage/git_backend.py` | GitPython、`pathlib`、stdlib | `storage/db/`、任何 `peerpedia_core` 模块** |
-| `policies/` | `storage/db/`、`exceptions/` | `commands/`、`sync/`、**GitPython**、**直接 `sqlalchemy`** |
+| `policies/` | `storage.db.models`（仅类型）、`exceptions/` | `commands/`、`sync/`、`git_backend`、CRUD 函数、任何数据库操作 |
 | `workflow/` | `config/`、`types/` | `storage/`、`commands/`、`Session`、`sync/` |
 | `sync/bundle_client.py` | `commands/`（仅 `apply_sync_bundle`）、`sync/git_bundle.py`、`sync/transport/` | `storage/`、`policies/`、`workflow/` |
 | `sync/bundle_server.py` | `commands/`（仅 `apply_sync_bundle`）、`sync/git_bundle.py` | `storage/`、`policies/`、`workflow/` |
@@ -249,12 +249,52 @@ apply_sync_bundle():
     └── {article_id}/
 ```
 
+## 硬约束（所有代码必须遵守）
+
+### 1. 模块边界
+
+| 规则 | 说明 |
+|------|------|
+| **CLI 不碰 storage** | `cli/`、`repl.py` 不得 `import storage/`（`storage.crypto` 暂除外）。所有数据操作调 `commands/` facade。 |
+| **policies 纯计算** | `policies/` 只 import `storage.db.models`（类型定义），不调 CRUD、不调 `git_backend`。数据由 caller 传入。 |
+| **workflow 纯计算** | `workflow/` 零 `storage/` 依赖，零 `Session`。数据由 `commands/` 传入。 |
+| **commands 唯一跨层** | `commands/` 是唯一同时 import `git_backend` + `storage/db/` 的层。 |
+| **storage 互不知晓** | `storage/db/` 和 `git_backend.py` 互不 import。 |
+| **Sync 自包含** | `sync/git_bundle.py` 和 `sync/monotonic_search.py` 零 `storage/`、零 `commands/`。 |
+
+### 2. Import 禁令
+
+| 禁令 | 允许例外 |
+|------|---------|
+| **禁止 `import git` (GitPython)** | `storage/git_backend.py`、`sync/git_bundle.py` |
+| **禁止 `import sqlalchemy`** | `storage/db/` 内部 |
+| **禁止 `db.query()` / `session.get()` / 直接改 model 属性** | `storage/db/crud_*.py` 内部。外部统一调 CRUD 函数。 |
+| **禁止函数内 import PeerPedia 模块** | 无例外。函数内 `from peerpedia_core.*` 说明函数"红杏出墙"，应提到顶层或移动函数。stdlib 重量库（`bcrypt`、`markdown`、`yaml`）可内部 import。 |
+
+### 3. Facade 规则
+
+| facade | 位置 | 规则 |
+|--------|------|------|
+| `commands/__init__.py` | 所有外部代码 | CLI、REPL、sync 只能 `from peerpedia_core.commands import ...`，不得 import 子模块 |
+| `cli/handlers/__init__.py` | `cli/parser.py` | 所有 handler 统一从此进口 |
+| `storage/db/__init__.py` | 所有非 db 代码 | `Session` 类型从此导入（`from peerpedia_core.storage.db import Session`） |
+
+### 4. 数据流
+
+- **类型 import 不算操作**：`from storage.db.models import Article` 或 `from storage.db import Session`（facade）只用于类型标注，不算越界。
+- **外部调 commands 走 facade**：`from peerpedia_core.commands import ...`，不得 `from peerpedia_core.commands.articles import ...`。
+- **commands 内部子模块互调走子模块**：避免 `__init__.py` 循环导入。
+
+### 5. Fail Fast
+
+- 不静默返回、不吞异常、不返回默认值。
+- `None` 不该出现：repo 不存在 → throw，没有 commits → throw。
+- 所有 CRUD 函数调 `flush()`，`commit()` 由 CLI/REPL 入口负责。
+
 ## 设计规则（写代码时遵守）
 
 1. **Git 存内容，DB 存缓存**——评分缓存从 Git 重新计算，不独立编造
 2. **Git-first，DB 后写**——内容先落 Git，成功后写 DB。Git 失败 → DB 不写
-3. **workflow/ 是纯计算**——不 import `storage/`、不 import `Session`
-4. **入口负责 commit**——crud 只调 `flush()`，CLI/REPL 调 `commit()`
-5. **Fail fast**——无 Git → 报错。参数不该为 None → 抛异常。不静默降级
-6. **评审是文件夹**——`scores.json` + `threads/`，每个评论独立文件
-7. **published 之后的任何 commit 自动触发 3 天沉淀**
+3. **入口负责 commit**——crud 只调 `flush()`，CLI/REPL 调 `commit()`
+4. **评审是文件夹**——`scores.json` + `threads/`，每个评论独立文件
+5. **published 之后的任何 commit 自动触发 3 天沉淀**

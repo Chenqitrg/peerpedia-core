@@ -12,6 +12,11 @@ count) lives in the database so it can be queried and aggregated.
 
 Pure local git — does not depend on bundle or sync modules.
 
+**Hard constraint**: this module depends only on GitPython + stdlib.
+It does NOT import any ``peerpedia_core`` module.  It raises only stdlib
+exceptions (ValueError, RuntimeError, FileNotFoundError) or its own
+``MergeConflictError``.  The caller translates to domain exceptions.
+
 Functions by category
 ---------------------
 Write (mutate state)

@@ -3,10 +3,19 @@
 
 """Commands layer — the sole module that touches both git and DB.
 
-This package is the gatekeeper for all data access.  Every read and write that
-involves both storage backends must go through a function in this package.
-CLI, REPL, and sync code call into here; they never import git_backend or
-crud_* directly.
+**This is the ONLY package that can import both ``storage/git_backend``
+and ``storage/db/``.**  CLI, REPL, sync — everything external — must go
+through this facade: ``from peerpedia_core.commands import ...``.
+
+Hard rules
+----------
+- External callers MUST import from here, never from submodules directly.
+- Submodules MAY import each other directly (``from .articles import ...``)
+  to avoid circular imports through ``__init__.py``.
+- No function may have an internal ``from peerpedia_core.*`` import — if
+  a function needs an import the module doesn't have, the function is in
+  the wrong module ("红杏出墙").
+- All CRUD calls use ``flush()`` only; ``commit()`` is the caller's job.
 
 Submodules
 ----------
@@ -67,10 +76,21 @@ from peerpedia_core.commands.articles import (
 )
 from peerpedia_core.commands.bookmarks import add_bookmark, get_bookmarks_for_user, remove_bookmark
 from peerpedia_core.frontmatter import parse_frontmatter
+from peerpedia_core.commands.maintainers import (
+    add_maintainer_to_article,
+    list_maintainers,
+    remove_maintainer_from_article,
+)
 from peerpedia_core.commands.merge import accept_merge, create_merge_proposal
 from peerpedia_core.commands.reviews import get_reviews_for_article, submit_review
 from peerpedia_core.commands.sync import apply_sync_bundle, git_sync_reviews
-from peerpedia_core.commands.users import create_user, get_user, get_user_by_name
+from peerpedia_core.commands.users import (
+    create_user,
+    get_user,
+    get_user_by_name,
+    update_user_public_key,
+    update_user_salt,
+)
 from peerpedia_core.commands.workflow import (
     publish_ready_articles,
     recalculate_all_reputations,
@@ -90,6 +110,7 @@ def db_session(database_url: str):
 __all__ = [
     "accept_merge",
     "add_bookmark",
+    "add_maintainer_to_article",
     "apply_sync_bundle",
     "count_articles",
     "create_article_with_content",
@@ -105,6 +126,7 @@ __all__ = [
     "get_user_by_name",
     "git_sync_reviews",
     "list_articles",
+    "list_maintainers",
     "parse_frontmatter",
     "publish_article",
     "publish_ready_articles",
@@ -113,7 +135,10 @@ __all__ = [
     "recompute_article_score",
     "recompute_author_reputation",
     "remove_bookmark",
+    "remove_maintainer_from_article",
     "rollback_article",
     "submit_review",
     "update_article_content",
+    "update_user_public_key",
+    "update_user_salt",
 ]

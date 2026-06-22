@@ -6,21 +6,35 @@
 from __future__ import annotations
 
 from peerpedia_core.storage.db import Session
+from peerpedia_core.storage.db.crud_user import (
+    create_user as _create,
+    get_user as _get,
+    get_user_by_name as _get_by_name,
+    update_user_public_key as _update_pubkey,
+    update_user_salt as _update_salt,
+)
 
 
 def create_user(db: Session, *, name: str, affiliation: str = "", password_hash: str = "", email: str = ""):
     """Create a new user."""
-    from peerpedia_core.storage.db.crud_user import create_user as _create
     return _create(db, name=name, affiliation=affiliation, password_hash=password_hash, email=email)
 
 
 def get_user(db: Session, user_ref: str):
     """Get a user by ID or name. Returns None if not found."""
-    from peerpedia_core.storage.db.crud_user import get_user as _get
     return _get(db, user_ref)
 
 
 def get_user_by_name(db: Session, name: str):
     """Get a user by exact name match. Returns None if not found."""
-    from peerpedia_core.storage.db.crud_user import get_user_by_name as _get
-    return _get(db, name)
+    return _get_by_name(db, name)
+
+
+def update_user_public_key(db: Session, user_id: str, pubkey_hex: str):
+    """Set the public key for a user."""
+    return _update_pubkey(db, user_id, pubkey_hex)
+
+
+def update_user_salt(db: Session, user_id: str, salt_hex: str):
+    """Set the scrypt salt for a user."""
+    return _update_salt(db, user_id, salt_hex)

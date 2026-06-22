@@ -10,11 +10,14 @@ import json
 import os
 from pathlib import Path
 
+import bcrypt
+
 from peerpedia_core.cli.helpers import _with_db, _ok, _die, _json_out
 from peerpedia_core.cli.display import console
-from peerpedia_core.commands import create_user
-from peerpedia_core.storage.crypto import derive_key_pair, new_salt
-from peerpedia_core.storage.db.crud_user import get_user_by_name
+from peerpedia_core.commands import (
+    create_user, get_user_by_name, update_user_public_key, update_user_salt,
+)
+from peerpedia_core.crypto import derive_key_pair, new_salt
 
 _SESSION_FILE = Path.home() / ".peerpedia" / "session.json"
 
@@ -43,7 +46,6 @@ def _cmd_register(db, args):
 
     args: --name, --json
     """
-    import bcrypt
 
     password = getpass.getpass("Password: ")
     if not password:
@@ -56,8 +58,6 @@ def _cmd_register(db, args):
     password_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
     private_key_bytes, pubkey_bytes = derive_key_pair(password, salt_hex)
     pubkey_hex = pubkey_bytes.hex()
-
-    from peerpedia_core.storage.db.crud_user import update_user_public_key, update_user_salt
 
     user = create_user(
         db,
@@ -82,7 +82,6 @@ def _cmd_login(db, args):
 
     args: --name, --json
     """
-    import bcrypt
 
     user = get_user_by_name(db, args.name)
     if user is None:

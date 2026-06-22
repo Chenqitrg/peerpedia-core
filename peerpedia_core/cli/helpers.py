@@ -19,13 +19,7 @@ from pathlib import Path
 
 from peerpedia_core.cli.display import console, theme
 from peerpedia_core.commands import db_session, get_user_by_name
-
-DEFAULT_ARTICLES_DIR = Path.home() / ".peerpedia" / "articles"
-
-# ── Database ─────────────────────────────────────────────────────────────
-
-DB_PATH = Path.home() / ".peerpedia" / "peerpedia.db"
-DB_URL = f"sqlite:///{DB_PATH}"
+from peerpedia_core.config.paths import ARTICLES_DIR as DEFAULT_ARTICLES_DIR, DB_PATH, DB_URL, SESSION_FILE
 
 
 def _with_db(func):
@@ -50,6 +44,8 @@ def _with_db(func):
             with db_session(DB_URL) as db:
                 return func(db, args)
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             _die(str(e))
 
     return wrapper
@@ -120,7 +116,7 @@ def _resolve_user(db, user_ref: str | None) -> str:
     UUID or UUID prefix → pass through directly (no DB check).
     """
     if user_ref is None:
-        session_file = Path.home() / ".peerpedia" / "session.json"
+        session_file = SESSION_FILE
         if session_file.exists():
             session = json.loads(session_file.read_text())
             user_ref = session.get("user_id")
@@ -148,7 +144,7 @@ def _resolve_user_with_key(db, user_ref: str | None) -> tuple[str, bytes | None]
     (e.g., pre-auth-migration sessions).
     """
     user_id = _resolve_user(db, user_ref)
-    session_file = Path.home() / ".peerpedia" / "session.json"
+    session_file = SESSION_FILE
     key_bytes = None
     if session_file.exists():
         session = json.loads(session_file.read_text())

@@ -5,6 +5,19 @@
 
 from dataclasses import dataclass
 
+# Five review dimensions — change here, everything updates.
+# Keys = CLI abbreviation, values = display name.
+SCORE_DIMENSIONS: dict[str, str] = {
+    "orig":  "originality",
+    "rigor":  "rigor",
+    "comp":   "completeness",
+    "ped":   "pedagogy",
+    "imp":   "impact",
+}
+
+# Example for CLI help text: "orig=4,rigor=3,comp=4,ped=3,imp=3"
+SCORE_FORMAT_EXAMPLE = ",".join(f"{abbr}=N" for abbr in SCORE_DIMENSIONS)
+
 
 def _clamp(value: float, lo: float = 0.0, hi: float = 5.0) -> float:
     return max(lo, min(hi, value))

@@ -19,8 +19,8 @@ from __future__ import annotations
 
 import sys
 
-from peerpedia_core.cli.helpers import DB_PATH, DB_URL
 from peerpedia_core.cli.parser import build_parser
+from peerpedia_core.config.paths import DB_PATH, DB_URL
 from peerpedia_core.commands import db_session, publish_ready_articles
 from peerpedia_core.repl import run
 

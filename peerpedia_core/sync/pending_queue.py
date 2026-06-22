@@ -38,7 +38,7 @@ import time
 from pathlib import Path
 from typing import Literal
 
-PENDING_FILE = Path.home() / ".peerpedia" / "pending_ops.json"
+from peerpedia_core.config.paths import PENDING_OPS_FILE as PENDING_FILE
 
 OpType = Literal["push", "delete"]
 PendingOp = dict  # {"id": str, "op_type": OpType, "created_at": float}

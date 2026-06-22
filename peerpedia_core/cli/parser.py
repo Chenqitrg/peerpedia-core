@@ -3,8 +3,8 @@
 
 """Argument parser — maps CLI commands to handler functions.
 
-Layer 3 of the CLI package.  Imports every handler module so it can
-wire them into argparse.  No business logic here — pure registration.
+Defined declaratively as a ``COMMANDS`` table so ``build_parser`` is a
+single loop rather than 180 lines of copy-paste argparse registration.
 """
 
 from __future__ import annotations
@@ -28,201 +28,196 @@ from peerpedia_core.cli.handlers import (
     _cmd_whoami,
 )
 
+from peerpedia_core.types.scores import SCORE_FORMAT_EXAMPLE
 
-# TODO(cli-split): split into peerpedia_core/cli/ — each subcommand
-# registers itself so build_parser() becomes a table-driven loop.
+# ═══════════════════════════════════════════════════════════════════════════════
+# Argument spec helpers
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_COMMON_ARGS = [
+    (("--user",), {"default": None, "help": "User ID (omit to use current session user)"}),
+    (("--json",), {"action": "store_true", "help": "Output as JSON"}),
+]
 
 
-def _help(func):
-    """Extract the first line of a handler's docstring for argparse help text."""
-    return (func.__doc__ or "").splitlines()[0].strip()
+def _add_args(p: argparse.ArgumentParser, *arg_specs: list) -> None:
+    """Register arguments from specs like ``(("--name",), {"required": True})``."""
+    for args, kwargs in arg_specs:
+        p.add_argument(*args, **kwargs)
 
 
-def _add_common_args(p: argparse.ArgumentParser):
-    # --user defaults to None; _resolve_user reads the current user from
-    # ~/.peerpedia/session.json when no explicit user is given.
-    p.add_argument("--user", default=None, help="User ID (omit to use current session user)")
-    p.add_argument("--json", action="store_true", help="Output as JSON")
+def _add_common(p: argparse.ArgumentParser) -> None:
+    _add_args(p, *_COMMON_ARGS)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Command table (declarative — edit this, not build_parser)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Each group: (name, help, [(sub_name, handler, [(args...)])])
+# If a command has no subcommands, use an empty sub_name.
+COMMAND_GROUPS = [
+    ("account", "Account management", [
+        ("register", _cmd_register, [
+            (("--name",), {"required": True, "help": "Your display name"}),
+            (("--json",), {"action": "store_true", "help": "Output as JSON"}),
+        ]),
+        ("login", _cmd_login, [
+            (("--name",), {"required": True, "help": "Your display name"}),
+            (("--json",), {"action": "store_true", "help": "Output as JSON"}),
+        ]),
+        ("whoami", _cmd_whoami, [
+            (("--json",), {"action": "store_true", "help": "Output as JSON"}),
+        ]),
+    ]),
+    ("article", "Article management", [
+        ("create", _cmd_article_create, [
+            (("--title",), {"required": True, "help": "Article title"}),
+            (("--format",), {"default": "markdown", "choices": ["markdown", "typst"],
+                             "help": "Source format"}),
+            (("--content",), {"help": "Article body (inline; omit to open editor)"}),
+            (("--no-editor",), {"action": "store_true", "help": "Create empty article without opening editor"}),
+            (("--publish",), {"action": "store_true", "help": "Publish immediately after creation"}),
+            (("--scores",), {"help": f'Self-review scores, e.g. "{SCORE_FORMAT_EXAMPLE}"'}),
+        ]),
+        ("show", _cmd_article_show, [
+            (("id",), {"help": "Article ID (or prefix)"}),
+            (("--show",), {"choices": ["meta", "full", "content"], "default": "meta",
+                           "help": "Display: meta (default), full (+content), content (source only)"}),
+        ]),
+        ("list", _cmd_article_list, [
+            (("--status",), {"choices": ["draft", "sedimentation", "published"],
+                             "help": "Filter by status"}),
+        ]),
+        ("edit", _cmd_article_edit, [
+            (("id",), {"help": "Article ID (or prefix)"}),
+            (("--content",), {"help": "New article body (omit to open editor)"}),
+            (("--title",), {"help": "New article title"}),
+            (("--no-editor",), {"action": "store_true", "help": "Skip editor; only apply --title if given"}),
+        ]),
+        ("publish", _cmd_article_publish, [
+            (("id",), {"help": "Article ID (or prefix)"}),
+            (("--scores",), {"required": True,
+                             "help": f'Self-review scores, e.g. "{SCORE_FORMAT_EXAMPLE}"'}),
+        ]),
+        ("delete", _cmd_article_delete, [
+            (("id",), {"help": "Article ID (or prefix)"}),
+        ]),
+        ("scan", _cmd_article_scan, []),
+    ]),
+    ("review", None, [
+        ("submit", _cmd_review_submit, [
+            (("article_id",), {"help": "Article ID (or prefix)"}),
+            (("--scores",), {"required": True,
+                             "help": f'Five-dim scores, e.g. "{SCORE_FORMAT_EXAMPLE}"'}),
+            (("--comment",), {"help": "Optional review comment"}),
+        ]),
+        ("list", _cmd_review_list, [
+            (("article_id",), {"help": "Article ID (or prefix)"}),
+            (("--show",), {"choices": ["meta", "full"], "default": "meta",
+                           "help": "Display: meta (scores, default) or full (scores + threads)"}),
+        ]),
+    ]),
+    ("merge", None, [
+        ("propose", _cmd_merge_propose, [
+            (("fork_id",), {"help": "Your fork's article ID"}),
+            (("--target",), {"required": True, "help": "Original article ID to merge into"}),
+        ]),
+        ("accept", _cmd_merge_accept, [
+            (("proposal_id",), {"help": "Merge proposal ID"}),
+            (("--target",), {"required": True, "help": "Target article ID"}),
+        ]),
+    ]),
+    ("bookmark", None, [
+        ("add", _cmd_bookmark_add, [
+            (("article_id",), {"help": "Article ID (or prefix)"}),
+        ]),
+        ("list", _cmd_bookmark_list, []),
+    ]),
+    ("sync", None, [
+        ("status", _cmd_sync_status, [
+            (("--server",), {"help": "Peer server URL (or set PEERPEDIA_SERVER env var)"}),
+        ]),
+        ("push", _cmd_sync_push, [
+            (("--server",), {"help": "Peer server URL (or set PEERPEDIA_SERVER env var)"}),
+        ]),
+        # TODO(sync): add ``sync pull`` command.
+        # TODO(sync): add ``sync discover`` command.
+    ]),
+    ("maintainer", None, [
+        ("add", _cmd_maintainer_add, [
+            (("article_id",), {"help": "Article ID"}),
+            (("--target-user",), {"required": True, "help": "User ID to add as maintainer"}),
+        ]),
+        ("remove", _cmd_maintainer_remove, [
+            (("article_id",), {"help": "Article ID"}),
+            (("--target-user",), {"required": True, "help": "User ID to remove from maintainers"}),
+        ]),
+        ("list", _cmd_maintainer_list, [
+            (("article_id",), {"help": "Article ID"}),
+        ]),
+    ]),
+]
+
+# Top-level commands (no subparsers — just a single handler)
+TOP_LEVEL = [
+    ("fork", _cmd_fork, [
+        (("article_id",), {"help": "Published article ID to fork"}),
+    ]),
+    ("compile", _cmd_compile, [
+        (("id",), {"help": "Article ID (or prefix)"}),
+        (("--format",), {"choices": ["pdf", "svg", "png", "html"],
+                         "help": "Output format (default: pdf)"}),
+    ]),
+    ("?Mother", _cmd_mother, []),
+]
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Builder
+# ═══════════════════════════════════════════════════════════════════════════════
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser("peerpedia", description="PeerPedia — peer review from the terminal")
+    parser = argparse.ArgumentParser(
+        "peerpedia", description="PeerPedia — peer review from the terminal",
+    )
     subs = parser.add_subparsers(dest="command")
 
-    # ── account ──────────────────────────────────────────────────────────
+    # Nested command groups (e.g. ``peerpedia article create``)
+    for name, help_text, subcommands in COMMAND_GROUPS:
+        grp = subs.add_parser(name, help=help_text)
+        grp_subs = grp.add_subparsers(dest="subcommand")
+        for sub_name, handler, arg_specs in subcommands:
+            p = grp_subs.add_parser(sub_name, help=_first_line(handler))
+            _add_args(p, *arg_specs)
+            _add_common(p)
+            p.set_defaults(func=handler)
 
-    acct = subs.add_parser("account", help="Account management")
-    acct_subs = acct.add_subparsers(dest="subcommand")
-
-    p = acct_subs.add_parser("register", help=_help(_cmd_register))
-    p.add_argument("--name", required=True, help="Your display name")
-    p.add_argument("--json", action="store_true", help="Output as JSON")
-    p.set_defaults(func=_cmd_register)
-
-    p = acct_subs.add_parser("login", help=_help(_cmd_login))
-    p.add_argument("--name", required=True, help="Your display name")
-    p.add_argument("--json", action="store_true", help="Output as JSON")
-    p.set_defaults(func=_cmd_login)
-
-    p = acct_subs.add_parser("whoami", help=_help(_cmd_whoami))
-    p.add_argument("--json", action="store_true", help="Output as JSON")
-    p.set_defaults(func=_cmd_whoami)
-
-    # ── article ──────────────────────────────────────────────────────────
-
-    art = subs.add_parser("article", help="Article management")
-    art_subs = art.add_subparsers(dest="subcommand")
-
-    p = art_subs.add_parser("create", help=_help(_cmd_article_create))
-    p.add_argument("--title", required=True, help="Article title")
-    p.add_argument("--format", default="markdown", choices=["markdown", "typst"], help="Source format")
-    p.add_argument("--content", help="Article body (inline; omit to open editor)")
-    p.add_argument("--no-editor", action="store_true", help="Create empty article without opening editor")
-    p.add_argument("--publish", action="store_true", help="Publish immediately after creation")
-    p.add_argument("--scores", help='Self-review scores, e.g. "orig=4,rigor=3,comp=4,ped=3,imp=3"')
-    _add_common_args(p)
-    p.set_defaults(func=_cmd_article_create)
-
-    p = art_subs.add_parser("show", help=_help(_cmd_article_show))
-    p.add_argument("id", help="Article ID (or prefix)")
-    p.add_argument("--show", choices=["meta", "full", "content"], default="meta",
-                   help="What to display: meta (metadata only, default), full (metadata + content), content (source only)")
-    _add_common_args(p)
-    p.set_defaults(func=_cmd_article_show)
-
-    p = art_subs.add_parser("list", help=_help(_cmd_article_list))
-    p.add_argument("--status", choices=["draft", "sedimentation", "published"], help="Filter by status")
-    _add_common_args(p)
-    p.set_defaults(func=_cmd_article_list)
-
-    p = art_subs.add_parser("edit", help=_help(_cmd_article_edit))
-    p.add_argument("id", help="Article ID (or prefix)")
-    p.add_argument("--content", help="New article body (omit to open editor)")
-    p.add_argument("--title", help="New article title")
-    p.add_argument("--no-editor", action="store_true", help="Skip editor; only apply --title if given")
-    _add_common_args(p)
-    p.set_defaults(func=_cmd_article_edit)
-
-    p = art_subs.add_parser("publish", help=_help(_cmd_article_publish))
-    p.add_argument("id", help="Article ID (or prefix)")
-    p.add_argument("--scores", required=True, help='Self-review scores, e.g. "orig=4,rigor=3,comp=4,ped=3,imp=3"')
-    _add_common_args(p)
-    p.set_defaults(func=_cmd_article_publish)
-
-    p = art_subs.add_parser("delete", help=_help(_cmd_article_delete))
-    p.add_argument("id", help="Article ID (or prefix)")
-    _add_common_args(p)
-    p.set_defaults(func=_cmd_article_delete)
-
-    p = art_subs.add_parser("scan", help=_help(_cmd_article_scan))
-    p.set_defaults(func=_cmd_article_scan)
-
-    # ── review ───────────────────────────────────────────────────────────
-
-    rev = subs.add_parser("review")
-    rev_subs = rev.add_subparsers(dest="subcommand")
-
-    p = rev_subs.add_parser("submit", help=_help(_cmd_review_submit))
-    p.add_argument("article_id", help="Article ID (or prefix)")
-    p.add_argument("--scores", required=True, help='Five-dim scores, e.g. "orig=4,rigor=3,comp=4,ped=3,imp=3"')
-    p.add_argument("--comment", help="Optional review comment")
-    _add_common_args(p)
-    p.set_defaults(func=_cmd_review_submit)
-
-    p = rev_subs.add_parser("list", help=_help(_cmd_review_list))
-    p.add_argument("article_id", help="Article ID (or prefix)")
-    p.add_argument("--show", choices=["meta", "full"], default="meta",
-                   help="What to display: meta (scores summary, default), full (scores + review threads from git)")
-    _add_common_args(p)
-    p.set_defaults(func=_cmd_review_list)
-
-    # ── fork ─────────────────────────────────────────────────────────────
-
-    p = subs.add_parser("fork", help=_help(_cmd_fork))
-    p.add_argument("article_id", help="Published article ID to fork")
-    _add_common_args(p)
-    p.set_defaults(func=_cmd_fork)
-
-    # ── merge ────────────────────────────────────────────────────────────
-
-    merge = subs.add_parser("merge")
-    merge_subs = merge.add_subparsers(dest="subcommand")
-
-    p = merge_subs.add_parser("propose", help=_help(_cmd_merge_propose))
-    p.add_argument("fork_id", help="Your fork's article ID")
-    p.add_argument("--target", required=True, help="Original article ID to merge into")
-    _add_common_args(p)
-    p.set_defaults(func=_cmd_merge_propose)
-
-    p = merge_subs.add_parser("accept", help=_help(_cmd_merge_accept))
-    p.add_argument("proposal_id", help="Merge proposal ID")
-    p.add_argument("--target", required=True, help="Target article ID")
-    _add_common_args(p)
-    p.set_defaults(func=_cmd_merge_accept)
-
-    # ── bookmark ─────────────────────────────────────────────────────────
-
-    bm = subs.add_parser("bookmark")
-    bm_subs = bm.add_subparsers(dest="subcommand")
-
-    p = bm_subs.add_parser("add", help=_help(_cmd_bookmark_add))
-    p.add_argument("article_id", help="Article ID (or prefix)")
-    _add_common_args(p)
-    p.set_defaults(func=_cmd_bookmark_add)
-
-    p = bm_subs.add_parser("list", help=_help(_cmd_bookmark_list))
-    _add_common_args(p)
-    p.set_defaults(func=_cmd_bookmark_list)
-
-    # ── compile ──────────────────────────────────────────────────────────
-
-    p = subs.add_parser("compile", help=_help(_cmd_compile))
-    p.add_argument("id", help="Article ID (or prefix)")
-    p.add_argument("--format", choices=["pdf", "svg", "png", "html"], help="Output format (default: pdf)")
-    _add_common_args(p)
-    p.set_defaults(func=_cmd_compile)
-
-    # ── sync ─────────────────────────────────────────────────────────────
-
-    sync = subs.add_parser("sync")
-    sync_subs = sync.add_subparsers(dest="subcommand")
-
-    p = sync_subs.add_parser("status", help=_help(_cmd_sync_status))
-    p.add_argument("--server", help="Peer server URL (or set PEERPEDIA_SERVER env var)")
-    p.set_defaults(func=_cmd_sync_status)
-
-    p = sync_subs.add_parser("push", help=_help(_cmd_sync_push))
-    p.add_argument("--server", help="Peer server URL (or set PEERPEDIA_SERVER env var)")
-    p.set_defaults(func=_cmd_sync_push)
-
-    # TODO(sync): add ``sync pull`` command.
-    # TODO(sync): add ``sync discover`` command.
-
-    # ── maintainer ───────────────────────────────────────────────────────
-
-    maintainer = subs.add_parser("maintainer")
-    maintainer_subs = maintainer.add_subparsers(dest="subcommand")
-
-    p = maintainer_subs.add_parser("add", help=_help(_cmd_maintainer_add))
-    p.add_argument("article_id", help="Article ID")
-    p.add_argument("--target-user", required=True, help="User ID to add as maintainer")
-    _add_common_args(p)
-    p.set_defaults(func=_cmd_maintainer_add)
-
-    p = maintainer_subs.add_parser("remove", help=_help(_cmd_maintainer_remove))
-    p.add_argument("article_id", help="Article ID")
-    p.add_argument("--target-user", required=True, help="User ID to remove from maintainers")
-    _add_common_args(p)
-    p.set_defaults(func=_cmd_maintainer_remove)
-
-    p = maintainer_subs.add_parser("list", help=_help(_cmd_maintainer_list))
-    p.add_argument("article_id", help="Article ID")
-    _add_common_args(p)
-    p.set_defaults(func=_cmd_maintainer_list)
-
-    # ── ?Mother — user guide ───────────────────────────────────────────────
-
-    p = subs.add_parser("?Mother", help="Interactive user guide")
-    p.set_defaults(func=_cmd_mother)
+    # Top-level commands (e.g. ``peerpedia fork``)
+    for name, handler, arg_specs in TOP_LEVEL:
+        p = subs.add_parser(name, help=_first_line(handler))
+        _add_args(p, *arg_specs)
+        _add_common(p)
+        p.set_defaults(func=handler)
 
     return parser
+
+
+def _first_line(func) -> str:
+    """Extract the first line of a handler's docstring for argparse help."""
+    return (func.__doc__ or "").splitlines()[0].strip()
+
+
+def get_cmd_map() -> dict[str, list[str]]:
+    """Return ``{flat_cmd: [group, subcmd]}`` for the REPL dispatcher.
+
+    Flat commands like ``"create"`` map to argparse groups like
+    ``["article", "create"]`` so the REPL can build the full argv.
+    """
+    result: dict[str, list[str]] = {}
+    for name, _help, subcommands in COMMAND_GROUPS:
+        for sub_name, _handler, _args in subcommands:
+            result[sub_name] = [name, sub_name]
+    for name, _handler, _args in TOP_LEVEL:
+        result[name] = [name]
+    return result

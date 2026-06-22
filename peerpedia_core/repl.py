@@ -73,6 +73,7 @@ from rich.console import Console
 from rich.theme import Theme
 
 from peerpedia_core.cli import build_parser
+from peerpedia_core.cli.parser import get_cmd_map
 from peerpedia_core.commands import get_user, get_user_by_name, publish_ready_articles
 from peerpedia_core.storage.db.engine import get_engine, get_session, init_db
 
@@ -90,18 +91,13 @@ console = Console(theme=theme)
 
 # ── Database ─────────────────────────────────────────────────────────────
 
-DB_PATH = Path.home() / ".peerpedia" / "peerpedia.db"
-DB_URL = f"sqlite:///{DB_PATH}"
+from peerpedia_core.config.params import params
+from peerpedia_core.config.paths import DB_PATH, DB_URL, REPL_HISTORY_FILE
 
 # ── Commands for tab completion ──────────────────────────────────────────
 
-COMMANDS = [
-    "register", "whoami",
-    "create", "show", "list", "edit", "publish", "delete",
-    "review", "fork", "merge", "bookmark",
-    "scan", "search", "compile", "sync",
-    ":help", ":user", ":quit",
-]
+_META_COMMANDS = [":help", ":h", ":user", ":u", ":quit", ":q"]
+COMMANDS = sorted(get_cmd_map().keys()) + _META_COMMANDS
 FLAGS = ["--title", "--format", "--content", "--user", "--json", "--force",
          "--scores", "--comment", "--commit-hash", "--target", "--status",
          "--publish", "--no-editor", "--server"]
@@ -207,26 +203,9 @@ def _dispatch(cmd_str: str) -> bool:
     if _repl_user and "--user" not in cmd_str and first_word not in ("register", ":help", ":user", ":quit", ":q", ":h", ":u", "whoami"):
         cmd_str += f" --user {_repl_user}"
 
-    # Map CLI subcommands to their argparse group
-    # The REPL uses flat commands: "create" maps to "article create"
-    cmd_map = {
-        "register": ["account", "register"],
-        "whoami": ["account", "whoami"],
-        "create": ["article", "create"],
-        "show": ["article", "show"],
-        "list": ["article", "list"],
-        "edit": ["article", "edit"],
-        "publish": ["article", "publish"],
-        "delete": ["article", "delete"],
-        "scan": ["article", "scan"],
-        "review": ["review"],
-        "fork": ["fork"],
-        "merge": ["merge"],
-        "bookmark": ["bookmark"],
-        "search": ["search"],
-        "compile": ["compile"],
-        "sync": ["sync"],
-    }
+    # Map CLI subcommands to their argparse group.
+    # Built from parser.py's COMMAND_GROUPS+TOP_LEVEL — single source of truth.
+    cmd_map = get_cmd_map()
 
     try:
         args_list = shlex.split(cmd_str)
@@ -280,8 +259,7 @@ def run():
     console.print("[muted]Type :help for commands, :quit to exit.[/]")
     console.print()
 
-    history_file = Path.home() / ".peerpedia" / ".repl_history"
-    history_file.parent.mkdir(parents=True, exist_ok=True)
+    REPL_HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
 
     completer = WordCompleter(COMMANDS + FLAGS, ignore_case=True, sentence=True)
 
@@ -297,7 +275,7 @@ def run():
         event.current_buffer.validate_and_handle()
 
     session = PromptSession(
-        history=FileHistory(str(history_file)),
+        history=FileHistory(str(REPL_HISTORY_FILE)),
         completer=completer,
         style=repl_style,
         mouse_support=True,
@@ -320,9 +298,9 @@ def run():
 
             should_continue = _dispatch(cmd)
 
-            # Periodic scan: check for publishable articles every hour
+            # Periodic scan: check for publishable articles
             now = time.time()
-            if now - _last_scan > 3600:
+            if now - _last_scan > params.sink.scan_interval_seconds:
                 db = _ensure_db()
                 count = publish_ready_articles(db)
                 db.commit()

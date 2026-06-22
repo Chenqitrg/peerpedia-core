@@ -135,13 +135,10 @@ def publish_ready_articles(db: Session) -> int:
     if published_count == 0:
         return 0
 
-    # Commit all article status changes at once
-    db.commit()
-
-    # Phase 2: recompute reputations for all affected authors
+    # Phase 2: recompute reputations for all affected authors.
+    # Caller is responsible for db.commit() — commands layer only flushes.
     for author_id in all_author_ids:
         recompute_author_reputation(db, author_id)
-    db.commit()
 
     return published_count
 

@@ -17,9 +17,8 @@ from peerpedia_core.cli.display import console
 from peerpedia_core.commands import (
     create_user, get_user_by_name, update_user_public_key, update_user_salt,
 )
+from peerpedia_core.config.paths import SESSION_FILE
 from peerpedia_core.crypto import derive_key_pair, new_salt
-
-_SESSION_FILE = Path.home() / ".peerpedia" / "session.json"
 
 
 def _write_session(user_id: str, name: str, private_key_hex: str) -> None:

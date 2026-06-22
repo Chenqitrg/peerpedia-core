@@ -192,6 +192,6 @@ def write_review_to_git(
 # ── Read wrapper ──────────────────────────────────────────────────────────
 
 
-def get_reviews_for_article(db: Session, article_id: str):
+def get_reviews_for_article(db: Session, article_id: str) -> list:
     """Return all cached reviews for an article, newest first."""
     return _get(db, article_id)

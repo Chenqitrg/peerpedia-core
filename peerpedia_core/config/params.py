@@ -9,6 +9,13 @@ All tunable functions are replaceable so the community can iterate on mechanisms
 
 from dataclasses import dataclass
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# Identity constants
+# ═══════════════════════════════════════════════════════════════════════════════
+
+EMAIL_SUFFIX = "@peerpedia"
+PLATFORM_EMAIL = f"system{EMAIL_SUFFIX}"
+
 
 @dataclass
 class SinkParams:
@@ -17,6 +24,7 @@ class SinkParams:
     new_article_default_days: int = 7
     edit_article_default_days: int = 3
     min_days: int = 2
+    scan_interval_seconds: int = 3600  # REPL periodic auto-publish interval
     max_days: int = 180
 
 

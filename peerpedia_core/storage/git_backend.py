@@ -56,7 +56,7 @@ from pathlib import Path
 
 import git
 
-DEFAULT_ARTICLES_DIR = Path.home() / ".peerpedia" / "articles"
+from peerpedia_core.config.paths import ARTICLES_DIR as DEFAULT_ARTICLES_DIR
 
 
 def init_article_repo(repo_path: Path) -> Path:

@@ -48,6 +48,7 @@ from pathlib import Path
 
 from peerpedia_core.storage.db import Session
 
+from peerpedia_core.config.params import EMAIL_SUFFIX, PLATFORM_EMAIL
 from peerpedia_core.exceptions import NotAuthorizedError, SignatureVerificationError
 from peerpedia_core.storage.db.crud_article import get_article, update_article_status
 from peerpedia_core.storage.db.crud_maintainer import get_maintainer_ids
@@ -69,7 +70,7 @@ from peerpedia_core.commands.articles import rebuild_article_authors
 from peerpedia_core.commands.workflow import publish_ready_articles, recompute_article_score
 
 
-_PLATFORM_EMAIL = "system@peerpedia"
+_PLATFORM_EMAIL = PLATFORM_EMAIL
 _VALID_STATUSES = {"draft", "sedimentation", "published"}
 
 
@@ -274,5 +275,5 @@ def _extract_pubkey_from_message(message: str) -> str | None:
 
 
 def _extract_user_id_from_email(email: str) -> str:
-    """Extract user_id from ``{user_id}@peerpedia`` format."""
+    """Extract user_id from an email like ``<id>@peerpedia``."""
     return email.split("@")[0]

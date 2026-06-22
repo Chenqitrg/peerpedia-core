@@ -14,9 +14,12 @@ from peerpedia_core.commands import (
     rollback_article,
     update_article_content,
 )
-from peerpedia_core.storage.db.crud_article import get_article
+from peerpedia_core.storage.db.crud_article import create_article, get_article
+from peerpedia_core.storage.db.crud_maintainer import add_maintainer
+from peerpedia_core.storage.db.crud_review import upsert_review
 from peerpedia_core.storage.db.engine import get_session
 from peerpedia_core.storage.db.models import User
+from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, commit_article, init_article_repo
 
 
 def _create_user(db, user_id: str, name: str = "Test Author"):
@@ -41,8 +44,6 @@ def test_fork_article_creates_record(db):
     _create_user(db, "alice", "Alice")
     _create_user(db, "bob", "Bob")
 
-    from peerpedia_core.storage.db.crud_article import create_article
-    from peerpedia_core.storage.db.crud_review import upsert_review
 
     article = create_article(
         db, id="art-1", title="Test Article", authors=["alice"], status="published",
@@ -53,7 +54,6 @@ def test_fork_article_creates_record(db):
     )
     db.flush()
 
-    from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, init_article_repo, commit_article
     rp = DEFAULT_ARTICLES_DIR / "art-1"
     init_article_repo(rp)
     (rp / "article.md").write_text("# Test Article\n\nContent.")
@@ -77,7 +77,6 @@ def test_fork_article_creates_record(db):
 def test_fork_fails_for_nonexistent_user(db):
     """Fork by nonexistent user raises NotFoundError."""
     _create_user(db, "alice", "Alice")
-    from peerpedia_core.storage.db.crud_article import create_article
 
     create_article(db, id="art-1", title="Test", authors=["alice"], status="published")
     db.flush()
@@ -90,7 +89,6 @@ def test_fork_fails_for_draft_article(db):
     """Fork a draft article raises NotAuthorizedError."""
     _create_user(db, "alice", "Alice")
     _create_user(db, "bob", "Bob")
-    from peerpedia_core.storage.db.crud_article import create_article
 
     create_article(db, id="art-1", title="Draft", authors=["alice"], status="draft")
     db.flush()
@@ -103,8 +101,6 @@ def test_fork_fails_for_duplicate(db):
     """Fork the same article twice raises ConflictError."""
     _create_user(db, "alice", "Alice")
     _create_user(db, "bob", "Bob")
-    from peerpedia_core.storage.db.crud_article import create_article
-    from peerpedia_core.storage.db.crud_review import upsert_review
 
     create_article(db, id="art-1", title="Test", authors=["alice"], status="published")
     upsert_review(
@@ -113,7 +109,6 @@ def test_fork_fails_for_duplicate(db):
     )
     db.flush()
 
-    from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, init_article_repo, commit_article
     rp = DEFAULT_ARTICLES_DIR / "art-1"
     init_article_repo(rp)
     (rp / "article.md").write_text("# Test\n\nContent.")
@@ -132,14 +127,11 @@ def test_fork_fails_for_duplicate(db):
 def test_rollback_creates_revert_commit(db):
     """Rollback creates a new commit with zero-score review."""
     _create_user(db, "alice", "Alice")
-    from peerpedia_core.storage.db.crud_article import create_article
-    from peerpedia_core.storage.db.crud_maintainer import add_maintainer
 
     create_article(db, id="art-1", title="Test", authors=["alice"], status="draft")
     add_maintainer(db, "art-1", "alice")
     db.flush()
 
-    from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, init_article_repo, commit_article
 
     rp = DEFAULT_ARTICLES_DIR / "art-1"
     if not (rp / ".git").is_dir():
@@ -157,7 +149,6 @@ def test_rollback_creates_revert_commit(db):
 def test_rollback_fails_for_nonexistent_user(db):
     """Rollback by nonexistent user raises NotFoundError."""
     _create_user(db, "alice", "Alice")
-    from peerpedia_core.storage.db.crud_article import create_article
 
     create_article(db, id="art-1", title="Test", authors=["alice"], status="draft")
     db.flush()
@@ -181,7 +172,6 @@ def test_create_article_writes_file_and_commits(db):
     assert result["status"] == "draft"
     assert "commit_hash" in result
 
-    from peerpedia_core.storage.db.crud_article import get_article
     article = get_article(db, result["id"])
     assert article is not None
     assert article.title == "Hello"
@@ -200,7 +190,6 @@ def test_create_article_with_publish(db):
     )
 
     assert result["status"] == "sedimentation"
-    from peerpedia_core.storage.db.crud_article import get_article
     article = get_article(db, result["id"])
     assert article.sink_start is not None
 
@@ -248,7 +237,6 @@ def test_article_has_frontmatter(db):
     result = create_article_with_content(
         db, title="Hello", content="# Test", author_ids=["alice"],
     )
-    from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR
     article_text = (DEFAULT_ARTICLES_DIR / result["id"] / "article.md").read_text()
     assert article_text.startswith("---"), "article.md should start with frontmatter"
     import yaml
@@ -268,7 +256,6 @@ def test_self_review_creates_file(db):
         db, result["id"], "alice",
         {"originality": 3, "rigor": 3, "completeness": 3, "pedagogy": 3, "impact": 3},
     )
-    from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR
     import json
     scores_path = DEFAULT_ARTICLES_DIR / result["id"] / "reviews" / "alice" / "scores.json"
     assert scores_path.exists(), "Self-review scores.json should exist in git"
@@ -290,7 +277,6 @@ def test_metadata_only_update_commits(db):
     assert updated["commit_hash"] != result["commit_hash"]
     # Verify frontmatter was updated
     from peerpedia_core.frontmatter import parse_frontmatter
-    from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR
     article_text = (DEFAULT_ARTICLES_DIR / aid / "article.md").read_text()
     fm = parse_frontmatter(article_text)
     assert fm["title"] == "Updated Title"

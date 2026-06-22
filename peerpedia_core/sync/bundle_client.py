@@ -60,8 +60,7 @@ from peerpedia_core.sync.git_bundle import (
     ingest_bundle,
 )
 
-# Sync domain defines its own articles directory — no dependency on git_backend.
-DEFAULT_ARTICLES_DIR = Path.home() / ".peerpedia" / "articles"
+from peerpedia_core.config.paths import ARTICLES_DIR as DEFAULT_ARTICLES_DIR
 
 
 # ═══════════════════════════════════════════════════════════════════════════

@@ -44,6 +44,7 @@ def seed(db_url: str, articles_dir: Path):
         Review,
         User,
     )
+    from peerpedia_core.crypto import derive_key_pair, write_key_to_tempfile
     from peerpedia_core.frontmatter import make_article_frontmatter
     from peerpedia_core.storage.git_backend import (
         commit_article,
@@ -59,7 +60,9 @@ def seed(db_url: str, articles_dir: Path):
     print(f"Seeding database: {db_url}")
     print(f"Articles directory: {articles_dir}")
 
-    import bcrypt
+    import hashlib
+
+    from peerpedia_core.crypto import derive_key_pair
 
     default_password = "666666"
 
@@ -192,28 +195,28 @@ def seed(db_url: str, articles_dir: Path):
         },
     ]
 
-    pwd_hash = bcrypt.hashpw(default_password.encode(), bcrypt.gensalt()).decode()
     users = {}
-    for u in user_defs:
-        existing = session.query(User).filter(User.name == u["name"]).first()
+    for u_def in user_defs:
+        existing = session.query(User).filter(User.name == u_def["name"]).first()
         if existing:
-            users[u["name"]] = existing
-            print(f"  User (existing): {u['name']} ({u['name']})")
+            users[u_def["name"]] = existing
+            print(f"  User (existing): {u_def['name']}")
         else:
+            salt = hashlib.sha256(u_def["name"].encode()).hexdigest()[:32]
+            _, pubkey_bytes = derive_key_pair(default_password, salt)
             user = User(
                 id=str(uuid.uuid4()),
-                
-                password_hash=pwd_hash,
-                email=f"{u['name']}@peerpedia.dev",
-                name=u["name"],
-                affiliation=u["affiliation"],
-                expertise=u["expertise"],
+                public_key=pubkey_bytes.hex(),
+                salt=salt,
+                name=u_def["name"],
+                affiliation=u_def["affiliation"],
+                expertise=u_def["expertise"],
                 reputation={"professionalism": 4.0, "objectivity": 4.0, "collaboration": 4.0, "pedagogy": 4.0},
             )
             session.add(user)
             session.commit()
-            users[u["name"]] = user
-            print(f"  User (new): {u['name']} ({u['name']})")
+            users[u_def["name"]] = user
+            print(f"  User (new): {u_def['name']}")
 
     print(f"\n  Default password for all users: {default_password}")
     print(f"  Total users: {len(users)}")
@@ -902,17 +905,25 @@ $$
         try:
             rp = init_article_repo(articles_dir / a.id)
             (rp / "article.md").write_text(make_article_frontmatter(ad["title"]) + ad["content"])
-            commit_article(rp, "Initial submission", author.name, f"{author.id}@peerpedia")
+            priv_key, pubkey_hex = derive_key_pair(default_password, author.salt)
+            key_path = write_key_to_tempfile(priv_key)
+            commit_article(rp, "Initial submission", author.name, f"{author.id}@peerpedia",
+                          signing_key=key_path, pubkey_hex=pubkey_hex)
+            key_path.unlink(missing_ok=True)
             # Write co-author attribution commits so git-derived authors
             # can recover the full author list on repair/rebuild.
             for co_author_id in co_author_ids:
                 co = session.get(User, co_author_id)
+                priv_key, pubkey_hex = derive_key_pair(default_password, co.salt)
+                key_path = write_key_to_tempfile(priv_key)
                 commit_article(
                     rp,
                     f"Co-author: {co.name}",
                     co.name,
                     f"{co.id}@peerpedia",
+                    signing_key=key_path, pubkey_hex=pubkey_hex,
                 )
+                key_path.unlink(missing_ok=True)
         except Exception as e:
             print(f"  Warning: git repo for {ad['title'][:40]} failed: {e}")
 
@@ -1023,14 +1034,22 @@ program and data. This is the von Neumann architecture.""",
         try:
             rp = init_article_repo(articles_dir / fork.id)
             (rp / "article.md").write_text(make_article_frontmatter(fork.title) + content)
-            commit_article(rp, "Fork with extensions", forker.name, f"{forker.id}@peerpedia")
+            priv_key, pubkey_hex = derive_key_pair(default_password, forker.salt)
+            key_path = write_key_to_tempfile(priv_key)
+            commit_article(rp, "Fork with extensions", forker.name, f"{forker.id}@peerpedia",
+                          signing_key=key_path, pubkey_hex=pubkey_hex)
+            key_path.unlink(missing_ok=True)
             # Second commit with improvements
             (rp / "article.md").write_text(make_article_frontmatter(fork.title) +
                 content + "\n\n## Further Refinements\n"
                 "Additional improvements based on further analysis and peer feedback.\n"
                 f"\\n*— {forker_name}*"
             )
-            commit_article(rp, "Refinements after review", forker.name, f"{forker.id}@peerpedia")
+            priv_key, pubkey_hex = derive_key_pair(default_password, forker.salt)
+            key_path = write_key_to_tempfile(priv_key)
+            commit_article(rp, "Refinements after review", forker.name, f"{forker.id}@peerpedia",
+                          signing_key=key_path, pubkey_hex=pubkey_hex)
+            key_path.unlink(missing_ok=True)
         except Exception as e:
             print(f"  Fork git warning: {e}")
 

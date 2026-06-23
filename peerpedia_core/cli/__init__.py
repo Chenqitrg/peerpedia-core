@@ -17,7 +17,7 @@ TODO(release): production readiness checklist —
 Sub-packages:
   ``display``     — Rich terminal formatting (Layer 0)
   ``helpers``     — DB, editor, user resolution, messaging (Layer 1)
-  ``sync_utils``  — auto-sync helpers (Layer 1)
+  ``bundle_utils``  — auto-push helpers (Layer 1)
   ``handlers/``   — command implementations (Layer 2)
   ``parser``      — argparse registration (Layer 3)
 """

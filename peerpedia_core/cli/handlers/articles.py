@@ -11,9 +11,10 @@ from peerpedia_core.cli.helpers import (
     _prompt_commit_message, _parse_scores, _page, _ok, _die, _json_out,
 )
 from peerpedia_core.cli.display import console
-from peerpedia_core.cli.sync_utils import _try_sync
+from peerpedia_core.cli.bundle_utils import _sync_server, _try_sync
+from peerpedia_core.social import discover_articles, discover_bookmarks
 from peerpedia_core.commands import (
-    create_article_with_content, get_article,
+    create_article_with_content, get_article, get_author_ids,
     list_articles, publish_article,
     publish_ready_articles, delete_article, update_article_content, get_user,
 )
@@ -49,6 +50,7 @@ def _cmd_article_create(db, args):
         self_review = _parse_scores(args.scores) if args.scores else None
         result = publish_article(
             db, result["id"], user_id, self_review,
+            signing_key_bytes=key_bytes, pubkey_hex=user.public_key,
         )
     db.commit()
     _try_sync(db)
@@ -70,7 +72,7 @@ def _cmd_article_show(db, args):
     if not article:
         _die(f"Article [accent]{args.id}[/] not found")
     if args.json:
-        _json_out({"id": article.id, "title": article.title, "status": article.status})
+        _json_out(article.to_dict())
         return
 
     show_mode = getattr(args, "show", "meta")
@@ -85,8 +87,22 @@ def _cmd_article_show(db, args):
 def _cmd_article_list(db, args):
     """List articles with optional AND filters.
 
-    args: --search, --status, --feed, --mine, --bookmarked, --json
+    args: --search, --status, --feed, --mine, --bookmarked, --user, --server, --json
     """
+    # Remote fetch: pull article metadata or bookmarks from a peer.
+    if args.server:
+        server = _sync_server(args)
+        if args.bookmarked and args.user:
+            n = discover_bookmarks(db, server, args.user)
+            db.commit()
+            if n > 0:
+                console.print(f"[dim]Discovered {n} new bookmark(s) from {server}[/]")
+        elif args.user:
+            n = discover_articles(db, server, args.user)
+            db.commit()
+            if n > 0:
+                console.print(f"[dim]Discovered {n} new article(s) from {server}[/]")
+
     author_id = None
     viewer_id = None
     bookmarked_by = None
@@ -95,8 +111,10 @@ def _cmd_article_list(db, args):
         viewer_id = me
     if args.mine:
         author_id = me
+    if args.user:
+        author_id = args.user
     if args.bookmarked:
-        bookmarked_by = me
+        bookmarked_by = args.user or me
 
     # Default: only public articles.  Drafts require --mine.
     if args.mine:
@@ -118,7 +136,10 @@ def _cmd_article_list(db, args):
         limit=20,
     )
     if args.json:
-        _json_out([{"id": a.id, "title": a.title, "status": a.status} for a in articles])
+        _json_out([
+            {**a.to_dict(), "authors": get_author_ids(db, a.id)}
+            for a in articles
+        ])
         return
     if not articles:
         console.print("[muted]No articles.[/]")
@@ -191,8 +212,13 @@ def _cmd_article_publish(db, args):
     args: id [positional], --scores, --json
     """
     user_id = _get_session_user()
+    key_bytes = _get_session_key()
+    user = get_user(db, user_id)
+    if user is None:
+        _die(f"User '{user_id}' not found — DB inconsistency.")
     scores = _parse_scores(args.scores)
-    result = publish_article(db, args.id, user_id, scores)
+    result = publish_article(db, args.id, user_id, scores,
+                             signing_key_bytes=key_bytes, pubkey_hex=user.public_key)
     db.commit()
     _try_sync(db)
     if args.json:

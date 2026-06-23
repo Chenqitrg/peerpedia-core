@@ -26,7 +26,7 @@ from peerpedia_core.storage.db.models import (
 def _make_user(session: Session, name: str, **kwargs) -> User:
     u = User(
         id=kwargs.pop("id", str(uuid.uuid4())),
-        password_hash="$2b$12$test",
+        public_key="0000000000000000000000000000000000000000000000000000000000000000",
         name=name,
         affiliation=kwargs.pop("affiliation", "Test"),
         **kwargs,
@@ -283,7 +283,7 @@ class TestUserModel:
         session = get_session(engine)
         u = User(
             id=str(uuid.uuid4()),
-            password_hash="$2b$12$test",
+            public_key="0000000000000000000000000000000000000000000000000000000000000000",
             name="张三",
             affiliation="清华大学",
             expertise=["理论物理", "数学"],
@@ -300,7 +300,7 @@ class TestUserModel:
 
     def test_default_reputation(self, engine):
         session = get_session(engine)
-        u = User(id=str(uuid.uuid4()), password_hash="$2b$12$test", name="李四")
+        u = User(id=str(uuid.uuid4()), public_key="0000000000000000000000000000000000000000000000000000000000000000", name="李四")
         session.add(u)
         session.commit()
         u2 = session.get(User, u.id)

@@ -17,7 +17,7 @@ from peerpedia_core.cli.handlers import (
     _cmd_article_publish, _cmd_article_scan,
     _cmd_article_show,
     _cmd_bookmark_add, _cmd_bookmark_remove,
-    _cmd_follow_user, _cmd_unfollow_user,
+    _cmd_follow_user, _cmd_followers, _cmd_following, _cmd_unfollow_user,
     _cmd_compile,
     _cmd_fork,
     _cmd_account_search,
@@ -27,7 +27,8 @@ from peerpedia_core.cli.handlers import (
     _cmd_mother,
     _cmd_register,
     _cmd_review_list, _cmd_review_submit,
-    _cmd_sync_push, _cmd_sync_status,
+    _cmd_server_start,
+    _cmd_sync_pull, _cmd_sync_push, _cmd_sync_status,
     _cmd_whoami,
 )
 
@@ -62,18 +63,13 @@ COMMAND_GROUPS = [
     ("account", "Account management", [
         ("register", _cmd_register, [
             (("--name",), {"required": True, "help": "Your display name"}),
-            (("--json",), {"action": "store_true", "help": "Output as JSON"}),
         ]),
         ("login", _cmd_login, [
             (("--name",), {"required": True, "help": "Your display name"}),
-            (("--json",), {"action": "store_true", "help": "Output as JSON"}),
         ]),
-        ("whoami", _cmd_whoami, [
-            (("--json",), {"action": "store_true", "help": "Output as JSON"}),
-        ]),
+        ("whoami", _cmd_whoami, []),
         ("search", _cmd_account_search, [
             (("query",), {"help": "Search query (partial name, case-insensitive)"}),
-            (("--json",), {"action": "store_true", "help": "Output as JSON"}),
         ]),
     ]),
     ("article", "Article management", [
@@ -98,6 +94,8 @@ COMMAND_GROUPS = [
             (("--feed",), {"action": "store_true", "help": "Articles from followed users"}),
             (("--mine",), {"action": "store_true", "help": "My articles"}),
             (("--bookmarked",), {"action": "store_true", "help": "My bookmarked articles"}),
+            (("--user",), {"help": "Show articles by this user (requires --server for remote fetch)"}),
+            (("--server",), {"help": "Peer server URL for remote --user query"}),
         ]),
         ("edit", _cmd_article_edit, [
             (("id",), {"help": "Article ID (or prefix)"}),
@@ -146,6 +144,26 @@ COMMAND_GROUPS = [
             (("article_id",), {"help": "Article ID (or prefix)"}),
         ]),
     ]),
+    ("following", None, [
+        ("", _cmd_following, [
+            (("--user",), {"required": True, "help": "User ID to query"}),
+            (("--local",), {"action": "store_true", "help": "Read from local DB"}),
+            (("--server",), {"help": "Peer server URL"}),
+        ]),
+    ]),
+    ("followers", None, [
+        ("", _cmd_followers, [
+            (("--user",), {"required": True, "help": "User ID to query"}),
+            (("--local",), {"action": "store_true", "help": "Read from local DB"}),
+            (("--server",), {"help": "Peer server URL"}),
+        ]),
+    ]),
+    ("server", "Run the PeerPedia server", [
+        ("start", _cmd_server_start, [
+            (("--host",), {"default": "127.0.0.1", "help": "Bind address"}),
+            (("--port",), {"default": 8080, "type": int, "help": "Listen port"}),
+        ]),
+    ]),
     ("sync", None, [
         ("status", _cmd_sync_status, [
             (("--server",), {"help": "Peer server URL (or set PEERPEDIA_SERVER env var)"}),
@@ -153,10 +171,14 @@ COMMAND_GROUPS = [
         ("push", _cmd_sync_push, [
             (("--server",), {"help": "Peer server URL (or set PEERPEDIA_SERVER env var)"}),
         ]),
-        # TODO(sync-pull): ``sync pull`` — git bundle pull (articles + reviews).
-        # TODO(social-graph): ``sync discover`` — P2P social graph discovery.
-        # TODO(social-graph): ``sync follow`` / ``sync unfollow`` — P2P follows.
-        # TODO(social-graph): ``sync bookmarks`` — P2P bookmark sync.
+        ("pull", _cmd_sync_pull, [
+            (("--server",), {"help": "Peer server URL (or set PEERPEDIA_SERVER env var)"}),
+        ]),
+        # TODO(social-graph): ``sync discover`` — P2P social graph discovery
+        # (traverse followers-of-followers to find new peers and articles).
+        # Follow/unfollow/bookmark are pushed to the server immediately after
+        # local commit via _push_social(); a future ``sync social push`` command
+        # would batch offline social changes.
     ]),
     ("maintainer", None, [
         ("add", _cmd_maintainer_add, [
@@ -198,15 +220,22 @@ TOP_LEVEL = [
 
 
 def build_parser() -> argparse.ArgumentParser:
-    # TODO(version): ``--version`` flag — print version + exit.
     # TODO(release): README + install guide — currently zero onboarding docs.
     # TODO(release): pip install smoke test — verify deps are declared correctly.
     # TODO(release): data migration — schema evolves, need upgrade path for users.
     # TODO(ux-onboarding): first-run wizard — register + create first article flow.
     # TODO(ux-onboarding): group commands in --help (Account / Article / Review).
+    import importlib.metadata
+
+    try:
+        _version = importlib.metadata.version("peerpedia-core")
+    except importlib.metadata.PackageNotFoundError:
+        _version = "unknown"
+
     parser = argparse.ArgumentParser(
         "peerpedia", description="PeerPedia — peer review from the terminal",
     )
+    parser.add_argument("--version", action="version", version=f"%(prog)s {_version}")
     subs = parser.add_subparsers(dest="command")
 
     # Nested command groups (e.g. ``peerpedia article create``)

@@ -10,7 +10,7 @@ from peerpedia_core.cli.helpers import (
     DEFAULT_ARTICLES_DIR,
 )
 from peerpedia_core.cli.display import _stars, console
-from peerpedia_core.cli.sync_utils import _try_sync
+from peerpedia_core.cli.bundle_utils import _try_sync
 from peerpedia_core.commands import submit_review, get_reviews_for_article, get_user
 
 

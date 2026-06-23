@@ -55,3 +55,11 @@ class BadRequestError(PeerpediaError):
 
 class SignatureVerificationError(PeerpediaError):
     """Commit signature is invalid, missing, or key mismatch (TOFU)."""
+
+
+class TransportError(PeerpediaError):
+    """Network-level error: unreachable, timeout, DNS, connection refused."""
+
+
+class ProtocolError(PeerpediaError):
+    """Protocol-level error: unexpected HTTP status, malformed response body."""

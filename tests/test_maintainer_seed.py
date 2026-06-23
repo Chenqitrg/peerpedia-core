@@ -26,10 +26,11 @@ from peerpedia_core.storage.db.engine import get_session
 from peerpedia_core.storage.db.models import User
 from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, init_article_repo, commit_article
 import peerpedia_core.storage.git_backend as git_backend
+from tests.conftest import commit_article_signed
 
 
 def _register_user(db: Session, user_id: str, name: str = "Test Author") -> User:
-    u = User(id=user_id, password_hash="$2b$12$test", name=name)
+    u = User(id=user_id, name=name)
     db.add(u)
     db.flush()
     return u
@@ -39,7 +40,7 @@ def _register_user(db: Session, user_id: str, name: str = "Test Author") -> User
 
 
 class TestCreateSeedsMaintainers:
-    def test_all_authors_become_maintainers(self, db_engine):
+    def test_all_authors_become_maintainers(self, db_engine, test_signing_key_bytes, test_pubkey_hex):
         db = get_session(db_engine)
         _register_user(db, "alice", "Alice")
         _register_user(db, "bob", "Bob")
@@ -48,15 +49,14 @@ class TestCreateSeedsMaintainers:
             db,
             title="Co-authored Paper",
             content="# Abstract\n\nJoint work.",
-            author_ids=["alice", "bob"],
-        )
+            author_ids=["alice", "bob"], signing_key_bytes=test_signing_key_bytes, pubkey_hex=test_pubkey_hex)
         db.commit()
 
         assert is_maintainer(db, result["id"], "alice")
         assert is_maintainer(db, result["id"], "bob")
         assert get_maintainer_ids(db, result["id"]) == ["alice", "bob"]
 
-    def test_single_author_is_sole_maintainer(self, db_engine):
+    def test_single_author_is_sole_maintainer(self, db_engine, test_signing_key_bytes, test_pubkey_hex):
         db = get_session(db_engine)
         _register_user(db, "alice", "Alice")
 
@@ -64,8 +64,7 @@ class TestCreateSeedsMaintainers:
             db,
             title="Solo Paper",
             content="# Abstract\n\nSolo work.",
-            author_ids=["alice"],
-        )
+            author_ids=["alice"], signing_key_bytes=test_signing_key_bytes, pubkey_hex=test_pubkey_hex)
         db.commit()
 
         assert get_maintainer_ids(db, result["id"]) == ["alice"]
@@ -75,7 +74,7 @@ class TestCreateSeedsMaintainers:
 
 
 class TestForkSeedsMaintainer:
-    def test_forker_is_sole_maintainer(self, db_engine):
+    def test_forker_is_sole_maintainer(self, db_engine, test_signing_key_bytes, test_pubkey_hex):
         db = get_session(db_engine)
         _register_user(db, "alice", "Alice")
         _register_user(db, "bob", "Bob")
@@ -85,8 +84,7 @@ class TestForkSeedsMaintainer:
             db,
             title="Original",
             content="# Original",
-            author_ids=["alice"],
-        )
+            author_ids=["alice"], signing_key_bytes=test_signing_key_bytes, pubkey_hex=test_pubkey_hex)
 
         from peerpedia_core.commands.articles import publish_article
 
@@ -94,8 +92,7 @@ class TestForkSeedsMaintainer:
             db,
             create_result["id"],
             "alice",
-            {"originality": 4, "rigor": 3, "completeness": 4, "pedagogy": 3, "impact": 4},
-        )
+            {"originality": 4, "rigor": 3, "completeness": 4, "pedagogy": 3, "impact": 4}, signing_key_bytes=test_signing_key_bytes, pubkey_hex=test_pubkey_hex)
         db.commit()
 
         # Set status to published (publish_article puts it in sedimentation)
@@ -111,7 +108,7 @@ class TestForkSeedsMaintainer:
         assert is_maintainer(db, fork_result["id"], "bob")
         assert get_maintainer_ids(db, fork_result["id"]) == ["bob"]
 
-    def test_original_authors_not_maintainers_on_fork(self, db_engine):
+    def test_original_authors_not_maintainers_on_fork(self, db_engine, test_signing_key_bytes, test_pubkey_hex):
         db = get_session(db_engine)
         _register_user(db, "alice", "Alice")
         _register_user(db, "bob", "Bob")
@@ -120,8 +117,7 @@ class TestForkSeedsMaintainer:
             db,
             title="Original",
             content="# Original",
-            author_ids=["alice"],
-        )
+            author_ids=["alice"], signing_key_bytes=test_signing_key_bytes, pubkey_hex=test_pubkey_hex)
 
         from peerpedia_core.commands.articles import publish_article
 
@@ -129,8 +125,7 @@ class TestForkSeedsMaintainer:
             db,
             create_result["id"],
             "alice",
-            {"originality": 4, "rigor": 3, "completeness": 4, "pedagogy": 3, "impact": 4},
-        )
+            {"originality": 4, "rigor": 3, "completeness": 4, "pedagogy": 3, "impact": 4}, signing_key_bytes=test_signing_key_bytes, pubkey_hex=test_pubkey_hex)
         db.commit()
 
         from peerpedia_core.storage.db.crud_article import update_article_status
@@ -148,7 +143,7 @@ class TestForkSeedsMaintainer:
 
 
 class TestMergeAuthorNotMaintainer:
-    def test_merge_author_not_maintainer(self, db_engine):
+    def test_merge_author_not_maintainer(self, db_engine, test_signing_key_bytes, test_pubkey_hex):
         """Merge author becomes ArticleAuthor but NOT ScriptMaintainer."""
         db = get_session(db_engine)
         _register_user(db, "alice", "Alice")
@@ -159,8 +154,7 @@ class TestMergeAuthorNotMaintainer:
             db,
             title="Original",
             content="# Original",
-            author_ids=["alice"],
-        )
+            author_ids=["alice"], signing_key_bytes=test_signing_key_bytes, pubkey_hex=test_pubkey_hex)
 
         from peerpedia_core.commands.articles import publish_article
 
@@ -168,8 +162,7 @@ class TestMergeAuthorNotMaintainer:
             db,
             create_result["id"],
             "alice",
-            {"originality": 4, "rigor": 3, "completeness": 4, "pedagogy": 3, "impact": 4},
-        )
+            {"originality": 4, "rigor": 3, "completeness": 4, "pedagogy": 3, "impact": 4}, signing_key_bytes=test_signing_key_bytes, pubkey_hex=test_pubkey_hex)
         db.commit()
 
         from peerpedia_core.storage.db.crud_article import update_article_status
@@ -188,6 +181,7 @@ class TestMergeAuthorNotMaintainer:
             content="# Bob's improvements",
             message="Improved the paper",
             user_id="bob",
+            signing_key_bytes=test_signing_key_bytes, pubkey_hex=test_pubkey_hex,
         )
         db.commit()
 

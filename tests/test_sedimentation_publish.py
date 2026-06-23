@@ -1,4 +1,5 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
+from tests.conftest import commit_article_signed
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
 """Specification: Sedimentation Pool Auto-Publish.
@@ -29,10 +30,12 @@ from peerpedia_core.workflow.sedimentation import (
 )
 
 
+from tests.conftest import commit_article_signed
+
 def _make_user(session, name):
     u = User(
         id=str(uuid.uuid4()),
-        password_hash="",
+        public_key="0000000000000000000000000000000000000000000000000000000000000000",
         name=name,
     )
     session.add(u)
@@ -161,7 +164,7 @@ class TestPublishReadyArticles:
                 gb_mod.DEFAULT_ARTICLES_DIR = base
                 rp = init_article_repo(base / article_id)
                 (rp / "article.md").write_text("# Test")
-                commit_article(rp, "init", "A", "a@b.com")
+                commit_article_signed(rp, "init", "A", "a@b.com")
 
                 count = publish_ready_articles(session)
                 assert count == 1

@@ -93,7 +93,7 @@ class TestPerCommitScoring:
     def _make_user(self, session, name):
         from peerpedia_core.storage.db.models import User
 
-        u = User(id=str(uuid.uuid4()), password_hash="$2b$12$test", name=name)
+        u = User(id=str(uuid.uuid4()), public_key="0000000000000000000000000000000000000000000000000000000000000000", name=name)
         session.add(u)
         session.commit()
         return u

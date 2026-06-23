@@ -209,16 +209,11 @@ def apply_sync_bundle(
     # Sync status transitions from commit messages (P2P status transport).
     sync_status_from_git(db, article_id)
 
-    # TODO(social-graph): P2P social graph sync — the missing half of P2P.
-    # Git bundles handle articles + reviews (content).  The social graph
-    # (follows, bookmarks, user profiles) needs an independent DB-to-DB
-    # transport: GET/POST follows per user, GET bookmarks per user.
-    # Without this there is no peer discovery — you must already know every
-    # peer's address.  Reachable articles = 2-hop social circle.
-    # Reviewable articles = 1-hop social circle.
-    #
-    # TODO(sync-pull): ``sync pull`` — bundle_client already has
-    # pull_incremental, just needs CLI wiring + server HTTP transport.
+    # TODO(social-graph): ``sync discover`` — traverse the social graph to
+    # find new peers and articles.  Follows, unfollows, and bookmarks are
+    # pushed to the server via _push_social() after local commit.  What's
+    # missing is the discovery side: given a seed peer, walk the graph
+    # (who follows whom, who bookmarks what) to surface new content.
 
     recompute_article_score(db, article_id)
 
@@ -263,7 +258,7 @@ def _verify_new_commits(db: Session, repo_path: Path, *, since_hash: str) -> Non
         if user is None:
             # First encounter: user record doesn't exist locally yet.
             # Expected for brand-new peers; pubkey is recorded when the
-            # user is first created via serve_post_articles.
+            # user is first created via create_article.
             continue
         if user.public_key is None:
             update_user_public_key(db, user_id, pubkey_hex)

@@ -7,12 +7,12 @@ Client-side functions mirror the server-side handlers in ``bundle_server``::
 
       CLIENT (bundle_client)              SERVER (bundle_server)
       ─────────────────────               ──────────────────────
-      sync_article() → orchestrates        (HTTP routing layer, TBD)
-        ├─ find_merge_base()   ↔   serve_get_ancestor()
+      sync_article() → orchestrates        server/app.py (ASGI routing)
+        ├─ find_merge_base()   ↔   check_ancestor()
         │    └─ monotonic_search            └─ is_ancestor()
-        ├─ pull_incremental()   ↔   serve_get_bundle()
+        ├─ pull_incremental()   ↔   get_bundle()
         │    └─ fetch_bundle(HTTP)          └─ create_bundle()
-        └─ push_incremental()   ↔   serve_post_sync()
+        └─ push_incremental()   ↔   apply_sync()
              └─ create_bundle()             └─ apply_bundle()
 
 Protocol flow (sync_article orchestrates)::
@@ -50,14 +50,16 @@ import io
 import tarfile
 from pathlib import Path
 
+from peerpedia_core.exceptions import ProtocolError
 from peerpedia_core.storage.db import Session
 
 from peerpedia_core.commands import apply_sync_bundle
-from peerpedia_core.sync.git_bundle import (
+from peerpedia_core.bundle.git_bundle import (
     create_bundle,
     find_common_ancestor,
     get_head,
     ingest_bundle,
+    init_repo,
 )
 
 from peerpedia_core.config.paths import ARTICLES_DIR as DEFAULT_ARTICLES_DIR
@@ -94,7 +96,9 @@ def sync_article(db: Session, server: str, article_id: str) -> dict:
 
     # Server doesn't have this article yet — upload full repo
     if not server_head:
-        return _result(create_remote_article(server, article_id), local_head)
+        if upload_article(server, article_id):
+            return {"synced": True, "head": local_head}
+        return {"synced": False, "head": None}
 
     # Already in sync
     if local_head == server_head:
@@ -104,32 +108,23 @@ def sync_article(db: Session, server: str, article_id: str) -> dict:
 
     # ── Case 1: Server ahead — pull only (ff) ────────────────────────────
     if merge_base == local_head:
-        new_head = pull_incremental(db, server, article_id, local_head)
-        return _result(new_head is not None, new_head)
+        return {"synced": True, "head": pull_incremental(db, server, article_id, local_head)}
 
     # ── Case 2: Local ahead — push only ──────────────────────────────────
     if merge_base == server_head:
-        return _result(
-            push_incremental(server, article_id, server_head, local_head) is not None,
-            local_head,
-        )
+        push_incremental(server, article_id, server_head, local_head)
+        return {"synced": True, "head": local_head}
 
     # ── Case 3: Diverged — pull (non-ff merge), then push ────────────────
     if merge_base is not None:
         new_head = pull_incremental(db, server, article_id, merge_base, ff_only=False)
-        if not new_head:
-            return {"synced": False, "head": None}
-        return _result(
-            push_incremental(server, article_id, server_head, new_head) is not None,
-            new_head,
-        )
+        push_incremental(server, article_id, server_head, new_head)
+        return {"synced": True, "head": new_head}
 
     # No common ancestor or probe failed — shouldn't happen after fast-path
-    return {"synced": False, "head": None}
-
-
-def _result(ok: bool, head: str) -> dict:
-    return {"synced": True, "head": head} if ok else {"synced": False, "head": None}
+    raise ProtocolError(
+        f"sync_article: no common ancestor found for {article_id} at {server}"
+    )
 
 
 def find_merge_base(
@@ -156,7 +151,7 @@ def pull_incremental(
     since_hash: str | None,
     *,
     ff_only: bool = True,
-) -> str | None:
+) -> str:
     """Pull server commits from *since_hash* to server HEAD.
 
     1. ``fetch_bundle`` — GET /bundle?since=… (HTTP) → bytes
@@ -166,33 +161,62 @@ def pull_incremental(
     *since_hash=None* means "full pull" (from the beginning).
     *ff_only=True*  → ``git merge --ff-only`` (server ahead).
     *ff_only=False* → ``git merge`` — creates a merge commit when diverged.
+
+    Raises ``ProtocolError`` on transport failure or empty bundle.
     """
     bundle_bytes = fetch_bundle(server, article_id, since_hash)
     if not bundle_bytes:
-        return None
+        raise ProtocolError(
+            f"pull_incremental: server returned empty bundle for article {article_id}"
+        )
     ingest_bundle(DEFAULT_ARTICLES_DIR / article_id, bundle_bytes)
     return apply_sync_bundle(db, article_id, ff_only=ff_only)
 
 
+def pull_new_article(db: Session, server: str, article_id: str) -> str | None:
+    """Pull an article that doesn't exist locally.
+
+    Initializes a new git repo, then does a full bundle pull from *server*.
+    Returns the new HEAD hash, or None if the server doesn't have the article.
+    """
+    repo_path = DEFAULT_ARTICLES_DIR / article_id
+    init_repo(repo_path)
+    return pull_incremental(db, server, article_id, since_hash=None)
+
+
 def push_incremental(
     server: str, article_id: str, since_hash: str, to_hash: str,
-) -> str | None:
+) -> str:
     """Push local commits from *since_hash* to *to_hash*.
 
     Creates an incremental bundle and POSTs it to the server.
-    Returns *to_hash* on success, None on failure.
+    Returns *to_hash* on success.
+
+    Raises ``ProtocolError`` on transport failure or server rejection
+    (conflict / error).
     """
     bundle_bytes = create_bundle(DEFAULT_ARTICLES_DIR / article_id, since_hash)
-    if push_bundle(server, article_id, bundle_bytes) == "ok":
+    result = push_bundle(server, article_id, bundle_bytes)
+    if result == "ok":
         return to_hash
-    return None
+    raise ProtocolError(
+        f"push_incremental: server returned {result!r} for article {article_id}"
+    )
 
 
-def create_remote_article(server: str, article_id: str) -> bool:
-    """Upload a full repo tar.gz for a first-ever push."""
+def upload_article(server: str, article_id: str) -> bool:
+    """Upload a full repo tar.gz when the server has no such article.
+
+    Returns True on success.  Raises ``FileNotFoundError`` if the local
+    git repo is missing.
+    """
     rp = DEFAULT_ARTICLES_DIR / article_id
     if not (rp / ".git").is_dir():
-        return False
+        raise FileNotFoundError(f"Repo not found: {rp}")
+
+    # Fail fast: don't upload an empty repo — the server expects at least
+    # one commit (the initial commit from init_article_repo).
+    get_head(rp)
 
     # TODO(perf): tar.gz BytesIO → bytes → base64 str — three copies coexist
     # in memory.  For a 5MB compressed tar, peak memory ~17MB.  Stream
@@ -209,7 +233,7 @@ def create_remote_article(server: str, article_id: str) -> bool:
 # HTTP transport — delegated to transport/http.py
 # ═══════════════════════════════════════════════════════════════════════════
 
-from peerpedia_core.sync.transport.http import (
+from peerpedia_core.transport import (
     ancestor_probe,
     fetch_bundle,
     fetch_head,

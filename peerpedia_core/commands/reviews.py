@@ -57,9 +57,9 @@ from peerpedia_core.storage.db import Session
 from peerpedia_core.exceptions import ConflictError, NotFoundError
 from peerpedia_core.policies.articles import assert_can_submit_review
 from peerpedia_core.storage.db.crud_article import get_article, get_author_ids
-from peerpedia_core.crypto import write_temp_key
 from peerpedia_core.storage.db.crud_review import get_reviews_for_article as _get, upsert_review
 from peerpedia_core.storage.db.crud_user import derive_anonymous_name, get_user
+from peerpedia_core.crypto import write_key_to_tempfile
 from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, commit_article
 from peerpedia_core.storage.locks import get_article_lock
 from peerpedia_core.commands.workflow import recompute_article_score, recompute_author_reputation
@@ -182,7 +182,7 @@ def write_review_to_git(
         raise ConflictError("Article busy — retry later")
 
     try:
-        key_path = write_temp_key(signing_key_bytes) if signing_key_bytes else None
+        key_path = write_key_to_tempfile(signing_key_bytes) if signing_key_bytes else None
         try:
             h = commit_article(
                 rp, f"[review] {display_name}", display_name, email,

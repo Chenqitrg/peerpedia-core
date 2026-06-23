@@ -19,7 +19,7 @@ from peerpedia_core.storage.db.models import (
 
 
 def _make_user(session: Session, name: str) -> User:
-    u = User(id=str(uuid.uuid4()), password_hash="$2b$12$test", name=name, affiliation="Test")
+    u = User(id=str(uuid.uuid4()), public_key="0000000000000000000000000000000000000000000000000000000000000000", name=name, affiliation="Test")
     session.add(u)
     session.commit()
     return u
@@ -301,7 +301,7 @@ class TestUserCRUD:
         from peerpedia_core.storage.db.crud_user import create_user
 
         session = get_session(engine)
-        u = create_user(session, name="新用户", affiliation="某大学")
+        u = create_user(session, name="新用户", public_key="0000000000000000000000000000000000000000000000000000000000000000", affiliation="某大学")
         assert u.id is not None
         assert u.name == "新用户"
         assert u.name == "新用户"
@@ -311,7 +311,7 @@ class TestUserCRUD:
         from peerpedia_core.storage.db.crud_user import create_user, get_user
 
         session = get_session(engine)
-        u = create_user(session, name="test")
+        u = create_user(session, name="test", public_key="0000000000000000000000000000000000000000000000000000000000000000")
         assert get_user(session, u.id).name == "test"
         assert get_user(session, "nonexistent") is None
         session.close()
@@ -320,8 +320,8 @@ class TestUserCRUD:
         from peerpedia_core.storage.db.crud_user import create_user, list_users
 
         session = get_session(engine)
-        create_user(session, name="张三")
-        create_user(session, name="李四")
+        create_user(session, name="张三", public_key="0000000000000000000000000000000000000000000000000000000000000000")
+        create_user(session, name="李四", public_key="0000000000000000000000000000000000000000000000000000000000000000")
         assert len(list_users(session)) == 2
         session.close()
 
@@ -333,7 +333,7 @@ class TestUserCRUD:
         )
 
         session = get_session(engine)
-        u = create_user(session, name="rep_user")
+        u = create_user(session, name="rep_user", public_key="0000000000000000000000000000000000000000000000000000000000000000")
         rep = {"professionalism": 4.0, "objectivity": 3.5, "collaboration": 4.5, "pedagogy": 4.0}
         update_user_reputation(session, u.id, rep)
         assert get_user(session, u.id).reputation == rep
@@ -353,8 +353,8 @@ class TestFollowCRUD:
         )
 
         session = get_session(engine)
-        a = create_user(session, name="A")
-        b = create_user(session, name="B")
+        a = create_user(session, name="A", public_key="0000000000000000000000000000000000000000000000000000000000000000")
+        b = create_user(session, name="B", public_key="0000000000000000000000000000000000000000000000000000000000000000")
         follow_user(session, a.id, b.id)
         assert is_following(session, a.id, b.id) is True
         assert is_following(session, b.id, a.id) is False
@@ -373,9 +373,9 @@ class TestFollowCRUD:
         )
 
         session = get_session(engine)
-        a = create_user(session, name="A")
-        b = create_user(session, name="B")
-        c = create_user(session, name="C")
+        a = create_user(session, name="A", public_key="0000000000000000000000000000000000000000000000000000000000000000")
+        b = create_user(session, name="B", public_key="0000000000000000000000000000000000000000000000000000000000000000")
+        c = create_user(session, name="C", public_key="0000000000000000000000000000000000000000000000000000000000000000")
         follow_user(session, b.id, a.id)  # b follows a
         follow_user(session, c.id, a.id)  # c follows a
         assert get_follower_count(session, a.id) == 2
@@ -394,7 +394,7 @@ class TestFollowCRUD:
         )
 
         session = get_session(engine)
-        a = create_user(session, name="A")
+        a = create_user(session, name="A", public_key="0000000000000000000000000000000000000000000000000000000000000000")
         with pytest.raises(ValueError, match="cannot follow themselves"):
             follow_user(session, a.id, a.id)
         session.close()
@@ -633,3 +633,65 @@ class TestUpdateNotFound:
     def test_add_merge_thread_message_not_found(self, engine):
         """Merge thread messages now live in git — this path is covered by review thread."""
         pass
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Salt roundtrip — exercises the full production auth path
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestSaltRoundtrip:
+    """Verify the full salt lifecycle: generate → store in DB → retrieve → derive key.
+
+    This is the production auth path.  The ``commit_article_signed`` helper
+    in conftest.py uses a deterministic hash(email) salt instead, so these
+    tests ensure the real path doesn't rot.
+    """
+
+    def test_salt_roundtrip_derives_same_key(self, engine):
+        """new_salt → store in User.salt → retrieve → derive_key_pair produces
+        the same key as direct derivation with the same password + salt."""
+        from peerpedia_core.crypto import derive_key_pair, new_salt
+        from peerpedia_core.storage.db.crud_user import create_user, get_user
+        from peerpedia_core.storage.db.crud_user import update_user_salt
+
+        PASSWORD = "roundtrip-test-password"
+
+        session = get_session(engine)
+        # 1. Generate a real random salt
+        salt_hex = new_salt()
+        assert len(salt_hex) == 32  # 16 bytes hex-encoded
+
+        # 2. Derive key pair
+        priv_bytes, pub_bytes = derive_key_pair(PASSWORD, salt_hex)
+        pubkey_hex = pub_bytes.hex()
+
+        # 3. Create user with public_key, then store salt
+        u = create_user(session, name="salt_test", public_key=pubkey_hex)
+        update_user_salt(session, u.id, salt_hex)
+        session.commit()
+
+        # 4. Retrieve from DB and re-derive
+        u2 = get_user(session, u.id)
+        assert u2.salt == salt_hex, "salt should survive roundtrip"
+        priv2, pub2 = derive_key_pair(PASSWORD, u2.salt)
+
+        # 5. Same password + same salt → same key pair
+        assert priv2 == priv_bytes
+        assert pub2.hex() == pubkey_hex
+        assert u2.public_key == pubkey_hex
+
+        session.close()
+
+    def test_different_salt_produces_different_key(self, engine):
+        """Two calls to new_salt() produce different salts → different keys."""
+        from peerpedia_core.crypto import derive_key_pair, new_salt
+
+        PASSWORD = "test-password"
+        salt1 = new_salt()
+        salt2 = new_salt()
+        assert salt1 != salt2, "salts should be unique"
+
+        _, pub1 = derive_key_pair(PASSWORD, salt1)
+        _, pub2 = derive_key_pair(PASSWORD, salt2)
+        assert pub1 != pub2, "different salts → different pubkeys"

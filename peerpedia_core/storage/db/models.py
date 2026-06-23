@@ -5,6 +5,13 @@
 
 Article content is stored in git repos (~/.peerpedia/articles/{id}/).
 Database stores metadata, scores, relationships, and compilation cache.
+
+.. todo::
+   Split domain entities (Article, User, etc.) from ORM persistence.
+   ``Column``, ``ForeignKey``, and ``Base`` are SQLAlchemy concerns that
+   currently couple the domain model to the database layer.  The domain
+   entities should live outside ``storage/`` and define their shape with
+   plain types, not ORM column descriptors.
 """
 
 from __future__ import annotations
@@ -12,7 +19,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import CheckConstraint, Column, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint
 
 from peerpedia_core.storage.db.engine import Base, JSONDict, JSONList
 
@@ -51,6 +58,22 @@ class Article(Base):
     last_author_rebuild_hash = Column(String, nullable=True)  # HEAD commit hash of last author rebuild
     created_at = Column(DateTime, nullable=False, default=_utcnow)
     updated_at = Column(DateTime, nullable=False, default=_utcnow, onupdate=_utcnow)
+
+    def to_dict(self) -> dict:
+        """Expose all article fields except internal caches (compiled_*, score)."""
+        return {
+            "id": self.id,
+            "title": self.title,
+            "abstract": self.abstract,
+            "keywords": self.keywords,
+            "categories": self.categories,
+            "status": self.status,
+            "forked_from": self.forked_from,
+            "fork_count": self.fork_count,
+            "sink_start": str(self.sink_start) if self.sink_start else None,
+            "sink_duration_days": self.sink_duration_days,
+            "created_at": str(self.created_at) if self.created_at else None,
+        }
 
 
 # ── Review ───────────────────────────────────────────────────────────────
@@ -111,17 +134,33 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(String, primary_key=True)
+    # TODO(p2p): name unique constraint is incompatible with P2P — two peers
+    # can independently register the same name.  Remove unique=True once
+    # get_user_by_name / login / follow are updated to handle duplicates.
     name = Column(String, unique=True, nullable=False)
-    password_hash = Column(String, nullable=False)  # bcrypt hash
-    public_key = Column(String, nullable=True)  # Ed25519 pubkey hex (from password-derived key pair)
+    public_key = Column(String, nullable=True)  # Ed25519 pubkey hex — set by register or TOFU
     salt = Column(String, nullable=True)  # hex-encoded scrypt salt (16 bytes)
-    email = Column(String, nullable=True)  # format-validated
+    address = Column(String, nullable=True)  # peer URL
+    last_fetch_at = Column(DateTime, nullable=True)  # metadata TTL
     affiliation = Column(String, nullable=False, default="")
     expertise = Column(JSONList, nullable=False, default=list)
     avatar_url = Column(String, nullable=True)
-    contact = Column(String, nullable=True)
     reputation = Column(JSONDict, nullable=False, default=dict)  # ReputationScores as dict
     created_at = Column(DateTime, nullable=False, default=_utcnow)
+
+    def to_dict(self) -> dict:
+        """Expose user fields for peer exchange. Excludes salt (secret) and reputation (local)."""
+        return {
+            "id": self.id,
+            "name": self.name,
+            "address": self.address,
+            "public_key": self.public_key,
+            "affiliation": self.affiliation,
+            "expertise": self.expertise,
+            "avatar_url": self.avatar_url,
+            "last_fetch_at": str(self.last_fetch_at) if self.last_fetch_at else None,
+            "created_at": str(self.created_at) if self.created_at else None,
+        }
 
 
 # ── Follow ───────────────────────────────────────────────────────────────
@@ -129,7 +168,10 @@ class User(Base):
 
 class Follow(Base):
     __tablename__ = "follows"
-    __table_args__ = (UniqueConstraint("follower_id", "followed_id", name="uq_follow"),)
+    __table_args__ = (
+        UniqueConstraint("follower_id", "followed_id", name="uq_follow"),
+        CheckConstraint("follower_id != followed_id", name="ck_no_self_follow"),
+    )
 
     follower_id = Column(String, ForeignKey("users.id"), primary_key=True)
     followed_id = Column(String, ForeignKey("users.id"), primary_key=True)

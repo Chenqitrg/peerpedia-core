@@ -68,7 +68,7 @@ def _make_client_fixture(app, db_engine, db_override_only=False):
     if not db_override_only:
         # Create a default user and override require_user for convenience.
         s = get_session(db_engine)
-        _u = User(id=str(uuid.uuid4()), password_hash="", name="AuthUser", affiliation="TestU")
+        _u = User(id=str(uuid.uuid4()), public_key="0000000000000000000000000000000000000000000000000000000000000000", name="AuthUser", affiliation="TestU")
         s.add(_u)
         s.commit()
         _uid = _u.id

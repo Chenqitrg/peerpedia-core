@@ -12,10 +12,12 @@ count) lives in the database so it can be queried and aggregated.
 
 Pure local git — does not depend on bundle or sync modules.
 
-**Hard constraint**: this module depends only on GitPython + stdlib.
-It does NOT import any ``peerpedia_core`` module.  It raises only stdlib
-exceptions (ValueError, RuntimeError, FileNotFoundError) or its own
-``MergeConflictError``.  The caller translates to domain exceptions.
+**Hard constraint**: this module depends on GitPython + stdlib +
+``peerpedia_core.config.paths`` (for ``ARTICLES_DIR``) and
+``peerpedia_core.exceptions`` (for ``ConflictError``, the base of
+``MergeConflictError``).  It does NOT import ``storage/db`` or any
+other ``peerpedia_core`` module.  The caller translates to domain
+exceptions.
 
 Functions by category
 ---------------------
@@ -56,24 +58,39 @@ from pathlib import Path
 
 import git
 
+from peerpedia_core.config.git import make_article_gitignore, ssh_sign_env, ssh_verify_env
 from peerpedia_core.config.paths import ARTICLES_DIR as DEFAULT_ARTICLES_DIR
 
 
 def init_article_repo(repo_path: Path) -> Path:
     """Initialize a new git repository for an article.
 
-    Creates the repo directory, initializes .git/, and sets up the
-    reviews/ subdirectory.  Returns repo_path.
+    Creates the repo directory, initializes .git/, writes a ``.gitignore``
+    that only allows approved paths (from ``config/git.py``), and creates
+    an initial commit with the ``.gitignore``.  Returns repo_path.
 
-    **Do not call this function in isolation.**  An empty repo without
-    content and an initial commit is invalid.  This function exists
-    only as a building block for ``create_article_with_content``
-    (and for tests that need a bare git repo).
+    The repo is valid after this call — it has a HEAD and can be merged
+    into without untracked-file conflicts.
     """
     repo_path.mkdir(parents=True, exist_ok=True)
-    git.Repo.init(repo_path)
+    repo = git.Repo.init(repo_path)
     (repo_path / "reviews").mkdir(exist_ok=True)
+    (repo_path / ".gitignore").write_text(make_article_gitignore())
+    if not repo.head.is_valid():
+        repo.git.add(A=True)
+        repo.git.commit(m="Init article repo")
     return repo_path
+
+
+def is_repo_dirty(repo_path: Path) -> bool:
+    """Return True if the git repo at *repo_path* has uncommitted changes.
+
+    Used by callers that need to skip ``commit_article`` when there is
+    nothing to commit (e.g., status transitions already captured by a
+    prior commit).
+    """
+    repo = git.Repo(repo_path)
+    return repo.is_dirty(untracked_files=True)
 
 
 def commit_article(
@@ -81,8 +98,8 @@ def commit_article(
     message: str,
     author_name: str,
     author_email: str,
-    signing_key: Path | None = None,
-    pubkey_hex: str | None = None,
+    signing_key: Path | None,
+    pubkey_hex: str | None,
 ) -> str:
     """Stage all changes and commit. Returns the commit hash.
 
@@ -93,22 +110,30 @@ def commit_article(
     via git's SSH signing (``gpg.format=ssh``) and the pubkey is embedded
     in the commit message as ``Pubkey: <hex>``.
 
-    TODO(security): signing is implemented but optional — unsigned commits
-    are rejected on sync but pollute local history.  Force signing for all
-    non-platform commits once the user base has keys.
+    Non-platform commits MUST be signed — unsigned commits pollute local
+    history and are rejected on sync.  Platform commits (system@peerpedia)
+    are exempt.
     """
     import os
 
     repo = git.Repo(repo_path)
     repo.git.add(A=True)
 
-    # TODO: silently returning the existing HEAD hides the no-op from the
-    # caller.  The caller should decide whether to warn, skip downstream
-    # work, or reject.  Options: return (hash, was_new), raise, or let git
-    # create the empty commit when --allow-empty was the caller's intent.
+    # Fail fast: refuse to create an empty commit.  The caller should
+    # check is_dirty() before calling if the no-op is intentional, or
+    # pass --allow-empty when an empty commit is semantically meaningful
+    # (e.g., recording a status transition with no file changes).
     if not repo.is_dirty(untracked_files=True) and repo.head.is_valid():
-        return repo.head.commit.hexsha  # type: ignore[union-attr]
+        raise ValueError(
+            "nothing to commit — repo is clean; "
+            "caller should skip or pass --allow-empty if intentional"
+        )
 
+    # Fail fast: all non-platform commits must be signed.
+    if author_email != "system@peerpedia" and (signing_key is None or not pubkey_hex):
+        raise ValueError(
+            "signing_key and pubkey_hex are required for non-platform commits"
+        )
     # Fail fast: pubkey requires signing key
     if pubkey_hex and not signing_key:
         raise ValueError(
@@ -128,26 +153,13 @@ def commit_article(
         _write_ssh_pubkey(signing_key, pub_path)
         allowed_signers = _write_allowed_signers(author_email, pub_path)
         try:
-            # Use GIT_CONFIG_COUNT env vars instead of -c flags so the
-            # config is applied BEFORE the subcommand — git >= 2.44 rejects
-            # -c after 'commit' (it also means --reedit-message there).
-            sign_env = {
-                **os.environ,
-                "GIT_CONFIG_COUNT": "3",
-                "GIT_CONFIG_KEY_0": "gpg.format",
-                "GIT_CONFIG_VALUE_0": "ssh",
-                "GIT_CONFIG_KEY_1": "gpg.ssh.allowedSignersFile",
-                "GIT_CONFIG_VALUE_1": str(allowed_signers),
-                "GIT_CONFIG_KEY_2": "user.signingkey",
-                "GIT_CONFIG_VALUE_2": str(pub_path),
-            }
             repo.git.commit(
                 S=True,
                 gpg_sign=str(pub_path),
                 m=full_message,
                 author=f"{author_name} <{author_email}>",
                 allow_empty=True,
-                env=sign_env,
+                env=ssh_sign_env(allowed_signers, pub_path),
             )
         finally:
             pub_path.unlink(missing_ok=True)
@@ -317,10 +329,10 @@ def get_diff_between(repo_path: Path, hash1: str, hash2: str) -> dict:
 # ── Merge ─────────────────────────────────────────────────────────────────
 
 
-class MergeConflictError(Exception):
-    """Raised when a git merge encounters conflicts that can't auto-resolve."""
+from peerpedia_core.exceptions import ConflictError
 
-    pass
+class MergeConflictError(ConflictError):
+    """Raised when a git merge encounters conflicts that can't auto-resolve."""
 
 
 def merge_git_repos(target: Path, fork: Path, author_name: str) -> str:
@@ -469,20 +481,19 @@ def verify_commit_signature(
     """
     import tempfile
 
+    import os
+
     with tempfile.NamedTemporaryFile(
         mode="w", suffix="_verify_signers", delete=False
     ) as f:
         f.write(f"{author_email} {pubkey_ssh_line}\n")
     signers_path = Path(f.name)
     try:
-        # TODO(perf/bug): repo.git.config() permanently writes to .git/config,
-        # overwriting gpg.format and pointing allowedSignersFile to a temp file
-        # that disappears in finally.  Use GIT_CONFIG_COUNT env vars (like
-        # commit_article lines 134-143 does) instead of persistent config.
         repo = git.Repo(repo_path)
-        repo.git.config("gpg.format", "ssh")
-        repo.git.config("gpg.ssh.allowedSignersFile", str(signers_path))
-        repo.git.verify_commit(commit_hash)
+        repo.git.verify_commit(
+            commit_hash,
+            env=ssh_verify_env(signers_path),
+        )
     except git.GitCommandError as e:
         raise RuntimeError(
             f"Commit {commit_hash[:8]} by {author_email} "

@@ -15,11 +15,14 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import os
 import secrets
 import struct
+import tempfile
 from pathlib import Path
 
 from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ed25519
 
 # scrypt parameters — ~100ms on modern hardware, memory-hard against brute force
@@ -92,18 +95,36 @@ def _load_public_key(key_bytes: bytes) -> ed25519.Ed25519PublicKey:
     return ed25519.Ed25519PublicKey.from_public_bytes(key_bytes)
 
 
-def write_temp_key(private_key_bytes: bytes) -> Path:
-    """Write private key bytes to a chmod 600 temp file, return its path.
+def serialize_private_key_pem(private_key_bytes: bytes) -> bytes:
+    """Serialize raw Ed25519 key bytes to OpenSSH PEM format.
 
-    Caller must unlink the returned path after use.
+    Returns PEM-encoded bytes suitable for ``ssh-keygen`` signing.
+    Pure crypto — no file I/O.
     """
-    import os
-    import tempfile
+    priv_key = ed25519.Ed25519PrivateKey.from_private_bytes(private_key_bytes)
+    return priv_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.OpenSSH,
+        encryption_algorithm=serialization.NoEncryption(),
+    )
 
+
+def write_key_to_tempfile(private_key_bytes: bytes) -> Path:
+    """Write an Ed25519 private key to a chmod 600 temp file.
+
+    Serializes raw key bytes to OpenSSH format so ``ssh-keygen`` can use
+    the file for git commit signing.  Callers MUST unlink the returned
+    path after use.
+    """
+    priv_pem = serialize_private_key_pem(private_key_bytes)
     fd, path = tempfile.mkstemp(suffix="_peerpedia_ed25519")
-    with os.fdopen(fd, "wb") as f:
-        f.write(private_key_bytes)
-    os.chmod(path, 0o600)
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(priv_pem)
+        os.chmod(path, 0o600)
+    except Exception:
+        Path(path).unlink(missing_ok=True)
+        raise
     return Path(path)
 
 

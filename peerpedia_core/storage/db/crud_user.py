@@ -5,7 +5,7 @@ r"""User CRUD — database only, ``session.flush()`` only.
 
 Functions
 ---------
-create_user             New user with bcrypt password hash
+create_user             New user with Ed25519 public key
 get_user                By ID or name
 get_user_by_name        Exact name match
 update_user_reputation  Write reputation dict (flush only)
@@ -94,15 +94,14 @@ def _pick_anonymous_name(idx: int) -> str:
 def create_user(
     session: Session,
     name: str,
+    public_key: str | None = None,
+    *,
     affiliation: str = "",
-    password_hash: str = "",
-    email: str = "",
 ) -> User:
     u = User(
         id=str(uuid.uuid4()),
         name=name,
-        password_hash=password_hash,
-        email=email,
+        public_key=public_key,
         affiliation=affiliation,
     )
     session.add(u)

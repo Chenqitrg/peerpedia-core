@@ -9,7 +9,7 @@ callback is a simple lookup into a ``list[bool]``.
 """
 
 import pytest
-from peerpedia_core.sync.monotonic_search import search_monotonic_boundary
+from peerpedia_core.bundle.monotonic import search_monotonic_boundary
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

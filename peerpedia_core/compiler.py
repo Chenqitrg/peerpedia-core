@@ -24,6 +24,17 @@ Architecture
 Backends are pluggable -- new formats can be added by subclassing
 ``CompilerBackend`` without touching the core protocol.
 
+.. todo:: LeanBackend
+
+    Extract ``\`\`\`lean`` blocks from Markdown articles, feed to ``lean --check``
+    as a subprocess.  Mathlib 4 provides the standard library — articles
+    can import theorems from Reservoir.  Peer-review workflow: reviewer runs
+    ``peerpedia verify <id>`` → Lean verifies all proof blocks → updates
+    credibility score.
+
+    No new article format needed — ``.md`` with ``lean`` fenced code blocks
+    is enough.  Requires Lean toolchain detection (like TypstBackend).
+
 Classes and key functions
 -------------------------
 CompileResult           Dataclass: html, pdf_path, pages, warnings

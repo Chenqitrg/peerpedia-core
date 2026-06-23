@@ -42,7 +42,7 @@ class TestComputeAuthorReputation:
 
     def test_no_articles_returns_defaults(self, session):
         """A user with no articles gets all-zero reputation."""
-        user = create_user(session, name="alice")
+        user = create_user(session, name="alice", public_key="0000000000000000000000000000000000000000000000000000000000000000")
         rep = recompute_author_reputation(session, user.id)
 
         assert isinstance(rep, ReputationScores)
@@ -63,7 +63,7 @@ class TestComputeAuthorReputation:
         Blending weight = article_to_author_weight = 0.3.
         Old rep is all zeros, so blended = 0.3 * article_avg.
         """
-        user = create_user(session, name="bob")
+        user = create_user(session, name="bob", public_key="0000000000000000000000000000000000000000000000000000000000000000")
         create_article(
             session,
             title="On the Nature of Scientific Inquiry",
@@ -81,7 +81,7 @@ class TestComputeAuthorReputation:
 
     def test_multiple_articles_averaged_and_blended(self, session):
         """Multiple articles are averaged (weighted by status) then blended."""
-        user = create_user(session, name="carol")
+        user = create_user(session, name="carol", public_key="0000000000000000000000000000000000000000000000000000000000000000")
 
         # published article with perfect scores
         create_article(
@@ -116,7 +116,7 @@ class TestComputeAuthorReputation:
 
     def test_blends_with_existing_reputation(self, session):
         """Existing reputation is blended with the new article-derived value."""
-        user = create_user(session, name="dave")
+        user = create_user(session, name="dave", public_key="0000000000000000000000000000000000000000000000000000000000000000")
 
         # First computation (no existing rep) -- sets reputation to blended value
         create_article(
@@ -151,7 +151,7 @@ class TestComputeAuthorReputation:
 
     def test_article_without_score_skipped(self, session):
         """Articles missing a score dict are skipped in the calculation."""
-        user = create_user(session, name="eve")
+        user = create_user(session, name="eve", public_key="0000000000000000000000000000000000000000000000000000000000000000")
         create_article(
             session,
             title="On the Nature of Scientific Inquiry",
@@ -167,7 +167,7 @@ class TestComputeAuthorReputation:
 
     def test_persisted_in_db(self, session):
         """After compute_author_reputation, the DB record is updated."""
-        user = create_user(session, name="frank")
+        user = create_user(session, name="frank", public_key="0000000000000000000000000000000000000000000000000000000000000000")
         create_article(
             session,
             title="On the Nature of Scientific Inquiry",
@@ -237,8 +237,8 @@ class TestRecalculateAllReputations:
 
     def test_recalculates_all_users(self, session):
         """Every user in the system gets their reputation updated."""
-        u1 = create_user(session, name="jill")
-        u2 = create_user(session, name="jack")
+        u1 = create_user(session, name="jill", public_key="0000000000000000000000000000000000000000000000000000000000000000")
+        u2 = create_user(session, name="jack", public_key="0000000000000000000000000000000000000000000000000000000000000000")
         create_article(
             session,
             title="On the Nature of Scientific Inquiry",
@@ -259,8 +259,8 @@ class TestRecalculateAllReputations:
 
     def test_returns_count_of_updated_users(self, session):
         """The function returns the number of users processed."""
-        create_user(session, name="ken")
-        create_user(session, name="laura")
+        create_user(session, name="ken", public_key="0000000000000000000000000000000000000000000000000000000000000000")
+        create_user(session, name="laura", public_key="0000000000000000000000000000000000000000000000000000000000000000")
         count = recalculate_all_reputations(session)
         assert count == 2
 

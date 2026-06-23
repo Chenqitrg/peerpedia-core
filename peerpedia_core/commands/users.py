@@ -21,9 +21,9 @@ from peerpedia_core.storage.db.crud_user import (
 )
 
 
-def create_user(db: Session, *, name: str, affiliation: str = "", password_hash: str = "", email: str = ""):
+def create_user(db: Session, *, name: str, public_key: str, affiliation: str = ""):
     """Create a new user."""
-    return _create(db, name=name, affiliation=affiliation, password_hash=password_hash, email=email)
+    return _create(db, name=name, public_key=public_key, affiliation=affiliation)
 
 
 def get_user(db: Session, user_ref: str):

@@ -17,7 +17,7 @@ def _user(**kwargs):
     """Create a User with required fields filled in."""
     defaults = {
         "id": str(uuid.uuid4()),
-        "password_hash": "",
+        "public_key": "0000000000000000000000000000000000000000000000000000000000000000",
         "name": "Test User",
         "affiliation": "Test",
     }

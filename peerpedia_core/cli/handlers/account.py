@@ -15,15 +15,13 @@ from __future__ import annotations
 
 import getpass
 
-import bcrypt
-
 from peerpedia_core.cli.helpers import (
     _with_db, _read_session, _write_session, _ok, _die, _json_out,
 )
 from peerpedia_core.cli.display import display_user as _render_user, console
 from peerpedia_core.commands import (
     create_user, get_user_by_name, search_users,
-    update_user_public_key, update_user_salt,
+    update_user_salt,
 )
 from peerpedia_core.crypto import derive_key_pair, new_salt
 
@@ -54,16 +52,10 @@ def _cmd_register(db, args):
         _die("Passwords do not match.")
 
     salt_hex = new_salt()
-    password_hash = bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
     private_key_bytes, pubkey_bytes = derive_key_pair(password, salt_hex)
     pubkey_hex = pubkey_bytes.hex()
 
-    user = create_user(
-        db,
-        name=args.name,
-        password_hash=password_hash,
-    )
-    update_user_public_key(db, user.id, pubkey_hex)
+    user = create_user(db, name=args.name, public_key=pubkey_hex)
     update_user_salt(db, user.id, salt_hex)
     db.commit()
 
@@ -91,10 +83,10 @@ def _cmd_login(db, args):
              "Please re-register: peerpedia account register --name {args.name}")
 
     password = getpass.getpass("Password: ")
-    if not bcrypt.checkpw(password.encode(), user.password_hash.encode()):
+    private_key_bytes, pubkey_bytes = derive_key_pair(password, user.salt)
+    if pubkey_bytes.hex() != user.public_key:
         _die("Wrong password.")
 
-    private_key_bytes, _ = derive_key_pair(password, user.salt)
     _write_session(user.id, user.name, private_key_bytes.hex())
 
     if args.json:

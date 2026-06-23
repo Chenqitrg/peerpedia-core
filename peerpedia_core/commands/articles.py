@@ -63,6 +63,14 @@ TODO(security): local integrity check — on article access (show, edit,
 publish), verify git commits are signed and DB matches git SOT.  If
 unsigned commits or DB tampering are detected, refuse operations and
 force a repair from git history.
+
+.. todo::
+   This module is ~630 lines and growing.  Split into a package:
+   ``commands/articles/create.py``, ``fork.py``, ``publish.py``,
+   ``rollback.py``, ``update.py`` — one per operation.  The read wrappers
+   at the bottom (``get_article``, ``list_articles``, etc.) are thin
+   pass-through — move them to ``commands/queries.py`` or inline into
+   ``__init__.py``.  Each sub-module should be ~80–150 lines.
 """
 
 from __future__ import annotations
@@ -100,7 +108,6 @@ from peerpedia_core.storage.db.crud_maintainer import add_maintainer, get_mainta
 from peerpedia_core.storage.db.crud_review import get_review, upsert_review
 from peerpedia_core.storage.db.crud_bookmark import is_bookmarked as _is_bookmarked
 from peerpedia_core.storage.db.crud_user import get_following as _get_following, get_user
-from peerpedia_core.crypto import write_temp_key
 from peerpedia_core.storage.git_backend import (
     DEFAULT_ARTICLES_DIR,
     checkout_files,
@@ -110,7 +117,9 @@ from peerpedia_core.storage.git_backend import (
     get_commit_authors,
     get_head_hash,
     init_article_repo,
+    is_repo_dirty,
 )
+from peerpedia_core.crypto import write_key_to_tempfile
 from peerpedia_core.storage.locks import get_article_lock
 from peerpedia_core.commands.reviews import write_review_to_git
 from peerpedia_core.commands.workflow import recompute_article_score, recompute_author_reputation
@@ -210,7 +219,16 @@ def rollback_article(
     signing_key_bytes: bytes | None = None,
     pubkey_hex: str | None = None,
 ) -> dict:
-    """Rollback to a previous commit (creates a new revert commit, not force-push).
+    """Rollback to a previous commit by creating a new forward commit.
+
+    Instead of ``git reset --hard`` (which rewrites history and breaks P2P
+    fast-forward sync) or ``git revert`` (which applies a per-commit diff
+    and may conflict on a dirty repo), this does ``checkout_files`` at
+    *target_hash* and creates a new signed commit.  The result is a linear
+    history that peers can fast-forward to without conflicts.
+
+    Trade-off: the commit history contains "Rollback to abc123" entries
+    rather than a true reversal, but P2P sync safety is the higher priority.
 
     Returns:
         {"commit_hash": <new_hash>, "message": "Rollback to ..."}
@@ -235,16 +253,29 @@ def rollback_article(
 
     checkout_files(rp, target_hash)
 
+    # If the checkout was a no-op (target is current HEAD), there is
+    # nothing to commit — the caller rolled back to the present state.
+    if not is_repo_dirty(rp):
+        return {
+            "commit_hash": get_head_hash(rp),
+            "message": f"Already at {target_hash[:8]} (no changes needed)",
+        }
+
+    # Fail fast: rollback always creates a new signed commit.
+    if signing_key_bytes is None or not pubkey_hex:
+        raise ValueError(
+            "signing_key_bytes and pubkey_hex are required for rollback"
+        )
+
     author_name = user.name
-    key_path = write_temp_key(signing_key_bytes) if signing_key_bytes else None
+    key_path = write_key_to_tempfile(signing_key_bytes)
     try:
         new_hash = commit_article(
             rp, f"Rollback to {target_hash[:8]}", author_name, f"{user_id}@peerpedia",
             signing_key=key_path, pubkey_hex=pubkey_hex,
         )
     finally:
-        if key_path:
-            key_path.unlink(missing_ok=True)
+        key_path.unlink(missing_ok=True)
 
     # G3: only trigger sedimentation for published articles
     if old_status == "published":
@@ -304,23 +335,11 @@ def create_article_with_content(
 
     rp = DEFAULT_ARTICLES_DIR / article_id
     init_article_repo(rp)
-    (rp / ".gitignore").write_text("""\
-# PeerPedia article repo — only approved paths are tracked.
-# Prevents free-riding by blocking arbitrary files from being committed.
-*
-!.gitignore
-!article.md
-!article.typ
-!reviews/
-!reviews/**
-!compiled/
-!compiled/**
-""")
     ext = ".typ" if format == "typst" else ".md"
     fm = make_article_frontmatter(title, abstract, keywords, categories)
     (rp / f"article{ext}").write_text(fm + content)
     user = get_user(db, author_ids[0])
-    key_path = write_temp_key(signing_key_bytes) if signing_key_bytes else None
+    key_path = write_key_to_tempfile(signing_key_bytes) if signing_key_bytes else None
     try:
         commit_hash = commit_article(
             rp, "Initial submission", user.name, f"{user.id}@peerpedia",
@@ -416,7 +435,7 @@ def update_article_content(
     article_path.write_text(new_fm + body)
 
     # Git commit first — then sync DB.
-    key_path = write_temp_key(signing_key_bytes) if signing_key_bytes else None
+    key_path = write_key_to_tempfile(signing_key_bytes) if signing_key_bytes else None
     try:
         commit_hash = commit_article(
             rp, message, user.name, f"{user_id}@peerpedia",
@@ -460,6 +479,8 @@ def publish_article(
     self_review: dict,
     *,
     comment: str = "",
+    signing_key_bytes: bytes,
+    pubkey_hex: str,
 ) -> dict:
     """Publish an article to the sedimentation pool.
 
@@ -492,15 +513,23 @@ def publish_article(
 
     write_review_to_git(
         article_id, user_id, self_review, comment, user.name, f"{user_id}@peerpedia",
+        signing_key_bytes=signing_key_bytes, pubkey_hex=pubkey_hex,
     )
 
     # Record status transition in git so it survives P2P sync.
-    commit_hash = commit_article(
-        DEFAULT_ARTICLES_DIR / article_id,
-        "[status] sedimentation",
-        "PeerPedia",
-        "system@peerpedia",
-    )
+    # Only commit if there are uncommitted changes — the review commit
+    # above may have already captured everything.
+    rp = DEFAULT_ARTICLES_DIR / article_id
+    if is_repo_dirty(rp):
+        commit_hash = commit_article(
+            rp,
+            "[status] sedimentation",
+            "PeerPedia",
+            "system@peerpedia",
+            signing_key=None, pubkey_hex=None,
+        )
+    else:
+        commit_hash = get_head_hash(rp)
 
     # Enter sedimentation so scope derivation works.
     update_article_status(db, article_id, "sedimentation")

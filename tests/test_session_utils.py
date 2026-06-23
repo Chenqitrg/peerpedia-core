@@ -25,7 +25,7 @@ from peerpedia_core.storage.db.session_utils import db_session_scope
 
 def _make_user(**kwargs):
     """Create a User with required defaults filled in."""
-    defaults = dict(id=str(uuid.uuid4()), name="U", password_hash="")
+    defaults = dict(id=str(uuid.uuid4()), name="U", public_key="0000000000000000000000000000000000000000000000000000000000000000")
     defaults.update(kwargs)
     return User(**defaults)
 

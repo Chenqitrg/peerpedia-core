@@ -75,7 +75,7 @@ from rich.theme import Theme
 from peerpedia_core.cli import build_parser
 from peerpedia_core.cli.parser import get_cmd_map
 from peerpedia_core.commands import get_user, get_user_by_name, publish_ready_articles
-from peerpedia_core.storage.db.engine import get_engine, get_session, init_db
+from peerpedia_core.storage.db import db_repl_setup
 
 # ── Rich console (same theme as CLI) ─────────────────────────────────────
 
@@ -119,9 +119,7 @@ def _ensure_db():
     global _repl_db
     if _repl_db is None:
         DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-        engine = get_engine(DB_URL)
-        init_db(engine)
-        _repl_db = get_session(engine)
+        _repl_engine, _repl_db = db_repl_setup(DB_URL)
     return _repl_db
 
 

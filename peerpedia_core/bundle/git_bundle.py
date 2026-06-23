@@ -58,16 +58,26 @@ from pathlib import Path
 
 import git
 
-from peerpedia_core.sync.monotonic_search import search_monotonic_boundary
+from peerpedia_core.bundle.monotonic import search_monotonic_boundary
 
 
-class MergeConflictError(Exception):
+from peerpedia_core.exceptions import ConflictError
+
+class MergeConflictError(ConflictError):
     """Raised when a git merge encounters conflicts that can't auto-resolve."""
-
-    pass
 
 
 # ── Bundle operations ────────────────────────────────────────────────────────
+
+
+def init_repo(path: Path) -> Path:
+    """Create a bare git repo at *path*. Returns *path*.
+
+    Pure git init — no dependency on ``git_backend``.
+    """
+    path.mkdir(parents=True, exist_ok=True)
+    git.Repo.init(path)
+    return path
 
 
 def get_head(repo_path: Path) -> str:
@@ -101,22 +111,21 @@ def ingest_bundle(repo_path: Path, bundle_bytes: bytes) -> None:
 
     repo = git.Repo(repo_path)
 
-    # TODO(perf): ingest_bundle leaks temp files — delete=False but no cleanup
-    # in finally.  Every pull/push-receive leaves a .bundle file in the system
-    # temp directory.  Fix: add a finally block with Path(f.name).unlink().
     with tempfile.NamedTemporaryFile(suffix=".bundle", delete=False) as f:
         f.write(bundle_bytes)
         f.flush()
-
         try:
-            repo.git.bundle("verify", f.name)
-        except git.GitCommandError as e:
-            raise ValueError(f"Invalid bundle: {e}") from e
+            try:
+                repo.git.bundle("verify", f.name)
+            except git.GitCommandError as e:
+                raise ValueError(f"Invalid bundle: {e}") from e
 
-        try:
-            repo.git.fetch(f.name, "HEAD")
-        except git.GitCommandError as e:
-            raise ValueError(f"Bundle fetch failed: {e}") from e
+            try:
+                repo.git.fetch(f.name, "HEAD")
+            except git.GitCommandError as e:
+                raise ValueError(f"Bundle fetch failed: {e}") from e
+        finally:
+            Path(f.name).unlink(missing_ok=True)
 
 
 def create_bundle(repo_path: Path, since_hash: str | None = None) -> bytes:

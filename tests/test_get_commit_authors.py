@@ -12,6 +12,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.conftest import commit_article_signed
+
 
 @pytest.fixture
 def article_repo():
@@ -21,7 +23,7 @@ def article_repo():
     with tempfile.TemporaryDirectory() as tmp:
         rp = init_article_repo(Path(tmp) / "test-article")
         (rp / "article.md").write_text("# Test\n")
-        commit_article(rp, "Initial content", "Alice", "alice@peerpedia")
+        commit_article_signed(rp, "Initial content", "Alice", "alice@peerpedia")
         yield rp
 
 
@@ -33,7 +35,7 @@ def test_extracts_content_author(article_repo):
     from peerpedia_core.storage.git_backend import commit_article, get_commit_authors
 
     (article_repo / "article.md").write_text("# Test\n\nNew section.")
-    commit_article(article_repo, "Add section", "Bob", "bob@peerpedia")
+    commit_article_signed(article_repo, "Add section", "Bob", "bob@peerpedia")
 
     authors = get_commit_authors(article_repo)
     assert "alice" in authors
@@ -43,11 +45,23 @@ def test_extracts_content_author(article_repo):
 # ── Message tag filtering ───────────────────────────────────────────────────
 
 
+def _touch_file(repo_path: Path, name: str = "reviews/test/scores.json") -> None:
+    """Write a dummy file so commit_article has something to commit.
+
+    Must match ``ARTICLE_REPO_TRACKED_PATTERNS`` in ``config/git.py``
+    so the file is not git-ignored.
+    """
+    f = repo_path / name
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text('{"score": 0}\n')
+
+
 def test_filters_review_commit(article_repo):
     """[review] commit is excluded even though email is @peerpedia."""
     from peerpedia_core.storage.git_backend import commit_article, get_commit_authors
 
-    commit_article(article_repo, "[review] Reviewer One", "Reviewer One", "reviewer-1@peerpedia")
+    _touch_file(article_repo)
+    commit_article_signed(article_repo, "[review] Reviewer One", "Reviewer One", "reviewer-1@peerpedia")
 
     authors = get_commit_authors(article_repo)
     assert "reviewer-1" not in authors
@@ -58,7 +72,8 @@ def test_filters_status_commit(article_repo):
     """[status] commit is excluded (author is system@peerpedia)."""
     from peerpedia_core.storage.git_backend import commit_article, get_commit_authors
 
-    commit_article(article_repo, "[status] published", "PeerPedia", "system@peerpedia")
+    _touch_file(article_repo)
+    commit_article_signed(article_repo, "[status] published", "PeerPedia", "system@peerpedia")
 
     authors = get_commit_authors(article_repo)
     assert "system" not in authors
@@ -68,7 +83,8 @@ def test_filters_merge_commit(article_repo):
     """[merge] commit is excluded."""
     from peerpedia_core.storage.git_backend import commit_article, get_commit_authors
 
-    commit_article(article_repo, "[merge] fork-123", "Merger", "merger@peerpedia")
+    _touch_file(article_repo)
+    commit_article_signed(article_repo, "[merge] fork-123", "Merger", "merger@peerpedia")
 
     authors = get_commit_authors(article_repo)
     assert "merger" not in authors
@@ -78,7 +94,8 @@ def test_message_with_leading_whitespace(article_repo):
     """Tag after whitespace is still detected (git messages can start with newlines)."""
     from peerpedia_core.storage.git_backend import commit_article, get_commit_authors
 
-    commit_article(article_repo, "\n[review] Spaced Reviewer", "Spaced", "spaced@peerpedia")
+    _touch_file(article_repo)
+    commit_article_signed(article_repo, "\n[review] Spaced Reviewer", "Spaced", "spaced@peerpedia")
 
     authors = get_commit_authors(article_repo)
     assert "spaced" not in authors
@@ -91,7 +108,8 @@ def test_filters_non_peerpedia_email(article_repo):
     """Commits with non-@peerpedia emails are excluded (system git config)."""
     from peerpedia_core.storage.git_backend import commit_article, get_commit_authors
 
-    commit_article(article_repo, "Some edit", "Ghost", "ghost@gmail.com")
+    _touch_file(article_repo)
+    commit_article_signed(article_repo, "Some edit", "Ghost", "ghost@gmail.com")
 
     authors = get_commit_authors(article_repo)
     assert "ghost" not in authors
@@ -101,7 +119,8 @@ def test_filters_email_without_domain(article_repo):
     """Email without @peerpedia suffix is excluded."""
     from peerpedia_core.storage.git_backend import commit_article, get_commit_authors
 
-    commit_article(article_repo, "Edit", "NoDomain", "nodomain@other")
+    _touch_file(article_repo)
+    commit_article_signed(article_repo, "Edit", "NoDomain", "nodomain@other")
 
     authors = get_commit_authors(article_repo)
     assert "nodomain" not in authors
@@ -116,11 +135,12 @@ def test_since_hash_limits_scan(article_repo):
     import git
 
     (article_repo / "article.md").write_text("# Test\n\nSecond update.")
-    commit_article(article_repo, "Second content", "Bob", "bob@peerpedia")
+    commit_article_signed(article_repo, "Second content", "Bob", "bob@peerpedia")
     repo = git.Repo(article_repo)
 
-    # Get the hash of the first commit (Alice's)
-    first_hash = list(repo.iter_commits())[-1].hexsha  # oldest
+    # Get the hash of Alice's content commit (second-oldest; oldest is the
+    # init commit from init_article_repo).
+    first_hash = list(repo.iter_commits())[-2].hexsha  # first content commit
 
     # Scanning from first_hash should only see Bob
     authors = get_commit_authors(article_repo, since_hash=first_hash)

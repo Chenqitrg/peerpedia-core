@@ -36,7 +36,7 @@ def _article(**kwargs):
 
 
 def _user(**kwargs):
-    defaults = {"id": str(uuid.uuid4()), "password_hash": "", "name": "Test User", "affiliation": "Test"}
+    defaults = {"id": str(uuid.uuid4()), "public_key": "0000000000000000000000000000000000000000000000000000000000000000", "name": "Test User", "affiliation": "Test"}
     defaults.update(kwargs)
     return User(**defaults)
 

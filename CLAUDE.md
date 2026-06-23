@@ -25,3 +25,8 @@ Strong success criteria let you loop independently.
 ## Tests verify intent, not just behavior
 Tests must encode WHY behavior matters, not just WHAT it does.
 A test that can't fail when business logic changes is wrong.
+
+## Double check my meaning
+If you are not sure about my meaning, ask.
+Do not pretend you have understood it.
+You are idiot if you do not ask me and do it brutally.

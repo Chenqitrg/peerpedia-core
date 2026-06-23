@@ -60,6 +60,10 @@ peerpedia_core/
 │       ├── __init__.py
 │       └── http.py            #   HTTP 传输（唯一 import httpx）
 │
+├── server/                    # HTTP 服务端——ASGI 路由层
+│   ├── __init__.py
+│   └── app.py                 #   Starlette 应用工厂 + 路由 + 异常映射
+│
 ├── cli/                       # 命令行入口（argparse + Rich）
 │   ├── __init__.py            #   main() 入口 + 启动扫描
 │   ├── display.py             #   输出格式化（_ok / _die / _json_out / _print_table）
@@ -74,7 +78,8 @@ peerpedia_core/
 │       ├── mother.py          #   综合命令入口
 │       ├── reviews.py         #   submit / list
 │       ├── social.py          #   fork / merge / bookmark
-│       └── sync.py            #   status / push
+│       ├── sync.py            #   status / push / pull
+│       └── server.py          #   server start
 │
 └── types/
     └── scores.py              # 五维评分（FiveDimScores）+ 四维声誉（ReputationScores）
@@ -139,6 +144,8 @@ sync/bundle_server.py                    sync/git_bundle.py
 | `workflow/` | `config/`、`types/` | `storage/`、`commands/`、`Session`、`sync/` |
 | `sync/bundle_client.py` | `commands/`（仅 `apply_sync_bundle`）、`sync/git_bundle.py`、`sync/transport/` | `storage/`、`policies/`、`workflow/` |
 | `sync/bundle_server.py` | `commands/`（仅 `apply_sync_bundle`）、`sync/git_bundle.py` | `storage/`、`policies/`、`workflow/` |
+| `sync/social_server.py` | `commands/`（仅 `get_following`、`get_followers`、`list_articles`） | `storage/`、`policies/`、`workflow/` |
+| `server/app.py` | `sync/bundle_server.py`、`sync/social_server.py`、`exceptions.py`、Starlette | `storage/`、`commands/`、`policies/`、`workflow/` |
 | `sync/git_bundle.py` | `sync/monotonic_search.py`、GitPython | `storage/`、`commands/`、`policies/`、`workflow/` |
 | `sync/monotonic_search.py` | `collections.abc`（stdlib only） | 任何 `peerpedia_core` 模块 |
 
@@ -148,7 +155,9 @@ sync/bundle_server.py                    sync/git_bundle.py
 
 **Sync Domain 自包含**——`git_bundle.py` 和 `monotonic_search.py` 零依赖 `storage/` 和 `commands/`。只通过 GitPython 操作裸 git 仓库。
 
-**硬约束 — import git**——除 `storage/git_backend.py` 和 `sync/git_bundle.py`（含 `bundle_client` / `bundle_server`）外，任何模块不得 `import git`（GitPython）。所有 git 操作必须经过这两个模块的函数接口。
+**硬约束 — import git**——除 `storage/git_backend.py`、`sync/git_bundle.py`（含 `bundle_client` / `bundle_server`）、`server/app.py`（仅 `GitCommandError` 用于异常映射）外，任何模块不得 `import git`（GitPython）。所有 git 操作必须经过这两个模块的函数接口。
+
+**硬约束 — import git_bundle**——除 `sync/bundle_client.py`、`sync/bundle_server.py`、`sync/__init__.py` 外，任何模块不得 `from peerpedia_core.sync.git_bundle import ...`。`git_bundle.py` 是纯协议层，只被 sync 域的 client/server 编排层引用。CLI、commands、tests 必须通过 `sync/` facade 或 `bundle_client` 的公开函数间接使用。`sync/__init__.py` 可 re-export `git_bundle` 中的符号（如 `get_head`），但不得在 `__init__.py` 之外被外部直接 import。
 
 **硬约束 — 数据库库**——除 `storage/db/` 外，任何模块不得直接 `import sqlalchemy`。`Session` 类型通过 `storage/db/__init__.py` facade 转发（`from peerpedia_core.storage.db import Session`），不得通过 `sqlalchemy.orm` 直接导入。任何 `db.query()` / `session.query()` / `db.get(Model, id)` 调用必须封装为 CRUD 函数。
 
@@ -269,7 +278,7 @@ apply_sync_bundle():
 | **禁止 `import git` (GitPython)** | `storage/git_backend.py`、`sync/git_bundle.py` |
 | **禁止 `import sqlalchemy`** | `storage/db/` 内部 |
 | **禁止 `db.query()` / `session.get()` / 直接改 model 属性** | `storage/db/crud_*.py` 内部。外部统一调 CRUD 函数。 |
-| **禁止函数内 import PeerPedia 模块** | 无例外。函数内 `from peerpedia_core.*` 说明函数"红杏出墙"，应提到顶层或移动函数。stdlib 重量库（`bcrypt`、`markdown`、`yaml`）可内部 import。 |
+| **禁止函数内 import PeerPedia 模块** | 无例外。函数内 `from peerpedia_core.*` 说明函数"红杏出墙"，应提到顶层或移动函数。stdlib 重量库（`cryptography`、`markdown`、`yaml`）可内部 import。 |
 
 ### 3. Facade 规则
 

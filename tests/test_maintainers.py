@@ -28,7 +28,7 @@ from peerpedia_core.commands.maintainers import (
 
 
 def _user(db: Session, user_id: str, name: str | None = None) -> User:
-    u = User(id=user_id, password_hash="$2b$12$test", name=name or user_id)
+    u = User(id=user_id, name=name or user_id)
     db.add(u)
     db.flush()
     return u

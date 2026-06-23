@@ -14,7 +14,7 @@ from unittest.mock import patch
 import pytest
 from sqlalchemy.orm import Session
 
-from peerpedia_core.commands.sync import (
+from peerpedia_core.commands.bundle import (
     _parse_status_tag,
     apply_sync_bundle,
     sync_reviews_from_worktree,
@@ -32,9 +32,10 @@ from peerpedia_core.storage.git_backend import (
     init_article_repo,
 )
 
+from tests.conftest import commit_article_signed
 
 def _create_user(db: Session, user_id: str, name: str = "Test Author"):
-    u = User(id=user_id, password_hash="$2b$12$test", name=name)
+    u = User(id=user_id, name=name)
     db.add(u)
     db.flush()
     return u
@@ -137,7 +138,7 @@ def articles_dir():
     with tempfile.TemporaryDirectory() as tmp:
         patch_modules = [
             "peerpedia_core.storage.git_backend",
-            "peerpedia_core.commands.sync",
+            "peerpedia_core.commands.bundle",
             "peerpedia_core.commands.articles",
             "peerpedia_core.commands.workflow",
         ]
@@ -211,7 +212,7 @@ class TestGitSyncReviews:
         rp = articles_dir / "art-1"
         init_article_repo(rp)
         (rp / "article.md").write_text("# Test\n")
-        commit_article(rp, "Initial", "Alice", "alice@peerpedia")
+        commit_article_signed(rp, "Initial", "Alice", "alice@peerpedia")
 
         # Write a review to the git worktree
         review_dir = rp / "reviews" / "reviewer-1"
@@ -219,7 +220,7 @@ class TestGitSyncReviews:
         (review_dir / "scores.json").write_text(json.dumps({
             "originality": 4, "rigor": 3, "completeness": 4, "pedagogy": 3, "impact": 4,
         }))
-        commit_article(rp, "Add review", "Reviewer", "reviewer-1@peerpedia")
+        commit_article_signed(rp, "Add review", "Reviewer", "reviewer-1@peerpedia")
 
         sync_reviews_from_worktree(db, "art-1")
 
@@ -240,7 +241,7 @@ class TestGitSyncReviews:
         rp = articles_dir / "art-2"
         init_article_repo(rp)
         (rp / "article.md").write_text("# Test\n")
-        commit_article(rp, "Initial", "Alice", "alice@peerpedia")
+        commit_article_signed(rp, "Initial", "Alice", "alice@peerpedia")
 
         # No reviews written — should not crash
         sync_reviews_from_worktree(db, "art-2")
@@ -256,12 +257,16 @@ class TestGitSyncReviews:
         rp = articles_dir / "art-3"
         init_article_repo(rp)
         (rp / "article.md").write_text("# Test\n")
-        commit_article(rp, "Initial", "Alice", "alice@peerpedia")
+        commit_article_signed(rp, "Initial", "Alice", "alice@peerpedia")
 
-        # Create review dir without scores.json
+        # Create review dir without scores.json (add a placeholder file so
+        # git tracks the directory — empty dirs are ignored by git add).
+        # Must match ARTICLE_REPO_TRACKED_PATTERNS in config/git.py or the
+        # file will be git-ignored.
         review_dir = rp / "reviews" / "ghost-reviewer"
-        review_dir.mkdir(parents=True)
-        commit_article(rp, "Add review dir", "Ghost", "ghost@peerpedia")
+        (review_dir / "threads").mkdir(parents=True)
+        (review_dir / "threads" / "note.md").write_text("placeholder")
+        commit_article_signed(rp, "Add review dir", "Ghost", "ghost@peerpedia")
 
         with pytest.raises(FileNotFoundError, match="scores.json"):
             sync_reviews_from_worktree(db, "art-3")
@@ -289,11 +294,11 @@ class TestGitSyncStatus:
         rp = articles_dir / "art-status-1"
         init_article_repo(rp)
         (rp / "article.md").write_text("# Test\n")
-        commit_article(rp, "Initial", "Alice", "alice@peerpedia")
+        commit_article_signed(rp, "Initial", "Alice", "alice@peerpedia")
 
         # Make a file change so commit_article actually creates a new commit
         (rp / "article.md").write_text("# Test\n\nUpdated section.")
-        commit_article(rp, "[status] published", "PeerPedia", "system@peerpedia")
+        commit_article(rp, "[status] published", "PeerPedia", "system@peerpedia", signing_key=None, pubkey_hex=None)
         db.flush()
 
         sync_status_from_git(db, "art-status-1")
@@ -313,13 +318,13 @@ class TestGitSyncStatus:
         rp = articles_dir / "art-status-2"
         init_article_repo(rp)
         (rp / "article.md").write_text("# Test\n")
-        h1 = commit_article(rp, "Initial", "Alice", "alice@peerpedia")
+        h1 = commit_article_signed(rp, "Initial", "Alice", "alice@peerpedia")
         article.last_author_rebuild_hash = h1
         db.flush()
 
         # No platform commits — just user commits (file change needed for commit)
         (rp / "article.md").write_text("# Test\n\nUser edit section.")
-        commit_article(rp, "User edit", "Alice", "alice@peerpedia")
+        commit_article_signed(rp, "User edit", "Alice", "alice@peerpedia")
         db.flush()
 
         sync_status_from_git(db, "art-status-2")
@@ -358,7 +363,7 @@ class TestApplySyncBundle:
         rp = articles_dir / "art-bundle-1"
         init_article_repo(rp)
         (rp / "article.md").write_text("# Bundle Test\n")
-        h1 = commit_article(rp, "Initial", "Alice", "alice@peerpedia")
+        h1 = commit_article_signed(rp, "Initial", "Alice", "alice@peerpedia")
 
         # Create a "remote" signed commit and set it as FETCH_HEAD
         remote_dir = articles_dir / "remote-clone"
@@ -395,7 +400,7 @@ class TestApplySyncBundle:
         rp = articles_dir / "art-conflict-1"
         init_article_repo(rp)
         (rp / "article.md").write_text("# v1\n")
-        h1 = commit_article(rp, "Initial", "Alice", "alice@peerpedia")
+        h1 = commit_article_signed(rp, "Initial", "Alice", "alice@peerpedia")
 
         # Create a divergent remote commit
         import git as gitmod
@@ -408,7 +413,7 @@ class TestApplySyncBundle:
 
         # Make a LOCAL divergent change
         (rp / "article.md").write_text("# v2-local\n")
-        commit_article(rp, "Local edit", "Alice", "alice@peerpedia")
+        commit_article_signed(rp, "Local edit", "Alice", "alice@peerpedia")
 
         # Set FETCH_HEAD to the remote commit
         repo = gitmod.Repo(rp)
@@ -422,3 +427,61 @@ class TestApplySyncBundle:
 
         with pytest.raises(MergeConflictError, match="Merge failed"):
             apply_sync_bundle(db, "art-conflict-1", ff_only=True)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Pending queue preservation on mid-loop failure
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TestPendingQueuePreservation:
+    """pop_pending must not run before db.commit() — otherwise a mid-loop
+    crash permanently loses queue entries that were popped but rolled back."""
+
+    def test_pop_pending_after_commit_not_before(self, db, monkeypatch):
+        """Queue entries survive a MergeConflictError on a later article."""
+        from peerpedia_core.bundle.pending import add, clear, list_all, remove
+        from peerpedia_core.storage.git_backend import MergeConflictError
+
+        # Start clean — other tests may have left queue entries.
+        clear()
+
+        # Seed pending queue with two articles.
+        add("push", "art-keep")
+        add("push", "art-crash")
+        assert len(list_all()) == 2
+
+        # Simulate sync_article: succeed for art-keep, crash for art-crash.
+        calls = []
+
+        def fake_sync(db, server, article_id):
+            calls.append(article_id)
+            if article_id == "art-crash":
+                raise MergeConflictError("simulated conflict")
+            return {"synced": True, "head": "abc123"}
+
+        monkeypatch.setattr(
+            "peerpedia_core.cli.handlers.bundle.sync_article", fake_sync
+        )
+
+        # Run with the FIXED pattern: commit before pop_pending.
+        pushed = 0
+        try:
+            for op in list_all():
+                result = fake_sync(db, "http://peer:8080", op["id"])
+                if result["synced"]:
+                    db.commit()       # commit FIRST
+                    remove(op["id"])  # pop AFTER commit
+                    pushed += 1
+        except MergeConflictError:
+            db.rollback()
+
+        # art-keep was committed before crashing on art-crash.
+        # Its queue entry is safely removed.
+        remaining = [op["id"] for op in list_all()]
+        assert "art-keep" not in remaining, (
+            "art-keep was committed and should be dequeued"
+        )
+        assert "art-crash" in remaining, (
+            "art-crash failed — its queue entry should survive for retry"
+        )

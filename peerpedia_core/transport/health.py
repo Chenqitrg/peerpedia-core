@@ -26,6 +26,11 @@ import httpx
 def is_online(server_url: str, timeout: float = 5.0) -> bool:
     """Return True if the remote server is reachable.
 
+    All errors (timeout, DNS failure, connection refused, non-200) map to
+    ``False``.  This is intentional — the caller only needs a boolean for
+    a UI decision (show/hide sync badge), and a failed health check should
+    never crash the app.
+
     Args:
         server_url: Base URL of the PeerPedia server (e.g. "https://peerpedia.dev").
         timeout: Request timeout in seconds.
@@ -33,5 +38,5 @@ def is_online(server_url: str, timeout: float = 5.0) -> bool:
     try:
         response = httpx.get(f"{server_url}/health", timeout=timeout)
         return response.status_code == 200
-    except Exception:
+    except httpx.HTTPError:
         return False

@@ -57,7 +57,7 @@ from peerpedia_core.config.params import params
 from peerpedia_core.storage.db.crud_article import get_article, get_articles_by_author, get_author_ids, list_articles, update_article_score, update_article_status
 from peerpedia_core.storage.db.crud_review import get_reviews_for_article, upsert_review
 from peerpedia_core.storage.db.crud_user import get_user, get_users_by_ids, list_users, update_user_reputation
-from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, commit_article, list_review_dirs, read_review_scores
+from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, commit_article, is_repo_dirty, list_review_dirs, read_review_scores
 from peerpedia_core.types.scores import ReputationScores
 from peerpedia_core.workflow.reputation import (
     blend_reputation,
@@ -118,13 +118,16 @@ def publish_ready_articles(db: Session) -> int:
             score = apply_no_review_penalty(score)
 
         # Git commit records the status transition for P2P sync.
+        # Only commit if dirty — a scoring operation above may have
+        # already captured all changes.
         rp = DEFAULT_ARTICLES_DIR / article.id
-        if (rp / ".git").is_dir():
+        if (rp / ".git").is_dir() and is_repo_dirty(rp):
             commit_article(
                 rp,
                 "[status] published",
                 "PeerPedia",
                 "system@peerpedia",
+                signing_key=None, pubkey_hex=None,
             )
 
         # Then DB.

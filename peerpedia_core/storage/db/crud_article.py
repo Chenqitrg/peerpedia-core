@@ -124,6 +124,25 @@ def create_article(
     return a
 
 
+def insert_article(
+    session: Session,
+    article: Article,
+    author_ids: list[str],
+) -> Article:
+    """Insert a pre-constructed Article ORM object with author join rows.
+
+    Unlike ``create_article`` which constructs the Article from keyword
+    parameters, this takes an already-built Article object. Use when the
+    caller has deserialized article metadata from a peer or otherwise
+    constructed the ORM object externally.
+    """
+    session.add(article)
+    session.flush()
+    add_article_authors(session, article.id, author_ids)
+    session.flush()
+    return article
+
+
 def get_article(session: Session, article_id: str) -> Article | None:
     return session.get(Article, article_id)
 

@@ -23,10 +23,11 @@ from peerpedia_core.storage.db.crud_maintainer import add_maintainer
 from peerpedia_core.storage.db.models import User
 import peerpedia_core.storage.git_backend as git_backend
 from peerpedia_core.storage.git_backend import init_article_repo, commit_article, MergeConflictError
+from tests.conftest import commit_article_signed
 
 
 def _create_user(db: Session, user_id: str, name: str = "Test Author"):
-    u = User(id=user_id, password_hash="$2b$12$test", name=name)
+    u = User(id=user_id, name=name)
     db.add(u)
     db.flush()
     return u
@@ -81,7 +82,7 @@ def _build_article_with_repo(db, articles_dir, article_id, authors, status="publ
     rp = articles_dir / article_id
     init_article_repo(rp)
     (rp / "article.md").write_text("# Test\n\nContent.")
-    commit_article(rp, "Initial commit", "Author", f"{authors[0]}@peerpedia")
+    commit_article_signed(rp, "Initial commit", "Author", f"{authors[0]}@peerpedia")
     return article
 
 
@@ -91,10 +92,21 @@ def _build_article_with_repo(db, articles_dir, article_id, authors, status="publ
 class TestAcceptMerge:
     def test_success(self, db, articles_dir):
         """Happy path: accept a merge proposal from fork into target."""
+        import git as gitmod
+
         _create_user(db, "alice", "Alice")
 
         target = _build_article_with_repo(db, articles_dir, "art-target", ["alice"], status="published")
-        fork = _build_article_with_repo(db, articles_dir, "art-fork", ["alice"], status="draft")
+
+        # Fork shares target's history — clone then add its own commit.
+        fork_rp = articles_dir / "art-fork"
+        gitmod.Repo.clone_from(str(articles_dir / "art-target"), str(fork_rp))
+        (fork_rp / "article.md").write_text("# Fork\n\nModified content.")
+        from tests.conftest import commit_article_signed
+        commit_article_signed(fork_rp, "Fork commit", "Alice", "alice@peerpedia")
+        fork = create_article(db, id="art-fork", title="Fork Article", authors=["alice"], status="draft")
+        add_maintainer(db, "art-fork", "alice")
+        db.flush()
 
         mp = _db_create_mp(db, fork.id, target.id, "alice")
         db.flush()
@@ -209,10 +221,22 @@ class TestAcceptMerge:
 
     def test_published_target_triggers_sedimentation(self, db, articles_dir):
         """G2b: merging into a published article triggers 3-day sedimentation."""
+        import git as gitmod
+
         _create_user(db, "alice", "Alice")
 
         _build_article_with_repo(db, articles_dir, "art-target-pub", ["alice"], status="published")
-        _build_article_with_repo(db, articles_dir, "art-fork-pub", ["alice"], status="draft")
+
+        # Fork clones target so they share history.
+        fork_rp = articles_dir / "art-fork-pub"
+        gitmod.Repo.clone_from(str(articles_dir / "art-target-pub"), str(fork_rp))
+        (fork_rp / "article.md").write_text("# Fork\n\nModified.")
+        from tests.conftest import commit_article_signed
+        commit_article_signed(fork_rp, "Fork commit", "Alice", "alice@peerpedia")
+        fork = create_article(db, id="art-fork-pub", title="Fork", authors=["alice"], status="draft")
+        add_maintainer(db, "art-fork-pub", "alice")
+        db.flush()
+
         mp = _db_create_mp(db, "art-fork-pub", "art-target-pub", "alice")
         db.flush()
 

@@ -8,28 +8,29 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock, patch
 
-from peerpedia_core.sync.network import is_online
-from peerpedia_core.sync.pending_queue import add, clear, count, list_all, remove
+from peerpedia_core.transport.health import is_online
+from peerpedia_core.bundle.pending import add, clear, count, list_all, remove
 
 
 # ── Network tests ────────────────────────────────────────────────────────
 
 
 def test_is_online_returns_true_for_200():
-    with patch("peerpedia_core.sync.network.httpx.get") as mock_get:
+    with patch("peerpedia_core.transport.health.httpx.get") as mock_get:
         mock_get.return_value.status_code = 200
         assert is_online("http://example.com") is True
 
 
 def test_is_online_returns_false_for_500():
-    with patch("peerpedia_core.sync.network.httpx.get") as mock_get:
+    with patch("peerpedia_core.transport.health.httpx.get") as mock_get:
         mock_get.return_value.status_code = 500
         assert is_online("http://example.com") is False
 
 
 def test_is_online_returns_false_for_network_error():
-    with patch("peerpedia_core.sync.network.httpx.get") as mock_get:
-        mock_get.side_effect = Exception("Connection refused")
+    import httpx
+    with patch("peerpedia_core.transport.health.httpx.get") as mock_get:
+        mock_get.side_effect = httpx.ConnectError("Connection refused")
         assert is_online("http://example.com") is False
 
 

@@ -68,7 +68,8 @@ def _imports_peerpedia_modules(file: Path):
 def test_no_import_git_outside_allowed():
     _ALLOWED = {
         "peerpedia_core/storage/git_backend.py",
-        "peerpedia_core/sync/git_bundle.py",
+        "peerpedia_core/bundle/git_bundle.py",
+        "peerpedia_core/transport/http_server.py",  # GitCommandError for error mapping
     }
     for f in _all_modules():
         rel = _rel(f)
@@ -89,20 +90,29 @@ def test_no_sqlalchemy_outside_storage_db():
 
 def test_no_internal_peerpedia_imports():
     """Function bodies must not contain ``from peerpedia_core.* import``."""
+    # Lazy imports are acceptable for optional heavy dependencies
+    # (e.g., starlette/uvicorn in server handlers) to avoid slowing
+    # down every CLI command.
+    _LAZY_IMPORT_OK = {
+        "peerpedia_core/cli/handlers/server.py",  # uvicorn + create_app
+    }
     for f in _all_modules():
+        rel = _rel(f)
+        if rel in _LAZY_IMPORT_OK:
+            continue
         for module, name, is_internal in _imports(f):
             if is_internal and module.startswith(_PEERPEDIA):
                 raise AssertionError(
-                    f"{_rel(f)}: internal import from {module} — "
+                    f"{rel}: internal import from {module} — "
                     "move to module level or move the function"
                 )
 
 
 def test_no_httpx_outside_transport():
-    """Only sync/transport/http.py and sync/network.py may import httpx."""
+    """Only transport/http_client.py and transport/health.py may import httpx."""
     _ALLOWED = {
-        "peerpedia_core/sync/transport/http.py",
-        "peerpedia_core/sync/network.py",
+        "peerpedia_core/transport/http_client.py",
+        "peerpedia_core/transport/health.py",
     }
     for f in _all_modules():
         rel = _rel(f)
@@ -117,23 +127,23 @@ def test_no_httpx_outside_transport():
 # B. Layer separation — who may NOT import whom
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# Local domain modules (everything outside sync/) must not import sync/.
-_LOCAL = {"cli/", "commands/", "config/", "policies/", "storage/", "workflow/",
-          "compiler.py", "crypto.py", "exceptions.py", "frontmatter.py", "repl.py"}
-# sync/ submodules that local code may import — currently none.
-_LOCAL_MAY_IMPORT_SYNC: set[str] = set()
+# Foundation modules must not import network-layer code (bundle, social, transport).
+_FOUNDATION = {"config/", "policies/", "storage/", "workflow/", "types/",
+               "compiler.py", "crypto.py", "exceptions.py", "frontmatter.py", "repl.py"}
+# Foundation modules that may import specific network-layer submodules.
+_FOUNDATION_MAY_IMPORT_NETWORK: set[str] = set()
 
 
-def test_local_never_imports_sync():
+def test_foundation_never_imports_network():
     for f in _all_modules():
         rel = _rel(f)
-        if not any(rel.startswith(p) for p in _LOCAL):
+        if not any(rel.startswith(p) for p in _FOUNDATION):
             continue
         for m in _imports_peerpedia_modules(f):
-            if "sync/" in m or m.endswith(".sync"):
-                if m not in _LOCAL_MAY_IMPORT_SYNC:
+            if any(m.startswith(p) for p in ("peerpedia_core.bundle", "peerpedia_core.social", "peerpedia_core.transport")):
+                if m not in _FOUNDATION_MAY_IMPORT_NETWORK:
                     raise AssertionError(
-                        f"{rel}: imports {m} — local modules must not import sync/"
+                        f"{rel}: imports {m} — foundation modules must not import network layer (bundle/social/transport)"
                     )
 
 
@@ -164,8 +174,8 @@ def test_policies_only_imports_models_and_exceptions():
 
 def test_bundle_client_server_never_import_each_other():
     """bundle_client ↔ bundle_server communicate via HTTP, never by import."""
-    _CLIENT = "peerpedia_core/sync/bundle_client.py"
-    _SERVER = "peerpedia_core/sync/bundle_server.py"
+    _CLIENT = "peerpedia_core/bundle/client.py"
+    _SERVER = "peerpedia_core/bundle/server.py"
     for f in _all_modules():
         rel = _rel(f)
         if rel == _CLIENT:
@@ -178,17 +188,17 @@ def test_bundle_client_server_never_import_each_other():
                     raise AssertionError(f"{rel}: imports bundle_client — use HTTP")
 
 
-def test_commands_never_imports_sync():
-    """Commands submodules must not import sync/.  __init__.py facade
-    re-exports sync functions — that's its job, not a violation."""
+def test_commands_never_imports_bundle_or_social():
+    """Commands submodules must not import bundle/ or social/.  __init__.py facade
+    re-exports bundle functions — that's its job, not a violation."""
     for f in _all_modules():
         rel = _rel(f)
         if "commands/" not in rel or "__init__.py" in rel:
             continue
         for m in _imports_peerpedia_modules(f):
-            if "sync/" in m or m.endswith(".sync"):
+            if any(m.startswith(p) for p in ("peerpedia_core.bundle", "peerpedia_core.social", "peerpedia_core.transport")):
                 raise AssertionError(
-                    f"{rel}: imports {m} — commands submodules must not import sync/"
+                    f"{rel}: imports {m} — commands submodules must not import network layer"
                 )
 
 
@@ -199,14 +209,14 @@ def test_commands_never_imports_sync():
 # Modules that are leaves NOW and must STAY leaves.
 _LEAVES: dict[str, set[str]] = {
     # Pure leaves — zero peerpedia_core imports.
-    "sync/monotonic_search.py": set(),
-    "sync/network.py": set(),
+    "bundle/monotonic.py": set(),
+    "transport/health.py": set(),
     "exceptions.py": set(),
     "config/paths.py": set(),
     "types/scores.py": set(),
     # Near-leaves — only allowed to import the listed peerpedia modules.
-    "sync/git_bundle.py": {"peerpedia_core.sync.monotonic_search"},
-    "sync/pending_queue.py": {"peerpedia_core.config.paths"},
+    "bundle/git_bundle.py": {"peerpedia_core.bundle.monotonic"},
+    "bundle/pending.py": {"peerpedia_core.config.paths"},
     "storage/locks.py": set(),
     "storage/git_backend.py": {"peerpedia_core.config.paths"},
     "config/params.py": set(),
@@ -250,7 +260,7 @@ _COMMANDS_SUBMODULES = {
     "peerpedia_core.commands.articles",
     "peerpedia_core.commands.reviews",
     "peerpedia_core.commands.merge",
-    "peerpedia_core.commands.sync",
+    "peerpedia_core.commands.bundle",
     "peerpedia_core.commands.users",
     "peerpedia_core.commands.bookmarks",
     "peerpedia_core.commands.workflow",
@@ -281,17 +291,17 @@ def test_external_code_uses_commands_facade():
 # Modules where ``except Exception: pass`` is explicitly tolerated
 # (entry points, HTTP transport, network detection).
 _EXCEPT_PASS_ALLOWED = {
-    "peerpedia_core/sync/network.py",
-    "peerpedia_core/sync/transport/http.py",
+    "peerpedia_core/transport/health.py",
+    "peerpedia_core/transport/http_client.py",
     "peerpedia_core/cli/helpers.py",  # _with_db: logs traceback before die
     "peerpedia_core/storage/db/session_utils.py",  # rollback on exit
-    "peerpedia_core/cli/sync_utils.py",  # sync fallback
+    "peerpedia_core/cli/bundle_utils.py",  # sync fallback
 }
 
 # HTTP transport returns None on network failure — caller retries.
 _EXCEPT_RETURN_NONE_ALLOWED = {
-    "peerpedia_core/sync/transport/http.py",
-    "peerpedia_core/sync/network.py",
+    "peerpedia_core/transport/http_client.py",
+    "peerpedia_core/transport/health.py",
 }
 
 
@@ -375,7 +385,33 @@ def test_architecture_rules_are_immutable():
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# G. No direct model mutation — all writes go through CRUD functions
+# G. git_bundle boundary — who may import git_bundle
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_GIT_BUNDLE_IMPORT_ALLOWED = {
+    "peerpedia_core/bundle/client.py",
+    "peerpedia_core/bundle/server.py",
+    "peerpedia_core/bundle/__init__.py",
+    "peerpedia_core/bundle/git_bundle.py",  # self-import for type annotations
+}
+
+
+def test_only_sync_layer_imports_git_bundle():
+    """Only bundle/client, bundle/server, and bundle/__init__ may import git_bundle."""
+    for f in _all_modules():
+        rel = _rel(f)
+        if rel in _GIT_BUNDLE_IMPORT_ALLOWED:
+            continue
+        for m, _name, _internal in _imports(f):
+            if m == "peerpedia_core.bundle.git_bundle":
+                raise AssertionError(
+                    f"{rel}: imports peerpedia_core.bundle.git_bundle — "
+                    "git_bundle is the pure protocol layer; use bundle/ facade or client/server instead"
+                )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# H. No direct model mutation — all writes go through CRUD functions
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # ORM model attributes that must only be written inside storage/db/crud_*.py.

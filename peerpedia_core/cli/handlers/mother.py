@@ -3,13 +3,36 @@
 
 """?Mother — interactive user guide.
 
-TODO(mother-agent): currently a static guide printed as a Rich panel.
-Mother will evolve into an AI agent backed by an API endpoint.  The CLI
-handler will become a thin client that connects to a local or remote
-Mother agent, sending user questions and receiving interactive guidance,
-writing assistance, and navigation help.  The agent should have access
-to the user's local article graph, social graph, and citation network
-to provide context-aware responses.
+TODO(mother-agent): Mother evolves through four phases:
+
+  Phase 1 — Knowledge Crawler
+    Traverse the P2P network along three graph axes: social (follow→peer
+    →articles), citation (cite→cited→cited-by transitive closure), and
+    tag (tag→subfield_of→related_to→articles).  Build a local index of
+    articles, authors, reviews, and their relationships.
+
+  Phase 2 — Structure Recognition
+    Identify article outlines, argument structures, and inter-article
+    relationships (contradicts, extends, replicates, supersedes).  Build
+    a knowledge map of the peer network — not just "what exists" but
+    "how things connect."
+
+  Phase 3 — Writing Assistant
+    User writes an article section → Mother suggests additions, flags
+    missing citations, highlights related work from the crawled corpus.
+    Mother's suggestions are grounded in the actual peer-reviewed
+    literature on the network, not generic model knowledge.
+
+  Phase 4 — Autonomous Agent
+    Mother writes, polishes, and reviews articles independently.  She
+    is the peer who has read everything — her intelligence comes from
+    the P2P graph, not from model weights alone.  She can be a reviewer,
+    a co-author, or a reader who surfaces connections no human noticed.
+
+  CLI integration: ``peerpedia mother ask "..."`` sends queries to the
+  agent.  The REPL can invoke Mother inline (``:mother "..."``).  Mother
+  uses the user's own API key from ``~/.peerpedia/config.json`` — no
+  central billing, no server-side costs.
 """
 
 from __future__ import annotations

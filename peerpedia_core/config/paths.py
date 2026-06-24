@@ -48,3 +48,34 @@ REPL_HISTORY_FILE = DATA_ROOT / ".repl_history"
 # ═══════════════════════════════════════════════════════════════════════════════
 
 PENDING_OPS_FILE = DATA_ROOT / "pending_ops.json"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Blob Store (content-addressed binary storage)
+# ═══════════════════════════════════════════════════════════════════════════════
+#
+# TODO(blob-store): content-addressed blob layer for images and other binary
+# assets that don't belong in git repos.
+#
+# Design:
+#   ~/.peerpedia/blobs/{sha256[:2]}/{sha256}
+#   — same structure as git objects, zero new concepts.
+#
+# Article repos store a blobs.json manifest:
+#   {"fig1.png": "sha256:abc123...", "data.csv": "sha256:def456..."}
+#
+# Peer exchange:
+#   GET /api/v1/blobs/{hash}         — fetch a blob from a peer
+#   POST /api/v1/blobs                — upload a blob to a peer
+#   Pull is on-demand (lazy), not eager like bundle sync.  When rendering an
+#   article, the compiler encounters a blob reference, checks local cache,
+#   and fetches from known peers if missing.
+#
+# Why not IPFS:  IPFS is a full distributed filesystem — overkill for "I need
+# to store 5 figures per article."  The blob store uses the same content-
+# addressed model (hash → content) with zero external dependencies.  Same
+# P2P transport layer, same hash semantics, ~200 lines.
+#
+# Storage budget:  a 10 MB image × 100 articles = 1 GB.  Trivial for any
+# modern disk.  No central server, no LFS, no IPFS daemon.
+
+BLOBS_DIR = DATA_ROOT / "blobs"

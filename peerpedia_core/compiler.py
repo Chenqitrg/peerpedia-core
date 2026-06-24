@@ -15,6 +15,25 @@ TODO(multi-file-articles): support articles composed of multiple source files
 (e.g. chapter1.md, chapter2.md, figures/, data/).  Currently _find_article_file
 hardcodes article.md or article.typ as the sole source file.
 
+TODO(lean-blocks): support ```lean fenced code blocks alongside the article
+text.  Not formalising the entire paper — just the key theorems.  Each
+natural-language claim can optionally carry a LEAN proof block:
+
+  **Theorem 1.** The scoring function is bounded on [1, 5].
+  ```lean
+  theorem score_bounded (s : Score) : 1 ≤ s.total ∧ s.total ≤ 5 := by
+    ...
+  ```
+
+The compiler runs LEAN on these blocks during ``peerpedia compile`` and
+reports pass/fail per block.  Reviewers don't need to manually check the
+math — they verify the LEAN proof compiles.  A paper where every formal
+claim carries a verified proof block gets a ``lean-verified`` badge.
+
+This turns peer review from "trust the author's reasoning" to "verify the
+author's proof."  The paper still reads as natural language — the LEAN
+blocks are optional annotations for rigor.
+
 Architecture
 ------------
 ::

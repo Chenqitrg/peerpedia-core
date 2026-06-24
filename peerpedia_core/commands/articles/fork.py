@@ -9,7 +9,8 @@ import uuid
 
 from peerpedia_core.storage.db import Session
 from peerpedia_core.exceptions import NotFoundError
-from peerpedia_core.policies.articles import assert_can_fork_article
+from peerpedia_core.config.params import params
+from peerpedia_core.policies.articles import assert_can_fork_article, assert_not_folded
 from peerpedia_core.commands.integrity import assert_article_integrity
 from peerpedia_core.storage.db.crud_article import (
     create_article,
@@ -43,6 +44,7 @@ def fork_article(db: Session, article_id: str, user_id: str) -> dict:
     if original is None:
         raise NotFoundError("Article not found")
     existing_fork = get_article_by_fork_and_author(db, forked_from=article_id, author_id=user.id)
+    assert_not_folded(original, threshold=params.reputation.fold_score_threshold)
     assert_can_fork_article(original, existing_fork)
 
     fork_id = str(uuid.uuid4())

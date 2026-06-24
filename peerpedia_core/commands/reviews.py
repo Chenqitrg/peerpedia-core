@@ -61,8 +61,9 @@ from pathlib import Path
 
 from peerpedia_core.storage.db import Session
 
+from peerpedia_core.config.params import params
 from peerpedia_core.exceptions import ConflictError, NotFoundError
-from peerpedia_core.policies.articles import assert_can_submit_review
+from peerpedia_core.policies.articles import assert_can_submit_review, assert_not_folded
 from peerpedia_core.storage.db.crud_article import get_article, get_author_ids
 from peerpedia_core.storage.db.crud_review import get_reviews_for_article as _get, upsert_review
 from peerpedia_core.storage.db.crud_user import derive_anonymous_name, get_user
@@ -98,6 +99,7 @@ def submit_review(
     article = get_article(db, article_id)
     if article is None:
         raise NotFoundError("Article not found")
+    assert_not_folded(article, threshold=params.reputation.fold_score_threshold)
     assert_can_submit_review(article)
 
     author_ids = get_author_ids(db, article_id)

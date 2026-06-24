@@ -21,13 +21,15 @@ Pure DB operations — no HTTP, no git.  Only imports from ``storage/db/``.
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 
 from peerpedia_core.storage.db import Session
 from peerpedia_core.storage.db.crud_article import get_article, insert_article
 from peerpedia_core.storage.db.crud_bookmark import add_bookmark, is_bookmarked
 from peerpedia_core.storage.db.crud_maintainer import add_maintainer, is_maintainer
+from peerpedia_core.storage.db.crud_share import add_share as _add_share, is_shared
 from peerpedia_core.storage.db.crud_user import follow_user, get_user, is_following
-from peerpedia_core.storage.db.models import Article, User
+from peerpedia_core.storage.db.models import Article, Follow, User
 
 logger = logging.getLogger(__name__)
 
@@ -69,40 +71,70 @@ def merge_users(db: Session, entries: list[dict]) -> int:
     return added
 
 
-def merge_follows(db: Session, follower_id: str, entries: list[dict]) -> int:
-    """Insert follows discovered from a peer — lazy social discovery.
+def merge_follows(
+    db: Session, follower_id: str, entries: list[dict], *,
+    authoritative: bool = False,
+) -> int:
+    """Merge follows discovered from a peer — lazy social discovery.
 
-    Creates ``follow`` rows for users that *follower_id* follows on the
-    peer.  Duplicates (already following) are logged as warnings and
-    skipped.  Self-follows raise ``ValueError`` — they indicate corrupt
-    peer data.
+    Creates or restores ``follow`` rows for users in *entries*.
+
+    When *authoritative* is True (home-server pull), the remote list is
+    treated as the complete following set: local follows not in *entries*
+    are soft-deleted.  When False (peer discovery), only adds/restores,
+    never deletes.
 
     Raises ValueError if any entry is missing *id*, or if a self-follow
     is detected.
-
-    TODO(unfollow-propagation): this function only ADDS follows.  Unfollows
-    are never propagated — if user A unfollows B locally, remote peers never
-    learn about it and still see A following B.  The social graph diverges
-    permanently.  Needs either a tombstone mechanism or a full graph sync.
     """
     _require_keys(entries, "id", label="follows")
 
-    added = 0
-    for e in entries:
-        followed_id = e["id"]
+    remote_ids = {e["id"] for e in entries}
+    for followed_id in remote_ids:
         if followed_id == follower_id:
             raise ValueError(
                 f"merge_follows: self-follow detected for user {follower_id}"
             )
+
+    added = 0
+    for followed_id in remote_ids:
         if is_following(db, follower_id, followed_id):
-            logger.warning(
-                "merge_follows: %s already follows %s — skipping duplicate",
-                follower_id,
-                followed_id,
-            )
             continue
         follow_user(db, follower_id=follower_id, followed_id=followed_id)
         added += 1
+
+    if authoritative:
+        # TODO(data-loss-01): when remote_ids is empty (home server returns []),
+        # ALL local follows are soft-deleted — a transient server bug wipes the
+        # entire social graph.  Guard: skip deletion when the remote set is
+        # empty to prevent catastrophic data loss from a buggy server response.
+        if remote_ids:
+            # Soft-delete local follows not present in the authoritative list.
+            local_follows = (
+                db.query(Follow)
+                .filter(
+                    Follow.follower_id == follower_id,
+                    Follow.deleted_at.is_(None),
+                )
+                .all()
+            )
+            removed = 0
+            for f in local_follows:
+                if f.followed_id not in remote_ids:
+                    f.deleted_at = datetime.now(timezone.utc)
+                    removed += 1
+            if removed:
+                logger.info(
+                    "merge_follows: authoritative — soft-deleted %d follow(s) for %s",
+                    removed, follower_id,
+                )
+        else:
+            logger.warning(
+                "merge_follows: authoritative server returned empty following "
+                "list for %s — soft-deletes skipped to prevent data loss.",
+                follower_id,
+            )
+
     return added
 
 
@@ -188,4 +220,25 @@ def merge_script_maintainers(db: Session, article_id: str, entries: list[dict]) 
         add_maintainer(db, article_id, user_id)
         added += 1
     db.flush()
+    return added
+
+
+def merge_shares(db: Session, user_id: str, entries: list[dict]) -> int:
+    """Merge shares discovered from a peer — lazy social discovery.
+
+    Each entry must have ``article_id``.  Duplicates are skipped.
+    """
+    added = 0
+    for e in entries:
+        article_id = e.get("article_id")
+        if not article_id:
+            continue
+        if is_shared(db, user_id, article_id):
+            continue
+        _add_share(
+            db, user_id, article_id,
+            recipient_id=e.get("recipient_id"),
+            comment=e.get("comment"),
+        )
+        added += 1
     return added

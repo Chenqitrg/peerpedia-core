@@ -174,5 +174,34 @@ def test_auth_required_without_token():
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# Key rotation
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def test_rotate_key_rejects_invalid_pubkey(client):
+    """Rotate-key rejects malformed public_key before touching DB."""
+    # Not 64 chars.
+    resp = client.post(
+        "/api/v1/users/test-user/rotate-key",
+        json={"public_key": "ab"},
+    )
+    assert resp.status_code == 400
+
+    # Not valid hex.
+    resp = client.post(
+        "/api/v1/users/test-user/rotate-key",
+        json={"public_key": "gg" * 32},
+    )
+    assert resp.status_code == 400
+
+    # Missing field.
+    resp = client.post(
+        "/api/v1/users/test-user/rotate-key",
+        json={},
+    )
+    assert resp.status_code == 400
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # Error response JSON shape
 # ═══════════════════════════════════════════════════════════════════════════════

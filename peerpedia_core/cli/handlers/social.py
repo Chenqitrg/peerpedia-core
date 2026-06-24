@@ -14,14 +14,15 @@ from peerpedia_core.cli.helpers import (
 from peerpedia_core.cli.display import console
 from peerpedia_core.cli.bundle_utils import _sync_server, _try_sync
 from peerpedia_core.commands import (
-    fork_article, create_merge_proposal, accept_merge,
-    add_bookmark, remove_bookmark,
+    fork_article, create_merge_proposal, accept_merge, withdraw_merge_proposal,
+    add_bookmark, add_share, get_feed_shares, get_shares_for_user,
+    list_aliases, remove_alias, remove_bookmark, remove_share, set_alias,
     follow_user, unfollow_user,
     get_follower_views, get_followers, get_following, get_following_views,
     get_article, merge_article_meta,
 )
-from peerpedia_core.transport import fetch_article_meta
-from peerpedia_core.social import discover_articles, discover_followers, discover_following
+from peerpedia_core.transport import fetch_article_meta, push_share, push_share_remove
+from peerpedia_core.social import discover_articles, discover_followers, discover_following, discover_shares
 from peerpedia_core.transport import push_follow, push_unfollow
 
 def _pull_social(db, user_id: str) -> None:
@@ -39,6 +40,7 @@ def _pull_social(db, user_id: str) -> None:
         discover_following(db, server, user_id)
         discover_followers(db, server, user_id)
         discover_articles(db, server, user_id)
+        discover_shares(db, server, user_id)
     except Exception as e:
         console.print(f"[dim]⚠ Social pull from {server} failed: {e}[/]")
 
@@ -64,6 +66,29 @@ def _push_social(action: str, **kwargs) -> None:
                           private_key_bytes=key)
     except Exception as e:
         console.print(f"[dim]⚠ Social sync ({action}) to {server} failed: {e}[/]")
+
+
+def _push_share(article_id: str, sharer_id: str, recipient_id: str | None = None,
+                comment: str | None = None, *, action: str = "add") -> None:
+    """Push a share to the peer server.  Best-effort — warns on failure.
+
+    *action*: ``"add"`` (default) or ``"remove"``.
+    """
+    server = os.environ.get("PEERPEDIA_SERVER")
+    if not server:
+        console.print("[dim]⚠ No PEERPEDIA_SERVER set — share push skipped.[/]")
+        return
+    try:
+        key = _get_session_key()
+        if action == "remove":
+            push_share_remove(server, sharer_id, article_id,
+                              private_key_bytes=key)
+        else:
+            push_share(server, sharer_id, article_id,
+                       recipient_id=recipient_id, comment=comment,
+                       private_key_bytes=key)
+    except Exception as e:
+        console.print(f"[dim]⚠ Share push to {server} failed: {e}[/]")
 
 
 @_with_db
@@ -110,6 +135,20 @@ def _cmd_merge_accept(db, args):
         console.print(f"[warning]⚠ {result['message']}[/]")
     else:
         _ok(f"Merge accepted — [accent]{result['id'][:8]}[/]")
+
+
+@_with_db
+def _cmd_merge_withdraw(db, args):
+    """Withdraw a merge proposal (proposer only).
+
+    args: proposal_id [positional], --json
+    """
+    result = withdraw_merge_proposal(db, args.proposal_id, _get_session_user())
+    db.commit()
+    if args.json:
+        _json_out(result)
+    else:
+        _ok(f"Proposal [accent]{args.proposal_id[:8]}[/] withdrawn")
 
 
 @_with_db
@@ -232,5 +271,121 @@ def _cmd_followers(db, args):
     else:
         users = get_followers(db, args.user)
         _ok(f"Followers {len(users)} user(s)")
+
+
+# ── Alias ────────────────────────────────────────────────────────────────────
+
+
+@_with_db
+def _cmd_alias_set(db, args):
+    """Set or update an alias for a user you follow.
+
+    args: user_identifier [positional], alias [positional]
+    """
+    owner_id = _get_session_user()
+    target_id = _resolve_user(db, args.user_identifier)
+    set_alias(db, owner_id, target_id, args.alias)
+    db.commit()
+    _ok(f"Alias [accent]{args.alias}[/] → {target_id[:8]}")
+
+
+@_with_db
+def _cmd_alias_remove(db, args):
+    """Remove an alias.
+
+    args: user_identifier [positional]
+    """
+    owner_id = _get_session_user()
+    target_id = _resolve_user(db, args.user_identifier)
+    remove_alias(db, owner_id, target_id)
+    db.commit()
+    _ok(f"Alias removed for {target_id[:8]}")
+
+
+@_with_db
+def _cmd_alias_list(db, args):
+    """List all aliases you have set.
+
+    args: --json
+    """
+    aliases = list_aliases(db, _get_session_user())
+    if args.json:
+        _json_out([{"target": a.target_id, "alias": a.alias} for a in aliases])
+    elif not aliases:
+        console.print("[muted]No aliases set.[/]")
+    else:
+        for a in aliases:
+            console.print(f"  [accent]{a.alias}[/] → {a.target_id[:8]}")
+
+
+# ── Share ────────────────────────────────────────────────────────────────────
+
+
+@_with_db
+def _cmd_share_add(db, args):
+    """Share an article — public recommendation visible to followers.
+
+    args: article_id [positional], --to, --comment, --json
+    """
+    user_id = _get_session_user()
+    recipient_id = None
+    if getattr(args, "to", None):
+        recipient_id = _resolve_user(db, args.to)
+    result = add_share(db, user_id, args.article_id,
+                       recipient_id=recipient_id, comment=args.comment)
+    db.commit()
+    _push_share(args.article_id, user_id, recipient_id, args.comment)
+    if args.json:
+        _json_out(result)
+    else:
+        to_str = f" → {args.to}" if getattr(args, "to", None) else ""
+        _ok(f"Shared [accent]{args.article_id[:8]}[/]{to_str}")
+
+
+@_with_db
+def _cmd_share_list(db, args):
+    """List shares from followed users.
+
+    args: --mine, --json
+    """
+    if getattr(args, "mine", False):
+        shares = get_shares_for_user(db, _get_session_user())
+    else:
+        shares = get_feed_shares(db, _get_session_user())
+    if args.json:
+        _json_out(shares)
+    elif not shares:
+        console.print("[muted]No shares in feed.[/]")
+    else:
+        from rich.table import Table
+
+        is_mine = getattr(args, "mine", False)
+        if is_mine:
+            table = Table(title="My Shares")
+            table.add_column("Article ID", style="dim")
+            table.add_column("Comment")
+            for s in shares:
+                table.add_row(s["article_id"][:8], s.get("comment") or "")
+        else:
+            table = Table(title="Shares")
+            table.add_column("Article", style="dim")
+            table.add_column("Title")
+            for s in shares:
+                table.add_row(s["id"][:8], s["title"])
+        console.print(table)
+
+
+@_with_db
+def _cmd_share_remove(db, args):
+    """Remove a share (un-share an article).
+
+    args: article_id [positional]
+    """
+
+    user_id = _get_session_user()
+    remove_share(db, user_id, args.article_id)
+    db.commit()
+    _push_share(args.article_id, user_id, action="remove")
+    _ok(f"Unshared [accent]{args.article_id[:8]}[/]")
 
 

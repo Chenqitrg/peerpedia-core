@@ -1,15 +1,77 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
+# TODO(peerpedia-markup): full CommonMark compatibility + MyST-style semantic
+# extensions.  A custom markup language (indentation-based, no closing
+# delimiters) is architecturally cleaner but not viable until AI models
+# support it — every LLM is trained on CommonMark.  Strategy:
+#   - Syntax: strict CommonMark superset (every standard .md file parses)
+#   - Semantics: MyST-style directives (:::{theorem}, :::{figure}) on top
+#   - Extensions: @key citations, ```lean blocks, {prf:*} environments
+#   - Revisit custom syntax only when Markdown's limitations become a real
+#     bottleneck, not an aesthetic preference.
+
 r"""Compiler backends for Typst, Markdown, and bTeX.
 
 Converts article source files into rendered output (HTML, PDF, SVG, PNG).
 The backend is selected based on the article's format field.
 
-TODO(citation-compile): resolve [@key] citation markers in Markdown/Typst
+TODO(markdown-formatter): auto-format Markdown on commit/publish to unify
+redundant syntax variants into one canonical style — PeerPedia's equivalent
+of ``black`` / ``prettier``.  Normalisation rules:
+
+  Inline emphasis:     *italic* and _italic_       → _italic_
+  Inline strong:       **bold** and __bold__        → **bold**
+  Unordered lists:     *, -, +                      → -
+  Headings (setext):   heading\n=======              → # heading
+  Links (reference):   [text][ref] → [text](url)     → whichever is canonical
+  Thematic breaks:     ***, ---, ___                 → ---
+
+Runs automatically: git pre-commit hook → formatter → commit.  Authors never
+see inconsistent formatting and never need to think about which style they
+used.  The canonical style is enforced in git history — a reviewer verifying
+the commit sees the formatted version.
+
+TODO(code-block-pipeline): fenced code blocks are the universal extension
+point.  The info string (first word after ```) routes to a handler — no new
+Markdown syntax needed.  TypstBackend already exists and compiles .typ →
+SVG/PNG; the compiler just needs to extract code blocks and route them:
+
+  ```typst          → TypstBackend → SVG     (figures, diagrams, plots)
+  ```typst_figure   → TypstBackend → SVG     (same, with caption support)
+  ```cd             → TypstBackend → SVG     (commutative diagrams)
+  ```lean           → lean --run    → pass/fail badge  (theorem verification)
+  ```mermaid        → mermaid.js    → SVG     (flowcharts, if wanted)
+
+All these share one pattern:
+  1. Parser extracts fenced block by info string
+  2. Route to handler (Typst subprocess, LEAN subprocess, JS runtime)
+  3. Embed rendered output (SVG/HTML) in compiled page
+
+Typst is the universal diagram AND math backend — TeX-quality math ($...$),
+commutative diagrams, plots, trees, circuits, chemical structures — all
+expressible in Typst's scripting language.  Even inline math can route
+through Typst instead of KaTeX for consistency.  Zero new deps.
+
+Architecture:  Markdown → structure (headings, paragraphs, lists, citations)
+               Typst    → rendering (math, diagrams, figures, code blocks)
+
+TODO(citation-compile): resolve @key citation markers in Markdown/Typst
 source and render a references list.  Currently citation markers pass through
-unchanged to output.  Needs: parse [@key] → query Citation table → format
-reference entry → append to compiled output.
+unchanged to output.
+
+  Citation syntax uses bare @key — no brackets:
+    @wiles1995 showed that ...          →  "Wiles (1995) showed that ..."
+    ... as demonstrated previously @wiles1995, @smith2020  →  "... as
+    demonstrated previously [1, 3]."
+
+  @ prefix is the delimiter — no closing bracket needed.  Disambiguation:
+  email addresses (name@domain.com) contain a dot after @; citation keys
+  (@key) are alphanumeric immediately after @.  The parser splits on this.
+
+  Same philosophy as Python's indentation: a visual convention (@ = citation)
+  becomes actual syntax.  Brackets are noise for both humans and AI models
+  that already output @key naturally.
 
 TODO(multi-file-articles): support articles composed of multiple source files
 (e.g. chapter1.md, chapter2.md, figures/, data/).  Currently _find_article_file

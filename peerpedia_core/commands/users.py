@@ -45,6 +45,19 @@ def update_user_public_key(db: Session, user_id: str, pubkey_hex: str):
     # TODO(account-lifecycle): users cannot delete/deactivate their account,
     # cannot change their display name (no update_user_name), and cannot
     # export their data.  The User model has no is_active or deleted_at flag.
+    #
+    # TODO(social-recovery): key recovery from lost device.  If a user loses
+    #   their device AND their salt (the only recovery path is password+salt),
+    #   they are permanently locked out — all articles, follows, reputation
+    #   are irrecoverable.  Needs a social recovery protocol:
+    #     1. User pre-designates N trusted recovery guardians (mutual follows).
+    #     2. Guardians each hold an encrypted key shard (Shamir's secret sharing
+    #        or threshold signatures, M-of-N).
+    #     3. On recovery: M guardians confirm the request → reconstruct the
+    #        private key.  The new key is pushed via push_key_rotation.
+    #     4. Guardians must be online peers — the protocol is P2P, not
+    #        centralized.  No single guardian can unilaterally recover.
+    #   Requires: guardian model, shard protocol, recovery CLI, P2P messaging.
     return _update_pubkey(db, user_id, pubkey_hex)
 
 

@@ -109,6 +109,9 @@ def test_no_internal_peerpedia_imports():
         ("peerpedia_core/commands/integrity.py",
          "peerpedia_core.commands.articles"):
             "circular: articles/__init__.py → integrity.py → articles._helpers (rebuild_article_authors)",
+        ("peerpedia_core/commands/integrity.py",
+         "peerpedia_core.commands.bundle"):
+            "circular: integrity.py → bundle.sync_reviews_from_worktree → bundle.py → integrity.assert_article_integrity",
     }
 
     for f in _all_modules():

@@ -19,7 +19,7 @@ from peerpedia_core.storage.db.crud_maintainer import add_maintainer
 from peerpedia_core.storage.db.crud_review import upsert_review
 from peerpedia_core.storage.db.engine import get_session
 from peerpedia_core.storage.db.models import User
-from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, commit_article, init_article_repo
+from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, commit_article, get_commit_history, init_article_repo
 from tests.conftest import commit_article_signed
 
 def _create_user(db, user_id: str, name: str = "Test Author"):
@@ -294,3 +294,156 @@ def test_frontmatter_roundtrip(test_signing_key_bytes, test_pubkey_hex):
     assert parsed["abstract"] == "Abstract text"
     assert parsed["keywords"] == ["kw1", "kw2"]
     assert parsed["categories"] == ["cat"]
+
+
+# ── Self-review validation ──────────────────────────────────────────────────
+
+def test_publish_without_self_review_fails_before_mutations(
+    db, test_signing_key_bytes, test_pubkey_hex,
+):
+    """Self-review validation fails BEFORE git write — zero side effects."""
+    from peerpedia_core.exceptions import BadRequestError
+
+    _create_user(db, "alice", "Alice")
+
+    result = create_article_with_content(
+        db, title="No Review", content="# Test",
+        author_ids=["alice"],
+        signing_key_bytes=test_signing_key_bytes, pubkey_hex=test_pubkey_hex,
+    )
+    article = get_article(db, result["id"])
+    original_status = article.status
+    rp = DEFAULT_ARTICLES_DIR / result["id"]
+    commits_before = len(list(get_commit_history(rp)))
+
+    with pytest.raises(BadRequestError, match="self_review"):
+        publish_article(
+            db, result["id"], "alice", None,
+            signing_key_bytes=test_signing_key_bytes, pubkey_hex=test_pubkey_hex,
+        )
+
+    # Verify zero side effects.
+    article = get_article(db, result["id"])
+    assert article.status == original_status
+    commits_after = len(list(get_commit_history(rp)))
+    assert commits_after == commits_before
+
+
+def test_sedimentation_cap_rejects_excess(
+    db, test_signing_key_bytes, test_pubkey_hex,
+):
+    """Publishing a 6th article while 5 are in sedimentation → rejected."""
+    from peerpedia_core.exceptions import BadRequestError
+    from peerpedia_core.config.params import params
+
+    _create_user(db, "alice", "Alice")
+
+    # Publish 5 articles into sedimentation — hit the cap.
+    for i in range(params.sink.max_sedimentation_per_author):
+        result = create_article_with_content(
+            db, title=f"Pub {i}", content="# Test",
+            author_ids=["alice"],
+            signing_key_bytes=test_signing_key_bytes, pubkey_hex=test_pubkey_hex,
+        )
+        publish_article(
+            db, result["id"], "alice",
+            {"originality": 3, "rigor": 3, "completeness": 3, "pedagogy": 3, "impact": 3},
+            signing_key_bytes=test_signing_key_bytes, pubkey_hex=test_pubkey_hex,
+        )
+
+    # 6th publish should fail.
+    result = create_article_with_content(
+        db, title="Over Cap", content="# Test",
+        author_ids=["alice"],
+        signing_key_bytes=test_signing_key_bytes, pubkey_hex=test_pubkey_hex,
+    )
+    with pytest.raises(BadRequestError, match="already has"):
+        publish_article(
+            db, result["id"], "alice",
+            {"originality": 3, "rigor": 3, "completeness": 3, "pedagogy": 3, "impact": 3},
+            signing_key_bytes=test_signing_key_bytes, pubkey_hex=test_pubkey_hex,
+        )
+
+    # Verify the 6th article stayed draft.
+    article = get_article(db, result["id"])
+    assert article.status == "draft"
+
+
+# ── G1/G3 marker commit tests ───────────────────────────────────────────────
+
+def test_rollback_published_article_writes_status_marker(
+    db, test_signing_key_bytes, test_pubkey_hex,
+):
+    """Rolling back a published article writes a platform [status] marker."""
+    from peerpedia_core.storage.db.crud_article import update_article_status
+
+    _create_user(db, "alice", "Alice")
+
+    result = create_article_with_content(
+        db, title="Rollback Test", content="# V1",
+        author_ids=["alice"],
+        signing_key_bytes=test_signing_key_bytes, pubkey_hex=test_pubkey_hex,
+    )
+    aid = result["id"]
+    rp = DEFAULT_ARTICLES_DIR / aid
+
+    # Make a second commit so we have history to roll back to.
+    first_commit = list(get_commit_history(rp))[0]["hash"]
+    (rp / "article.md").write_text("# V2\n\nUpdated.\n")
+    commit_article_signed(rp, "V2", "Alice", "alice@peerpedia")
+
+    # Set status to published so rollback_article triggers the marker path.
+    update_article_status(db, aid, "published")
+
+    # Rollback to the first commit.
+    rollback_article(
+        db, aid, first_commit, user_id="alice",
+        signing_key_bytes=test_signing_key_bytes, pubkey_hex=test_pubkey_hex,
+    )
+
+    # Verify platform [status] commit exists after rollback.
+    commits = list(get_commit_history(rp))
+    platform_commits = [
+        c for c in commits
+        if c["author_email"] == "system@peerpedia"
+        and "[status] sedimentation" in c["message"]
+    ]
+    assert len(platform_commits) >= 1, "No platform [status] commit after rollback"
+
+
+def test_update_published_article_writes_status_marker(
+    db, test_signing_key_bytes, test_pubkey_hex,
+):
+    """Editing a published article writes a platform [status] marker."""
+    _create_user(db, "alice", "Alice")
+
+    result = create_article_with_content(
+        db, title="Update Marker", content="# V1",
+        author_ids=["alice"],
+        signing_key_bytes=test_signing_key_bytes, pubkey_hex=test_pubkey_hex,
+    )
+    aid = result["id"]
+    publish_article(
+        db, aid, "alice",
+        {"originality": 3, "rigor": 3, "completeness": 3, "pedagogy": 3, "impact": 3},
+        signing_key_bytes=test_signing_key_bytes, pubkey_hex=test_pubkey_hex,
+    )
+    # Force to published so update sees old_status == "published".
+    from peerpedia_core.storage.db.crud_article import update_article_status as _set_status
+    _set_status(db, aid, "published")
+
+    # Edit the published article.
+    update_article_content(
+        db, aid, content="# Updated", user_id="alice",
+        message="Edit after publish",
+        signing_key_bytes=test_signing_key_bytes, pubkey_hex=test_pubkey_hex,
+    )
+
+    # Verify platform [status] commit exists after edit.
+    commits = list(get_commit_history(DEFAULT_ARTICLES_DIR / aid))
+    platform_commits = [
+        c for c in commits
+        if c["author_email"] == "system@peerpedia"
+        and "[status] sedimentation" in c["message"]
+    ]
+    assert len(platform_commits) >= 1, "No platform [status] commit after published edit"

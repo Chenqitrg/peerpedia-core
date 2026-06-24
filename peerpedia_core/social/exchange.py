@@ -17,14 +17,16 @@ Transport-agnostic — switching from HTTP to P2P only requires changing
 
 from __future__ import annotations
 
+import os
 from functools import partial
 from typing import Callable
 
 from peerpedia_core.storage.db import Session
 
-from peerpedia_core.commands import merge_article_meta, merge_follows, merge_users
+from peerpedia_core.commands import merge_article_meta, merge_follows, merge_shares, merge_users
 from peerpedia_core.exceptions import ProtocolError, TransportError
 from peerpedia_core.transport import (
+    fetch_shares,
     fetch_user_articles,
     fetch_followers,
     fetch_following,
@@ -55,10 +57,16 @@ def discover_following(db: Session, server: str, user_id: str) -> int:
 
     Returns count of new follows added.  Raises ConnectionError if the
     server is unreachable.  Raises ProtocolError on malformed responses.
+
+    When *server* is the user's home server (PEERPEDIA_SERVER), the remote
+    following list is treated as authoritative — local follows not in the
+    remote list are soft-deleted.
     """
     data = _fetch_or_raise(fetch_following, server, user_id, "following")
     merge_users(db, data)
-    return merge_follows(db, user_id, data)
+    home_server = os.environ.get("PEERPEDIA_SERVER")
+    authoritative = (home_server is not None and server == home_server)
+    return merge_follows(db, user_id, data, authoritative=authoritative)
 
 
 def discover_followers(db: Session, server: str, user_id: str) -> int:
@@ -83,3 +91,13 @@ def discover_articles(
         server, user_id, "articles",
     )
     return merge_article_meta(db, data)
+
+
+def discover_shares(db: Session, server: str, user_id: str) -> int:
+    """Fetch and merge shares from *user_id* on *server*.
+
+    Returns count of new shares discovered.  Raises ConnectionError if
+    the server is unreachable.  Raises ProtocolError on malformed responses.
+    """
+    data = _fetch_or_raise(fetch_shares, server, user_id, "shares")
+    return merge_shares(db, user_id, data)

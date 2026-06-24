@@ -18,7 +18,7 @@ import tempfile
 from pathlib import Path
 
 from peerpedia_core.cli.display import console, theme, display_article as _render_article
-from peerpedia_core.commands import db_session, get_author_ids, get_user_by_name, parse_frontmatter
+from peerpedia_core.commands import db_session, get_author_ids, parse_frontmatter, resolve_username_or_alias
 from peerpedia_core.config.paths import ARTICLES_DIR as DEFAULT_ARTICLES_DIR, DB_PATH, DB_URL, SESSION_FILE
 
 
@@ -160,18 +160,32 @@ def _get_session_user() -> str:
 def _resolve_user(db, user_ref: str) -> str:
     """Resolve a user reference to a user ID.
 
-    ``@name`` → look up username in local DB.
+    ``@name`` → look up username first, then aliases.
     UUID or UUID prefix → pass through directly.
     """
     if user_ref.startswith("@"):
-        users = get_user_by_name(db, user_ref[1:])
+        name = user_ref[1:]
+        # resolve_username_or_alias checks username first, then falls back
+        # to aliases — single query path covers both.  No need for a
+        # separate get_user_by_name call.
+        session_user = _get_session_user()
+        users = resolve_username_or_alias(db, session_user, name)
+
         if len(users) == 1:
             return users[0].id
         if len(users) > 1:
-            _die(f"Multiple users named '@{user_ref[1:]}'. "
-                 f"Use user ID instead: {', '.join(u.id for u in users)}")
-        _die(f"User '@{user_ref[1:]}' not found.\n"
-             f"  Register: peerpedia account register --name {user_ref[1:]}")
+            candidates = "\n".join(
+                f"  {u.id}  {u.name}" for u in users
+            )
+            _die(
+                f"Multiple users match '@{name}':\n{candidates}\n"
+                f"Use the UUID to specify which one."
+            )
+        _die(
+            f"User '@{name}' not found.\n"
+            f"  Register: peerpedia account register --name {name}\n"
+            f"  Or set an alias: peerpedia alias set <user_id> {name}"
+        )
     return user_ref
 
 

@@ -19,6 +19,7 @@ Reviewer's checklist
 
 import secrets
 import uuid
+from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
@@ -183,53 +184,80 @@ def update_user_reputation(session: Session, user_id: str, reputation: dict) -> 
 
 
 def follow_user(session: Session, follower_id: str, followed_id: str) -> Follow:
-    """Create a follow relationship.  Raises ValueError on self-follow."""
+    """Create or restore a follow relationship.  Raises ValueError on self-follow.
+
+    If a soft-deleted row exists, restores it (``deleted_at=None``).
+    Otherwise inserts a new row.
+    """
     if follower_id == followed_id:
         raise ValueError("A user cannot follow themselves")
-    f = Follow(follower_id=follower_id, followed_id=followed_id)
-    session.add(f)
+    f = session.query(Follow).filter(
+        Follow.follower_id == follower_id,
+        Follow.followed_id == followed_id,
+    ).first()
+    if f:
+        f.deleted_at = None  # restore soft-deleted row
+    else:
+        f = Follow(follower_id=follower_id, followed_id=followed_id)
+        session.add(f)
     session.flush()
     return f
 
 
 def unfollow_user(session: Session, follower_id: str, followed_id: str) -> None:
-    """Remove a follow relationship.  Idempotent — no-op if not following."""
-    f = session.query(Follow).filter(Follow.follower_id == follower_id, Follow.followed_id == followed_id).first()
+    """Soft-delete a follow relationship.  Idempotent — no-op if not following."""
+    f = session.query(Follow).filter(
+        Follow.follower_id == follower_id,
+        Follow.followed_id == followed_id,
+        Follow.deleted_at.is_(None),
+    ).first()
     if f:
-        session.delete(f)
+        f.deleted_at = datetime.now(timezone.utc)
         session.flush()
 
 
 def is_following(session: Session, follower_id: str, followed_id: str) -> bool:
-    """Return True if *follower_id* follows *followed_id*."""
-    return session.query(Follow).filter(Follow.follower_id == follower_id, Follow.followed_id == followed_id).first() is not None
+    """Return True if *follower_id* follows *followed_id* (excludes soft-deleted)."""
+    return session.query(Follow).filter(
+        Follow.follower_id == follower_id,
+        Follow.followed_id == followed_id,
+        Follow.deleted_at.is_(None),
+    ).first() is not None
 
 
 def get_followers(session: Session, user_id: str) -> list[User]:
-    """Return users who follow *user_id* (single JOIN query)."""
+    """Return users who follow *user_id* (excludes soft-deleted, single JOIN)."""
     return (
         session.query(User)
         .join(Follow, User.id == Follow.follower_id)
-        .filter(Follow.followed_id == user_id)
+        .filter(Follow.followed_id == user_id, Follow.deleted_at.is_(None))
         .all()
     )
 
 
 def get_following(session: Session, user_id: str) -> list[User]:
-    """Return users that *user_id* follows (single JOIN query)."""
+    """Return users that *user_id* follows (excludes soft-deleted, single JOIN)."""
     return (
         session.query(User)
         .join(Follow, User.id == Follow.followed_id)
-        .filter(Follow.follower_id == user_id)
+        .filter(Follow.follower_id == user_id, Follow.deleted_at.is_(None))
         .all()
     )
 
 
 def get_follower_count(session: Session, user_id: str) -> int:
-    """Return the number of followers *user_id* has."""
-    return session.query(Follow).filter(Follow.followed_id == user_id).count()
+    """Return the number of active followers *user_id* has."""
+    return (
+        session.query(Follow)
+        .filter(Follow.followed_id == user_id, Follow.deleted_at.is_(None))
+        .count()
+    )
 
 
 def get_following_count(session: Session, user_id: str) -> int:
-    """Return the number of users *user_id* follows."""
-    return session.query(Follow).filter(Follow.follower_id == user_id).count()
+    """Return the number of active users *user_id* follows."""
+    return (
+        session.query(Follow)
+        .filter(Follow.follower_id == user_id, Follow.deleted_at.is_(None))
+        .count()
+    )

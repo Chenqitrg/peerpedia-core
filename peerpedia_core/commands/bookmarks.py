@@ -4,7 +4,7 @@
 """Bookmark operations — local-only reading list.
 
 Bookmarks are private — not pushed to servers or visible to followers.
-Use ``share`` (TODO) for public recommendations.
+Use ``share`` for public recommendations.
 """
 
 from __future__ import annotations

@@ -26,6 +26,7 @@ class SinkParams:
     min_days: int = 2
     scan_interval_seconds: int = 3600  # REPL periodic auto-publish interval
     max_days: int = 180
+    max_sedimentation_per_author: int = 5  # anti-spam: max concurrent articles in pool
 
 
 @dataclass
@@ -61,6 +62,10 @@ class ReputationParams:
 
     article_to_author_weight: float = 0.3
     author_weight_in_review: float = 0.2
+
+    # Articles with score < this threshold are folded (frozen):
+    # no new reviews, edits, forks, or citations allowed.
+    fold_score_threshold: float = 1.0
 
 
 @dataclass

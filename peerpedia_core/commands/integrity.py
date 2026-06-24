@@ -101,14 +101,13 @@ def _verify_full(db: Session, article_id: str, repo_path: Path) -> None:
 def _repair_from_git(db: Session, article_id: str, repo_path: Path) -> None:
     """Rebuild DB cache for *article_id* from git SOT."""
     from peerpedia_core.commands.articles import rebuild_article_authors  # noqa: PLC0415
+    from peerpedia_core.commands.bundle import sync_reviews_from_worktree  # noqa: PLC0415
 
     rebuild_article_authors(db, article_id)
     _sync_status_from_git(db, article_id, repo_path)
-    # TODO(G9): call sync_reviews_from_worktree(db, article_id) before
-    # recompute_article_score.  Currently recompute_article_score reads
-    # review scores from the DB cache, not from git.  If a review exists
-    # in git but not in DB (e.g. crash after git write, before DB upsert),
-    # _repair_from_git will recompute the score using stale data.
+    # G9: sync reviews from git worktree before recomputing scores so
+    # reviews that exist in git but not in DB are not silently dropped.
+    sync_reviews_from_worktree(db, article_id)
     recompute_article_score(db, article_id)
 
 

@@ -13,6 +13,7 @@ from peerpedia_core.transport.http_client import (
     fetch_user_articles,
     fetch_followers,
     fetch_following,
+    push_key_rotation,
 )
 
 
@@ -80,3 +81,34 @@ class TestFetchArticles:
         with patch("peerpedia_core.transport.http_client._get_client", return_value=client):
             result = fetch_user_articles("http://peer:8080", "alice")
         assert result == [{"id": "art-1", "title": "Paper", "status": "published"}]
+
+
+class TestPushKeyRotation:
+    def test_success_200(self):
+        mock_resp = httpx.Response(200)
+        client = _mock_client(post=MagicMock(return_value=mock_resp))
+        with patch("peerpedia_core.transport.http_client._get_client", return_value=client):
+            result = push_key_rotation(
+                "http://peer:8080", "alice", "aa" * 32,
+                private_key_bytes=b"\x00" * 32,
+            )
+        assert result is True
+
+    def test_404_returns_false(self):
+        mock_resp = httpx.Response(404)
+        client = _mock_client(post=MagicMock(return_value=mock_resp))
+        with patch("peerpedia_core.transport.http_client._get_client", return_value=client):
+            result = push_key_rotation(
+                "http://peer:8080", "alice", "aa" * 32,
+                private_key_bytes=b"\x00" * 32,
+            )
+        assert result is False
+
+    def test_network_error_raises(self):
+        client = _mock_client(post=MagicMock(side_effect=httpx.ConnectError("down")))
+        with patch("peerpedia_core.transport.http_client._get_client", return_value=client):
+            with pytest.raises(TransportError):
+                push_key_rotation(
+                    "http://peer:8080", "alice", "aa" * 32,
+                    private_key_bytes=b"\x00" * 32,
+                )

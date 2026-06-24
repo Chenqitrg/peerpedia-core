@@ -319,3 +319,136 @@ def fetch_user_articles(server: str, user_id: str, limit: int = 20, offset: int 
     if resp.status_code == 404:
         return None
     raise ProtocolError(f"fetch_user_articles: unexpected status {resp.status_code} from {server}")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Key rotation
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def push_key_rotation(
+    server: str, user_id: str, new_pubkey_hex: str, *,
+    private_key_bytes: bytes,
+) -> bool:
+    """POST /api/v1/users/{user_id}/rotate-key → True on success.
+
+    The request is signed with the user's current private key.
+    *private_key_bytes* is required — key rotation without auth is rejected.
+    The server verifies the signature and updates the stored public key.
+    """
+    if not private_key_bytes:
+        raise ValueError("private_key_bytes is required for key rotation")
+    path = f"/api/v1/users/{user_id}/rotate-key"
+    body = json.dumps({"public_key": new_pubkey_hex}).encode("utf-8")
+    headers: dict[str, str] = {
+        "Authorization": sign_auth_header(
+            "POST", path, user_id, private_key_bytes, body=body,
+        ),
+    }
+    try:
+        resp = _get_client().post(f"{server}{path}", content=body, headers=headers)
+    except httpx.HTTPError as e:
+        raise TransportError(
+            f"push_key_rotation failed for {user_id} at {server}: {e}"
+        ) from e
+    if resp.status_code == 200:
+        return True
+    if resp.status_code == 404:
+        return False
+    raise ProtocolError(
+        f"push_key_rotation: unexpected status {resp.status_code} from {server}"
+    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Share
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def push_share(
+    server: str, sharer_id: str, article_id: str, *,
+    recipient_id: str | None = None, comment: str | None = None,
+    private_key_bytes: bytes | None = None,
+) -> bool:
+    """POST /api/v1/users/{sharer_id}/share → True on success."""
+    path = f"/api/v1/users/{sharer_id}/share"
+    body = json.dumps({
+        "article_id": article_id,
+        "recipient_id": recipient_id,
+        "comment": comment,
+    }).encode("utf-8")
+    headers: dict[str, str] = {}
+    if private_key_bytes:
+        headers["Authorization"] = sign_auth_header(
+            "POST", path, sharer_id, private_key_bytes, body=body,
+        )
+    try:
+        resp = _get_client().post(f"{server}{path}", content=body, headers=headers)
+    except httpx.HTTPError as e:
+        raise TransportError(
+            f"push_share failed for {sharer_id} at {server}: {e}"
+        ) from e
+    if resp.status_code == 200:
+        return True
+    if resp.status_code == 404:
+        return False
+    raise ProtocolError(
+        f"push_share: unexpected status {resp.status_code} from {server}"
+    )
+
+
+def push_share_remove(
+    server: str, sharer_id: str, article_id: str, *,
+    private_key_bytes: bytes,
+) -> bool:
+    """DELETE /api/v1/users/{sharer_id}/share → True on success.
+
+    Propagates share removal to peers so the social graph stays consistent.
+    *private_key_bytes* is required — share removal without auth is rejected.
+    """
+    if not private_key_bytes:
+        raise ValueError("private_key_bytes is required for share removal")
+    path = f"/api/v1/users/{sharer_id}/share"
+    body = json.dumps({"article_id": article_id}).encode("utf-8")
+    headers: dict[str, str] = {
+        "Authorization": sign_auth_header(
+            "DELETE", path, sharer_id, private_key_bytes, body=body,
+        ),
+    }
+    try:
+        resp = _get_client().request(
+            "DELETE", f"{server}{path}", content=body, headers=headers,
+        )
+    except httpx.HTTPError as e:
+        raise TransportError(
+            f"push_share_remove failed for {sharer_id} at {server}: {e}"
+        ) from e
+    if resp.status_code == 200:
+        return True
+    if resp.status_code == 404:
+        return False
+    raise ProtocolError(
+        f"push_share_remove: unexpected status {resp.status_code} from {server}"
+    )
+
+
+def fetch_shares(server: str, user_id: str) -> list[dict] | None:
+    """GET /api/v1/users/{user_id}/shares → list of share dicts, or None."""
+    try:
+        resp = _get_client().get(f"{server}/api/v1/users/{user_id}/shares")
+    except httpx.HTTPError as e:
+        raise TransportError(
+            f"fetch_shares failed for {user_id} at {server}: {e}"
+        ) from e
+    if resp.status_code == 200:
+        try:
+            return resp.json()
+        except json.JSONDecodeError as e:
+            raise ProtocolError(
+                f"Malformed JSON from {server} for users/{user_id}/shares"
+            ) from e
+    if resp.status_code == 404:
+        return None
+    raise ProtocolError(
+        f"fetch_shares: unexpected status {resp.status_code} from {server}"
+    )

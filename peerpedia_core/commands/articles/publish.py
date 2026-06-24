@@ -6,13 +6,16 @@
 from __future__ import annotations
 
 from peerpedia_core.storage.db import Session
-from peerpedia_core.config.params import params
+from peerpedia_core.config.params import PLATFORM_EMAIL, params
 from peerpedia_core.exceptions import BadRequestError, NotAuthorizedError, NotFoundError
 from peerpedia_core.policies.articles import (
+    assert_article_has_score,
     assert_can_publish_article,
-    require_self_review_for_publish,
+    assert_not_folded,
+    validate_self_review_scores,
 )
 from peerpedia_core.storage.db.crud_article import (
+    count_articles,
     get_article as _get_article,
     set_sink_start,
     update_article_status,
@@ -49,6 +52,7 @@ def publish_article(
     if a is None:
         raise NotFoundError("Article not found")
     mids = get_maintainer_ids(db, article_id)
+    assert_not_folded(a, threshold=params.reputation.fold_score_threshold)
     assert_can_publish_article(a, mids, user)
 
     assert_article_integrity(db, article_id, level="full")
@@ -57,10 +61,25 @@ def publish_article(
     if old_status != "draft":
         raise NotAuthorizedError("Only draft articles can be published")
 
-    # TODO(sedimentation-cap): check count of author's articles currently in
-    # sedimentation before allowing publish.  Without a cap (e.g. 3-5), a
-    # malicious user can flood the pool with garbage articles, consuming
-    # peer storage and diluting reviewer attention.
+    # TODO(lean-ci): if the article contains ```lean fenced code blocks,
+    # run ``lean --run`` on each block before publishing.  All LEAN blocks
+    # must compile successfully — broken proofs block publication, same as
+    # missing self-review.  The LEAN verification result is written into
+    # the commit message as a ``LEAN-verified: <hash>`` trailer, signed
+    # alongside the article content.  Peers can trust the verification
+    # without re-running (they can re-verify independently).  This is the
+    # git-native equivalent of CI: the proof compiles → it ships.
+
+    # Validate self-review BEFORE any mutations — failure here has zero side effects.
+    validate_self_review_scores(self_review)
+
+    # Anti-spam: limit concurrent articles in sedimentation per author.
+    in_pool = count_articles(db, status="sedimentation", author_id=user_id)
+    if in_pool >= params.sink.max_sedimentation_per_author:
+        raise BadRequestError(
+            f"Author already has {in_pool} article(s) in sedimentation "
+            f"(max {params.sink.max_sedimentation_per_author})"
+        )
 
     write_review_to_git(
         article_id, user_id, self_review, comment, user.name, f"{user_id}@peerpedia",
@@ -70,7 +89,7 @@ def publish_article(
     rp = DEFAULT_ARTICLES_DIR / article_id
     if is_repo_dirty(rp):
         commit_hash = commit_article(
-            rp, "[status] sedimentation", "PeerPedia", "system@peerpedia",
+            rp, "[status] sedimentation", "PeerPedia", PLATFORM_EMAIL,
             signing_key=None, pubkey_hex=None,
         )
     else:
@@ -91,18 +110,7 @@ def publish_article(
 
     recompute_article_score(db, article_id)
 
-    rp = DEFAULT_ARTICLES_DIR / article_id
-    # TODO(self-review-order): this check runs AFTER all mutations (git write
-    # + DB status change + sink_start + score recompute at L60-87).  If it
-    # somehow fails, the article is already in sedimentation with side effects
-    # committed.  Move this check before L60.
-    if not (rp / ".git").is_dir():
-        raise BadRequestError("self_review is required before publishing — no git repo found")
-    try:
-        head = get_head_hash(rp)
-    except ValueError:
-        raise BadRequestError("self_review is required before publishing — no commits yet")
-    existing_review = get_review(db, article_id, user.id, a.status, head)
-    require_self_review_for_publish(a, existing_review)
+    # Post-mutation guard: verify the score was computed successfully.
+    assert_article_has_score(a)
 
     return {"id": a.id, "title": a.title, "status": a.status, "commit_hash": commit_hash}

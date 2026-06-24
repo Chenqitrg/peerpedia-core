@@ -15,7 +15,7 @@ import pytest
 from sqlalchemy.orm import Session
 
 from peerpedia_core.exceptions import BadRequestError, NotAuthorizedError, NotFoundError
-from peerpedia_core.commands.merge import accept_merge, create_merge_proposal
+from peerpedia_core.commands.merge import accept_merge, create_merge_proposal, withdraw_merge_proposal
 from peerpedia_core.storage.db.crud_article import create_article, get_article
 from peerpedia_core.storage.db.crud_merge import create_merge_proposal as _db_create_mp
 from peerpedia_core.storage.db.engine import get_session
@@ -286,3 +286,46 @@ class TestCreateMergeProposal:
         assert mp.target_article_id == "art-original"
         assert mp.proposer_id == "alice"
         assert mp.status == "open"
+
+
+class TestWithdrawMergeProposal:
+    def test_withdraw_open_proposal(self, db):
+        """Proposer can withdraw their own open proposal."""
+        _create_user(db, "alice", "Alice")
+        _create_user(db, "bob", "Bob")
+
+        create_article(db, id="art-target", title="Target", authors=["bob"], status="published")
+        create_article(db, id="art-fork", title="Fork", authors=["alice"], status="draft")
+
+        mp = create_merge_proposal(db, "art-fork", "art-target", "alice")
+
+        result = withdraw_merge_proposal(db, mp.id, "alice")
+        assert result["status"] == "withdrawn"
+        assert result["id"] == mp.id
+
+    def test_withdraw_other_users_proposal_fails(self, db):
+        """Non-proposer cannot withdraw someone else's proposal."""
+        _create_user(db, "alice", "Alice")
+        _create_user(db, "bob", "Bob")
+
+        create_article(db, id="art-target", title="Target", authors=["bob"], status="published")
+        create_article(db, id="art-fork", title="Fork", authors=["alice"], status="draft")
+
+        mp = create_merge_proposal(db, "art-fork", "art-target", "alice")
+
+        with pytest.raises(NotAuthorizedError):
+            withdraw_merge_proposal(db, mp.id, "bob")
+
+    def test_withdraw_accepted_proposal_fails(self, db, articles_dir):
+        """Cannot withdraw a proposal that was already accepted."""
+        _create_user(db, "alice", "Alice")
+        _create_user(db, "bob", "Bob")
+
+        _build_article_with_repo(db, articles_dir, "art-target", ["bob"], status="published")
+        _build_article_with_repo(db, articles_dir, "art-fork", ["alice"], status="draft")
+
+        mp = create_merge_proposal(db, "art-fork", "art-target", "alice")
+        accept_merge(db, "art-target", mp.id, "bob")
+
+        with pytest.raises(BadRequestError, match="already"):
+            withdraw_merge_proposal(db, mp.id, "alice")

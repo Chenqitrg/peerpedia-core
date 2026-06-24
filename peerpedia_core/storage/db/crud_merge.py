@@ -59,6 +59,13 @@ def accept_merge_proposal(session: Session, proposal_id: str) -> MergeProposal:
 
 
 def reject_merge_proposal(session: Session, proposal_id: str) -> MergeProposal:
+    """Intentionally unwired — target maintainers cannot reject contributions."""
     return _resolve(session, proposal_id, "rejected")
 
 
+def withdraw_merge_proposal(session: Session, proposal_id: str) -> MergeProposal:
+    """Change a merge proposal status to ``withdrawn``.
+
+    Authorization (proposer-only) is enforced by the commands layer.
+    """
+    return _resolve(session, proposal_id, "withdrawn")

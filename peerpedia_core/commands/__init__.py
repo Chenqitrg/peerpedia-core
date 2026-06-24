@@ -80,8 +80,11 @@ from peerpedia_core.commands.maintainers import (
     list_maintainers,
     remove_maintainer_from_article,
 )
-from peerpedia_core.commands.merge import accept_merge, create_merge_proposal
+from peerpedia_core.commands.merge import accept_merge, create_merge_proposal, withdraw_merge_proposal
 from peerpedia_core.commands.reviews import get_reviews_for_article, submit_review
+from peerpedia_core.commands.shares import (
+    add_share, get_feed_shares, get_shares_for_user, remove_share,
+)
 from peerpedia_core.commands.bundle import apply_sync_bundle, assert_article_integrity, sync_reviews_from_worktree
 from peerpedia_core.commands.users import (
     create_user,
@@ -115,18 +118,35 @@ from peerpedia_core.commands.discover import (
     merge_bookmarks,
     merge_follows,
     merge_script_maintainers,
+    merge_shares,
     merge_users,
 )
 
-# TODO(citation-wiring): citation CRUD (crud_citation.py) is fully
-# implemented and tested (100% coverage), but never imported here or exposed
-# to CLI/HTTP.  Users cannot add citations, view an article's citation graph,
-# or see "cited by" chains.  The compiler does not resolve [@key] markers.
-# Wiring plan:
-#   1. Import get_cites / get_cited_by / create_or_update_citation here
-#   2. Add CLI commands: peerpedia citation add <from> <to>
-#   3. Add citation list to article show output
-#   4. Wire compiler to resolve [@key] → rendered references
+# TODO(citation-system): three independent subsystems, ordered by dependency:
+#
+#   1. BIB PARSING (SOT — git) — parse .bib files in article git repos.
+#      BibTeX parser that reads author/title/venue/year/key from a .bib
+#      file inside the article repo.  ADR-007: git is SOT for citation
+#      metadata.  The BibTeX key is the canonical @key reference.
+#      Needs: a bib parser module (storage/bib_parser.py or similar).
+#
+#   2. INLINE @key PARSING (compiler) — resolve @key citation markers in
+#      Markdown/Typst source.  @ prefix is the delimiter (no brackets).
+#      Distinguish from email addresses (name@domain.com has a dot after @).
+#      Parse @key → look up BibTeX entry → format rendered reference.
+#      Needs: compiler.py changes, regex/parser for @key detection.
+#
+#   3. PROBABILITY ACCUMULATION (DB cache) — forward_prob / backward_prob
+#      are graph-topology scores computed from click/view events.  Need a
+#      click-tracking mechanism: user reads article A → clicks citation to
+#      article B → P(A→B) increases.  Could use a read-event table
+#      (article_id, viewer_id, timestamp, referrer_article_id).  Only
+#      forward_prob / backward_prob live in DB — everything else is SOT
+#      in git.  Needs: event table, click endpoint, scoring function.
+#
+#   CRUD (crud_citation.py) is fully implemented and tested.  The missing
+#   pieces are all above it: bib parsing, @key resolution, probability
+#   accumulation.  Without those three, the Citation table is inert.
 # TODO(notification-system): there is no notification mechanism — no event
 # table, no polling endpoint, no push.  Users are unaware of: reviews on
 # their articles, merge proposals targeting their articles, new followers,
@@ -138,6 +158,9 @@ from peerpedia_core.config.paths import ARTICLES_DIR
 from peerpedia_core.storage.db import db_repl_setup as _db_repl_setup
 from peerpedia_core.storage.db.session_utils import db_session_scope as _db_session_scope
 from peerpedia_core.storage.db.crud_article import get_author_ids_batch, insert_article
+from peerpedia_core.storage.db.crud_alias import (
+    list_aliases, remove_alias, resolve_username_or_alias, set_alias,
+)
 from peerpedia_core.storage.db.crud_user import get_users_by_ids
 
 
@@ -178,7 +201,9 @@ def health_check(database_url: str) -> list[str]:
 __all__ = [
     "accept_merge",
     "add_bookmark",
+    "add_share",
     "db_session",
+    "withdraw_merge_proposal",
     "add_maintainer_to_article",
     "apply_sync_bundle",
     "assert_article_integrity",
@@ -194,10 +219,13 @@ __all__ = [
     "get_article_view",
     "get_author_ids",
     "get_author_ids_batch",
+    "get_feed_shares",
     "get_follower_views",
     "get_following_views",
+    "get_shares_for_user",
     "get_user_view",
     "get_users_by_ids",
+    "list_aliases",
     "get_followers",
     "get_following",
     "get_bookmarks_for_user",
@@ -214,18 +242,23 @@ __all__ = [
     "merge_bookmarks",
     "merge_follows",
     "merge_script_maintainers",
+    "merge_shares",
     "merge_users",
     "parse_frontmatter",
     "publish_article",
     "publish_ready_articles",
     "rebuild_article_authors",
+    "resolve_username_or_alias",
     "recalculate_all_reputations",
     "recompute_article_score",
     "recompute_author_reputation",
+    "remove_alias",
     "remove_bookmark",
+    "remove_share",
     "remove_maintainer_from_article",
     "rollback_article",
     "search_users",
+    "set_alias",
     "submit_review",
     "unfollow_user",
     "update_article_content",

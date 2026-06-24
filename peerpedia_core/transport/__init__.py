@@ -19,5 +19,9 @@ from peerpedia_core.transport.http_client import (
     push_article_repo,
     push_bundle,
     push_follow,
+    push_key_rotation,
+    push_share,
+    push_share_remove,
     push_unfollow,
+    fetch_shares,
 )

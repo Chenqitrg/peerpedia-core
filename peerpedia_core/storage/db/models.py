@@ -217,6 +217,45 @@ class Follow(Base):
     follower_id = Column(String, ForeignKey("users.id"), primary_key=True)
     followed_id = Column(String, ForeignKey("users.id"), primary_key=True)
     created_at = Column(DateTime, nullable=False, default=_utcnow)
+    deleted_at = Column(DateTime, nullable=True)  # soft-delete for unfollow propagation
+
+
+# ── Alias ───────────────────────────────────────────────────────────────────
+
+
+class Alias(Base):
+    """Local alias for a followed user — solves P2P name collision.
+
+    Each *owner* can assign a unique *alias* to any user they follow.
+    ``@alias`` resolves like ``@username`` but is locally scoped.
+    """
+    __tablename__ = "aliases"
+    __table_args__ = (UniqueConstraint("owner_id", "alias", name="uq_alias"),)
+
+    owner_id = Column(String, ForeignKey("users.id"), primary_key=True)
+    target_id = Column(String, ForeignKey("users.id"), primary_key=True)
+    alias = Column(String, nullable=False)
+
+
+# ── Share ────────────────────────────────────────────────────────────────────
+
+
+class Share(Base):
+    """Public share/forward — a user recommends an article to followers.
+
+    Unlike bookmarks (private), shares are visible to followers and can
+    be directed (@recipient).  This is the primary content-discovery and
+    moderation-signal mechanism.
+    """
+    __tablename__ = "shares"
+    __table_args__ = (UniqueConstraint("sharer_id", "article_id", name="uq_share"),)
+
+    id = Column(String, primary_key=True, default=_new_id)
+    sharer_id = Column(String, ForeignKey("users.id"), nullable=False)
+    article_id = Column(String, ForeignKey("articles.id"), nullable=False, index=True)
+    recipient_id = Column(String, ForeignKey("users.id"), nullable=True)
+    comment = Column(String, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=_utcnow)
 
 
 # ── Bookmark ─────────────────────────────────────────────────────────────
@@ -252,11 +291,22 @@ class MergeProposal(Base):
 
 
 class Citation(Base):
-    """Directed citation edge between two articles.  ``forward_prob`` estimates P(cited | cites)."""
+    """Directed citation edge between two articles.  ``forward_prob`` estimates P(cited | cites).
+
+    Citation metadata (author, title, venue, year) lives in a ``.bib`` file
+    inside the article's git repo — it is text, version-controlled, and
+    reconstructable.  Only the two computed probabilities (*forward_prob*,
+    *backward_prob*) need DB storage — they are graph-topology scores that
+    cannot be recalculated from source alone.  This follows ADR-007: git is
+    the SOT for content, DB caches only what cannot be reconstructed.
+    """
     __tablename__ = "citations"
     __table_args__ = (UniqueConstraint("from_article_id", "to_article_id", name="uq_citation"),)
 
     from_article_id = Column(String, ForeignKey("articles.id"), primary_key=True)
     to_article_id = Column(String, ForeignKey("articles.id"), primary_key=True, index=True)
+    # TODO(citation-probs): forward_prob / backward_prob are the ONLY fields
+    # that must live in DB.  Everything else (keys, authors, venues) should
+    # be reconstructed from the .bib file in git, not cached here.
     forward_prob = Column(Float, nullable=False, default=0.0)
     backward_prob = Column(Float, nullable=False, default=0.0)

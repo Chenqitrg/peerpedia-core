@@ -9,7 +9,7 @@ from peerpedia_core.storage.db import Session
 from peerpedia_core.config.params import params
 from peerpedia_core.exceptions import NotFoundError
 from peerpedia_core.frontmatter import make_article_frontmatter, strip_frontmatter
-from peerpedia_core.policies.articles import assert_can_edit_article
+from peerpedia_core.policies.articles import assert_can_edit_article, assert_not_folded
 from peerpedia_core.commands.integrity import assert_article_integrity
 from peerpedia_core.storage.db.crud_article import (
     get_article as _get_article,
@@ -17,7 +17,7 @@ from peerpedia_core.storage.db.crud_article import (
 )
 from peerpedia_core.storage.db.crud_maintainer import get_maintainer_ids
 from peerpedia_core.storage.db.crud_user import get_user
-from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, commit_article
+from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, commit_article, commit_status_marker
 from peerpedia_core.crypto import write_key_to_tempfile
 from peerpedia_core.commands.articles._helpers import rebuild_article_authors
 
@@ -44,6 +44,7 @@ def update_article_content(
     if a is None:
         raise NotFoundError("Article not found")
     mids = get_maintainer_ids(db, article_id)
+    assert_not_folded(a, threshold=params.reputation.fold_score_threshold)
     assert_can_edit_article(a, mids, user)
     old_status = a.status
     rp = DEFAULT_ARTICLES_DIR / article_id
@@ -88,12 +89,9 @@ def update_article_content(
     rebuild_article_authors(db, article_id, since_hash=a.last_author_rebuild_hash)
 
     if old_status == "published":
-        # TODO(G1): commit a "[status] sedimentation" marker commit *before*
-        # set_sink_start so integrity repair can detect a crash between the
-        # git write and the DB write.  Currently commit_article at L71 writes
-        # a plain message — if the process dies before L91, the DB stays
-        # "published" with unreviewed content in git and no [status] marker
-        # for _repair_from_git to find.
+        # G1: write a platform [status] marker so integrity repair can detect
+        # divergence if the process dies before set_sink_start.
+        commit_status_marker(rp, "sedimentation")
         set_sink_start(db, article_id, params.sink.edit_article_default_days)
 
     return {"id": a.id, "title": a.title, "status": a.status, "commit_hash": commit_hash}

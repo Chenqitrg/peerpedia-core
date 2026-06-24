@@ -425,6 +425,49 @@ class TestFollowCRUD:
             follow_user(session, a.id, a.id)
         session.close()
 
+    def test_unfollow_soft_deletes(self, engine):
+        """Unfollow sets deleted_at instead of hard-deleting the row."""
+        from peerpedia_core.storage.db.crud_user import (
+            create_user, follow_user, is_following, unfollow_user,
+        )
+        from peerpedia_core.storage.db.models import Follow
+
+        session = get_session(engine)
+        a = create_user(session, name="A", public_key="00" * 32)
+        b = create_user(session, name="B", public_key="00" * 32)
+        follow_user(session, a.id, b.id)
+        unfollow_user(session, a.id, b.id)
+
+        assert is_following(session, a.id, b.id) is False
+        # Row still exists with deleted_at set.
+        f = session.query(Follow).filter(
+            Follow.follower_id == a.id, Follow.followed_id == b.id,
+        ).first()
+        assert f is not None
+        assert f.deleted_at is not None
+        session.close()
+
+    def test_follow_restores_soft_deleted(self, engine):
+        """Follow after unfollow restores the soft-deleted row."""
+        from peerpedia_core.storage.db.crud_user import (
+            create_user, follow_user, is_following, unfollow_user,
+        )
+        from peerpedia_core.storage.db.models import Follow
+
+        session = get_session(engine)
+        a = create_user(session, name="A", public_key="00" * 32)
+        b = create_user(session, name="B", public_key="00" * 32)
+        follow_user(session, a.id, b.id)
+        unfollow_user(session, a.id, b.id)
+        follow_user(session, a.id, b.id)
+
+        assert is_following(session, a.id, b.id) is True
+        f = session.query(Follow).filter(
+            Follow.follower_id == a.id, Follow.followed_id == b.id,
+        ).first()
+        assert f.deleted_at is None  # restored
+        session.close()
+
 
 # ── Bookmark CRUD ────────────────────────────────────────────────────────
 

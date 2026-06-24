@@ -735,3 +735,37 @@ class TestClosedLoopSync:
         ingest_bundle(server_rp, client_bundle)
         with pytest.raises(gitmod.GitCommandError):
             server_repo.git.merge("FETCH_HEAD", "--ff-only")
+
+
+class TestCommitStatusMarker:
+    """Tests for ``commit_status_marker`` — platform [status] commits."""
+
+    def test_writes_platform_commit(self, articles_dir):
+        from peerpedia_core.storage.git_backend import (
+            commit_status_marker, init_article_repo, get_commit_history,
+        )
+
+        rp = init_article_repo(articles_dir / "test-status")
+        (rp / "article.md").write_text("content")
+        commit_article_signed(rp, "initial", "Author", "a@b.com")
+        h = commit_status_marker(rp, "sedimentation")
+
+        assert len(h) == 40
+        commits = list(get_commit_history(rp, max_count=1))
+        top = commits[0]
+        assert top["hash"] == h
+        assert "[status] sedimentation" in top["message"]
+        assert top["author_email"] == "system@peerpedia"
+        assert "PeerPedia" in top["author"]
+
+    def test_rejects_invalid_status(self, articles_dir):
+        from peerpedia_core.storage.git_backend import (
+            commit_status_marker, init_article_repo,
+        )
+
+        rp = init_article_repo(articles_dir / "test-status-bad")
+        (rp / "article.md").write_text("content")
+        commit_article_signed(rp, "initial", "Author", "a@b.com")
+
+        with pytest.raises(ValueError, match="Invalid status"):
+            commit_status_marker(rp, "garbaggio")

@@ -104,6 +104,36 @@ class TestMergeFollows:
         assert n == 1
         assert is_following(db, "alice", "carol")
 
+    def test_authoritative_deletes_missing(self, db):
+        """authoritative=True soft-deletes local follows not in remote list."""
+        _make_user(db, "alice", "Alice")
+        _make_user(db, "bob", "Bob")
+        _make_user(db, "carol", "Carol")
+        _make_user(db, "dave", "Dave")
+        # Local: alice follows bob, carol, dave
+        merge_follows(db, "alice", [{"id": "bob"}, {"id": "carol"}, {"id": "dave"}])
+
+        # Authoritative pull: remote only has bob and carol — dave is gone.
+        merge_follows(db, "alice", [{"id": "bob"}, {"id": "carol"}], authoritative=True)
+
+        assert is_following(db, "alice", "bob")
+        assert is_following(db, "alice", "carol")
+        assert not is_following(db, "alice", "dave"), "dave should be soft-deleted"
+
+    def test_non_authoritative_only_adds(self, db):
+        """authoritative=False never deletes local follows."""
+        _make_user(db, "alice", "Alice")
+        _make_user(db, "bob", "Bob")
+        _make_user(db, "carol", "Carol")
+        # Local: alice follows bob
+        merge_follows(db, "alice", [{"id": "bob"}])
+
+        # Non-authoritative pull: remote has carol but NOT bob.
+        merge_follows(db, "alice", [{"id": "carol"}], authoritative=False)
+
+        assert is_following(db, "alice", "bob"), "bob should still be followed"
+        assert is_following(db, "alice", "carol"), "carol should be added"
+
 
 # ── merge_article_meta ───────────────────────────────────────────────────────
 

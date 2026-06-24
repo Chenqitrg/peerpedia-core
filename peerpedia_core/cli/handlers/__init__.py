@@ -27,12 +27,17 @@ from peerpedia_core.cli.handlers.maintainers import (
 from peerpedia_core.cli.handlers.mother import _cmd_mother
 from peerpedia_core.cli.handlers.reviews import _cmd_review_list, _cmd_review_submit
 from peerpedia_core.cli.handlers.social import (
+    _cmd_alias_list,
+    _cmd_alias_remove,
+    _cmd_alias_set,
     _cmd_bookmark_add,
     _cmd_bookmark_remove,
     _cmd_follow_user, _cmd_followers, _cmd_following,
     _cmd_fork,
     _cmd_merge_accept,
     _cmd_merge_propose,
+    _cmd_merge_withdraw,
+    _cmd_share_add, _cmd_share_list, _cmd_share_remove,
     _cmd_unfollow_user,
 )
 from peerpedia_core.cli.handlers.server import _cmd_server_start

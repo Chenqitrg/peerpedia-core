@@ -50,15 +50,17 @@ from __future__ import annotations
 from peerpedia_core.storage.db import Session
 
 from peerpedia_core.config.params import params
-from peerpedia_core.exceptions import BadRequestError, NotFoundError
-from peerpedia_core.policies.articles import assert_can_accept_merge
+from peerpedia_core.exceptions import BadRequestError, NotAuthorizedError, NotFoundError
+from peerpedia_core.policies.articles import assert_can_accept_merge, assert_not_folded
 from peerpedia_core.storage.db.crud_article import get_article, get_author_ids, set_sink_start
 from peerpedia_core.storage.db.crud_maintainer import get_maintainer_ids
-from peerpedia_core.storage.db.crud_merge import accept_merge_proposal, get_merge_proposal
+from peerpedia_core.storage.db.crud_merge import (
+    accept_merge_proposal, get_merge_proposal, withdraw_merge_proposal as _withdraw,
+)
 from peerpedia_core.storage.db.crud_user import get_user
 from peerpedia_core.storage.db.crud_merge import create_merge_proposal as _create
 from peerpedia_core.storage.git_backend import (
-    DEFAULT_ARTICLES_DIR, MergeConflictError, commit_article,
+    DEFAULT_ARTICLES_DIR, MergeConflictError, commit_status_marker,
     get_head_hash, merge_git_repos,
 )
 
@@ -81,6 +83,9 @@ def accept_merge(db: Session, article_id: str, proposal_id: str, user_id: str) -
         raise NotFoundError("Article not found")
     mids = get_maintainer_ids(db, article_id)
     assert_can_accept_merge(article, mids, user)
+    assert_not_folded(article, threshold=params.reputation.fold_score_threshold)
+
+    was_published = article.status == "published"
 
     target_repo = DEFAULT_ARTICLES_DIR / article_id
     fork_repo = DEFAULT_ARTICLES_DIR / mp.fork_article_id
@@ -108,26 +113,11 @@ def accept_merge(db: Session, article_id: str, proposal_id: str, user_id: str) -
         # Record status transition in git so it survives P2P sync.
         # The merge itself is already committed — this is an empty commit
         # that marks the re-sedimentation triggered by the merge.
-        commit_article(
-            target_repo,
-            "[status] sedimentation",
-            "PeerPedia",
-            "system@peerpedia",
-            signing_key=None, pubkey_hex=None,
-            allow_empty=True,
-        )
+        commit_status_marker(target_repo, "sedimentation")
         set_sink_start(db, article_id, params.sink.edit_article_default_days)
 
     mp = accept_merge_proposal(db, proposal_id)
     head_hash = get_head_hash(target_repo)
-
-    # TODO(proposal-close): the proposal creator cannot withdraw/close their
-    # own proposal.  Only the target maintainer can accept; there is no
-    # decline or cancel path for the proposer.  The old system had
-    # reject_merge_proposal in CRUD (intentionally unwired — maintainers
-    # should not be able to dismiss contributions), but a proposer-side
-    # close/withdraw mechanism is missing entirely.  Closed proposals should
-    # be archived, not deleted.
 
     return {"id": article.id, "title": article.title, "status": article.status,
             "commit_hash": head_hash}
@@ -139,3 +129,28 @@ def accept_merge(db: Session, article_id: str, proposal_id: str, user_id: str) -
 def create_merge_proposal(db: Session, fork_id: str, target_id: str, proposer_id: str):
     """Create a merge proposal from a fork to its original article."""
     return _create(db, fork_id, target_id, proposer_id)
+
+
+def withdraw_merge_proposal(db: Session, proposal_id: str, user_id: str) -> dict:
+    """Withdraw a merge proposal — proposer only.
+
+    Raises ``NotAuthorizedError`` if *user_id* is not the proposer.
+    """
+    mp = get_merge_proposal(db, proposal_id)
+    if mp is None:
+        raise NotFoundError("Merge proposal not found")
+    if mp.proposer_id != user_id:
+        raise NotAuthorizedError(
+            f"Only the proposal creator can withdraw this proposal"
+        )
+
+    try:
+        _withdraw(db, proposal_id)
+    except ValueError as e:
+        raise BadRequestError(str(e)) from e
+    return {
+        "id": mp.id,
+        "status": "withdrawn",
+        "fork_article_id": mp.fork_article_id,
+        "target_article_id": mp.target_article_id,
+    }

@@ -56,7 +56,7 @@ from peerpedia_core.config.params import params
 from peerpedia_core.storage.db.crud_article import get_article, get_articles_by_author, get_author_ids, list_articles, update_article_score, update_article_status
 from peerpedia_core.storage.db.crud_review import get_reviews_for_article, upsert_review
 from peerpedia_core.storage.db.crud_user import get_user, get_users_by_ids, list_users, update_user_reputation
-from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, commit_article
+from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, commit_article, commit_status_marker
 from peerpedia_core.types.scores import ReputationScores
 from peerpedia_core.workflow.reputation import (
     blend_reputation,
@@ -117,14 +117,7 @@ def publish_ready_articles(db: Session) -> int:
         # so the published status survives sync.
         rp = DEFAULT_ARTICLES_DIR / article.id
         if (rp / ".git").is_dir():
-            commit_article(
-                rp,
-                "[status] published",
-                "PeerPedia",
-                "system@peerpedia",
-                signing_key=None, pubkey_hex=None,
-                allow_empty=True,
-            )
+            commit_status_marker(rp, "published")
 
         # Then DB.
         update_article_status(db, article.id, "published")
@@ -165,6 +158,7 @@ def recompute_article_score(db: Session, article_id: str) -> dict | None:
     # Batch-load all reviewer users in one query
     reviewer_ids = {r.reviewer_id for r in all_reviews}
     reviewer_users = get_users_by_ids(db, reviewer_ids)
+
     user_weight_map: dict[str, float] = {}
     for u in reviewer_users:
         user_weight_map[u.id] = get_reviewer_weight(u.reputation if u.reputation else None)

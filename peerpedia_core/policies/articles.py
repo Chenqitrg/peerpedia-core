@@ -12,10 +12,13 @@ Every function takes pre-fetched data (Article, author_ids, maintainer_ids)
 and either returns the article or raises a semantic exception.  The caller
 (``commands/``) is responsible for fetching data before calling.
 
-TODO(moderation): users cannot delete published articles by design
-(influence is irreversible), but there is no platform-level moderation
-layer to remove illegal/harmful content.  Needs: admin role, article
-hide/delete by admin, report mechanism, content review workflow.
+Moderation model (reputation-weighted, no roles):
+  - High-reputation reviewers naturally have more influence via
+    get_reviewer_weight() — no special admin override.
+  - Articles with score < fold_score_threshold are frozen (no reviews,
+    edits, forks, or publishing).  See also assert_not_folded() below.
+  - Discovery path: share/forward to high-reputation users (TODO).
+    No separate report table — forwarding is the signal.
 
 Permission matrix
 -----------------
@@ -127,6 +130,30 @@ def _assert_maintainer(
 # ═══════════════════════════════════════════════════════════════════════════════
 # Read permissions
 # ═══════════════════════════════════════════════════════════════════════════════
+
+
+# ── Fold (moderation) ────────────────────────────────────────────────────────
+
+
+def assert_not_folded(article, *, threshold: float = 1.0) -> None:
+    """Raise ``NotAuthorizedError`` if the article's average score < *threshold*.
+
+    A folded article is frozen — no reviews, edits, forks, or other
+    interactions are allowed.  The caller provides the threshold from
+    configuration so this module stays free of config imports.
+    """
+    if article.score is None:
+        return
+    scores = article.score
+    if isinstance(scores, dict):
+        avg = sum(scores.values()) / len(scores) if scores else 0.0
+    else:
+        avg = float(scores)
+    if avg < threshold:
+        raise NotAuthorizedError(
+            "This article has been folded — "
+            "interactions are disabled due to low score."
+        )
 
 
 def assert_can_read_article(
@@ -278,6 +305,44 @@ def assert_can_fork_article(
 # ═══════════════════════════════════════════════════════════════════════════════
 # Publish — self-review gate
 # ═══════════════════════════════════════════════════════════════════════════════
+
+# Abbreviated keys (CLI input) and full-name keys (internal representation).
+# Must mirror SCORE_DIMENSIONS in peerpedia_core.types.scores — hardcoded
+# here because this module is architecturally restricted to importing only
+# models + exceptions (see test_policies_only_imports_models_and_exceptions).
+# If dimensions change, update both places.
+_FULL_DIMS = {"originality", "rigor", "completeness", "pedagogy", "impact"}
+_ABBR_DIMS = {"orig", "rigor", "comp", "ped", "imp"}
+
+
+def validate_self_review_scores(self_review: dict) -> None:
+    """Validate self-review scores BEFORE any mutations.
+
+    Must be called before ``write_review_to_git`` so a bad request fails
+    with zero side effects.
+    """
+    if not isinstance(self_review, dict):
+        raise BadRequestError("self_review must be a dict")
+    keys = set(self_review.keys())
+    if not (_ABBR_DIMS.issubset(keys) or _FULL_DIMS.issubset(keys)):
+        raise BadRequestError(
+            "self_review must contain all 5 dimensions: "
+            "orig, rigor, comp, ped, imp"
+        )
+    for dim, val in self_review.items():
+        if not isinstance(val, (int, float)) or val < 1 or val > 5:
+            raise BadRequestError(
+                f"self_review dimension '{dim}' must be a number between 1 and 5, got {val!r}"
+            )
+
+
+def assert_article_has_score(article) -> None:
+    """Assert the article has a score after score recomputation.
+
+    Must be called AFTER ``recompute_article_score``.
+    """
+    if article.score is None:
+        raise BadRequestError("Article must have a score before publishing")
 
 
 def require_self_review_for_publish(

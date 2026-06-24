@@ -63,6 +63,7 @@ from pathlib import Path
 import git
 
 from peerpedia_core.config.git import make_article_gitignore, ssh_sign_env, ssh_verify_env
+from peerpedia_core.config.params import PLATFORM_EMAIL
 from peerpedia_core.config.paths import ARTICLES_DIR as DEFAULT_ARTICLES_DIR
 
 
@@ -143,7 +144,9 @@ def commit_article(
         )
 
     # Fail fast: all non-platform commits must be signed.
-    if author_email != "system@peerpedia" and (signing_key is None or not pubkey_hex):
+    # Platform commits (author_email == PLATFORM_EMAIL) are exempt — they
+    # carry no user signature.
+    if author_email != PLATFORM_EMAIL and (signing_key is None or not pubkey_hex):
         raise ValueError(
             "signing_key and pubkey_hex are required for non-platform commits"
         )
@@ -185,6 +188,36 @@ def commit_article(
         )
 
     return repo.head.commit.hexsha
+
+
+def commit_status_marker(repo_path: Path, status: str) -> str:
+    """Write a platform ``[status]`` marker commit for integrity tracking.
+
+    Platform commits use ``author_name="PeerPedia"`` and
+    ``author_email=PLATFORM_EMAIL`` so ``_read_status_from_git`` can
+    distinguish them from user-authored commits.
+
+    This is the single source of truth for status marker commits —
+    callers (update, rollback, merge) use this instead of constructing
+    the platform commit inline, guaranteeing the correct author/email
+    are always used.
+
+    Raises ``ValueError`` if *status* is not a known article status.
+    """
+    _VALID = {"draft", "sedimentation", "published"}
+    if status not in _VALID:
+        raise ValueError(
+            f"Invalid status {status!r}, must be one of {sorted(_VALID)}"
+        )
+    return commit_article(
+        repo_path,
+        f"[status] {status}",
+        "PeerPedia",
+        PLATFORM_EMAIL,
+        signing_key=None,
+        pubkey_hex=None,
+        allow_empty=True,
+    )
 
 
 def _write_ssh_pubkey(private_key_path: Path, pub_path: Path) -> None:

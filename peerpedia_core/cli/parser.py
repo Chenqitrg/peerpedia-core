@@ -16,6 +16,7 @@ from peerpedia_core.cli.handlers import (
     _cmd_article_list,
     _cmd_article_publish, _cmd_article_scan,
     _cmd_article_show,
+    _cmd_alias_list, _cmd_alias_remove, _cmd_alias_set,
     _cmd_bookmark_add, _cmd_bookmark_remove,
     _cmd_follow_user, _cmd_followers, _cmd_following, _cmd_unfollow_user,
     _cmd_compile,
@@ -24,7 +25,8 @@ from peerpedia_core.cli.handlers import (
     _cmd_login,
     _cmd_recover,
     _cmd_maintainer_add, _cmd_maintainer_list, _cmd_maintainer_remove,
-    _cmd_merge_accept, _cmd_merge_propose,
+    _cmd_merge_accept, _cmd_merge_propose, _cmd_merge_withdraw,
+    _cmd_share_add, _cmd_share_list, _cmd_share_remove,
     _cmd_mother,
     _cmd_register,
     _cmd_review_list, _cmd_review_submit,
@@ -139,6 +141,32 @@ COMMAND_GROUPS = [
             (("proposal_id",), {"help": "Merge proposal ID"}),
             (("--target",), {"required": True, "help": "Target article ID"}),
         ]),
+        ("withdraw", _cmd_merge_withdraw, [
+            (("proposal_id",), {"help": "Merge proposal ID to withdraw"}),
+        ]),
+    ]),
+    ("alias", "Set or manage aliases for followed users", [
+        ("set", _cmd_alias_set, [
+            (("user_identifier",), {"help": "User ID, @name, or UUID prefix"}),
+            (("alias",), {"help": "Alias to assign"}),
+        ]),
+        ("remove", _cmd_alias_remove, [
+            (("user_identifier",), {"help": "User ID, @name, or UUID prefix"}),
+        ]),
+        ("list", _cmd_alias_list, []),
+    ]),
+    ("share", "Share or recommend articles to followers", [
+        ("add", _cmd_share_add, [
+            (("article_id",), {"help": "Article ID to share"}),
+            (("--to",), {"help": "Target user (@name, @alias, or UUID)"}),
+            (("--comment",), {"help": "Optional comment on the share"}),
+        ]),
+        ("list", _cmd_share_list, [
+            (("--mine",), {"action": "store_true", "help": "Show my shares instead of feed"}),
+        ]),
+        ("remove", _cmd_share_remove, [
+            (("article_id",), {"help": "Article ID to unshare"}),
+        ]),
     ]),
     ("bookmark", None, [
         ("add", _cmd_bookmark_add, [
@@ -242,12 +270,10 @@ def build_parser() -> argparse.ArgumentParser:
     # TODO(ux-history): no browsing history — after reading an article, there is
     #   no record of what you've read.  Add a read-history log so users can
     #   revisit recently-viewed articles and avoid losing track of papers.
-    # TODO(social-share): no way to recommend articles — users can bookmark
-    #   but bookmarks are private.  Add ``peerpedia share <article_id>`` that
-    #   posts article metadata to the user's profile so followers see the
-    #   recommendation and can pull the full text from the source peer.
-    #   Unlike fork (creates a copy), share is a pointer — followers fetch
-    #   from the original source.
+    # Share/forward is implemented (crud_share.py, commands/shares.py,
+    #   cli/handlers/social.py — peerpedia share add/list/remove).
+    #   TODO(share-p2p): push shares to servers so followers on other peers
+    #   can see shares in their feed.  Currently shares are local-only.
     import importlib.metadata
 
     try:

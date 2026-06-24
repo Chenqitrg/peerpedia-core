@@ -16,6 +16,7 @@ import json
 import logging
 
 from sqlalchemy import Engine, create_engine, text
+from sqlalchemy import exc as sa_exc
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 from sqlalchemy.types import Text, TypeDecorator
 
@@ -103,6 +104,23 @@ def migrate_db(engine: Engine) -> None:
     _log = logging.getLogger(__name__)
     _migrations = [
         "ALTER TABLE articles ADD COLUMN witnessed_at DATETIME",
+        "ALTER TABLE follows ADD COLUMN deleted_at DATETIME",
+        "CREATE TABLE IF NOT EXISTS aliases ("
+        "  owner_id TEXT NOT NULL REFERENCES users(id),"
+        "  target_id TEXT NOT NULL REFERENCES users(id),"
+        "  alias TEXT NOT NULL,"
+        "  PRIMARY KEY (owner_id, target_id),"
+        "  UNIQUE (owner_id, alias)"
+        ")",
+        "CREATE TABLE IF NOT EXISTS shares ("
+        "  id TEXT PRIMARY KEY,"
+        "  sharer_id TEXT NOT NULL REFERENCES users(id),"
+        "  article_id TEXT NOT NULL REFERENCES articles(id),"
+        "  recipient_id TEXT REFERENCES users(id),"
+        "  comment TEXT,"
+        "  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,"
+        "  UNIQUE (sharer_id, article_id)"
+        ")",
     ]
     with engine.connect() as conn:
         for sql in _migrations:
@@ -110,8 +128,13 @@ def migrate_db(engine: Engine) -> None:
                 conn.execute(text(sql))
                 conn.commit()
                 _log.info("Migration applied: %s", sql)
-            except Exception:
-                # Column already exists — no DDL for IF NOT EXISTS in SQLite
+            except sa_exc.OperationalError as e:
+                # SQLite has no IF NOT EXISTS for ALTER TABLE ADD COLUMN.
+                # Only suppress duplicate-column errors; re-raise anything
+                # else (syntax errors, FK violations, etc.) to fail fast.
+                msg = str(e).lower()
+                if "duplicate column" not in msg and "already exists" not in msg:
+                    raise
                 conn.rollback()
 
 

@@ -8,7 +8,7 @@ from __future__ import annotations
 from peerpedia_core.storage.db import Session
 from peerpedia_core.config.params import params
 from peerpedia_core.exceptions import NotFoundError
-from peerpedia_core.policies.articles import assert_can_rollback_article
+from peerpedia_core.policies.articles import assert_can_rollback_article, assert_not_folded
 from peerpedia_core.commands.integrity import assert_article_integrity
 from peerpedia_core.storage.db.crud_article import (
     get_article as _get_article,
@@ -20,6 +20,7 @@ from peerpedia_core.storage.git_backend import (
     DEFAULT_ARTICLES_DIR,
     checkout_files,
     commit_article,
+    commit_status_marker,
     get_head_hash,
     is_repo_dirty,
 )
@@ -49,6 +50,7 @@ def rollback_article(
         raise NotFoundError("Article not found")
     mids = get_maintainer_ids(db, article_id)
     assert_can_rollback_article(article, mids, user)
+    assert_not_folded(article, threshold=params.reputation.fold_score_threshold)
     old_status = article.status
     rp = DEFAULT_ARTICLES_DIR / article_id
     if not (rp / ".git").is_dir():
@@ -67,11 +69,6 @@ def rollback_article(
     try:
         new_hash = commit_article(
             rp,
-            # TODO(G3): use "[status] sedimentation" marker message instead
-            # of a plain message.  This is the only command that changes a
-            # published article's content without writing a [status] commit.
-            # If the process dies at L76 (set_sink_start), integrity repair
-            # has no marker to detect the divergence.
             f"Rollback to {target_hash[:8]}",
             user.name, f"{user_id}@peerpedia",
             signing_key=key_path, pubkey_hex=pubkey_hex,
@@ -79,7 +76,10 @@ def rollback_article(
     finally:
         key_path.unlink(missing_ok=True)
 
+    # G3: write a platform [status] marker so integrity repair can detect
+    # divergence if the process dies before set_sink_start.
     if old_status == "published":
+        commit_status_marker(rp, "sedimentation")
         set_sink_start(db, article_id, params.sink.edit_article_default_days)
 
     rebuild_article_authors(db, article_id)

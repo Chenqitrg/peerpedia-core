@@ -1,11 +1,16 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""Social discovery server handlers — pure logic, no HTTP.
+"""Social graph server handlers — pure logic, no HTTP.
 
-Called by the routing layer in ``transport/http_server.py`` (start with
-``peerpedia server start``).  Thin wrappers around ``commands/`` —
-the server layer never touches DB directly.
+Called by ``transport/routes/users.py``.  Every function is a thin wrapper
+around a ``commands/`` function — this layer never touches DB directly::
+
+    get_following / get_followers   → commands.get_following / get_followers
+    get_articles                    → commands.list_articles
+    get_bookmarks                   → commands.get_bookmarks_for_user
+    handle_follow / handle_unfollow → commands.follow_user / unfollow_user
+    handle_bookmark                 → commands.add_bookmark
 """
 
 from __future__ import annotations

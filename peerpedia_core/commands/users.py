@@ -1,7 +1,11 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""User operations -- thin wrappers so CLI doesn't import storage/db directly."""
+"""User operations — follow/unfollow, profile queries.
+
+Redirects to ``storage/db/crud_user.py`` via the commands facade so
+CLI and routes never import storage/db directly.
+"""
 
 from __future__ import annotations
 

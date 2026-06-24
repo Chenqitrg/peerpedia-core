@@ -3,9 +3,16 @@
 
 """Social discovery orchestration — fetch-then-merge.
 
-Transport-agnostic: imports from ``transport/`` (the facade), not from
-``transport/http_client`` directly.  Switching from HTTP to P2P only requires
-changing ``transport/__init__.py``.
+Each ``discover_*`` function: (1) fetches data from a peer server via the
+``transport/`` facade, (2) merges it into the local DB via ``commands/discover``.
+Transport-agnostic — switching from HTTP to P2P only requires changing
+``transport/__init__.py``::
+
+    discover_following   → fetch_following  → merge_follows
+    discover_followers   → fetch_followers  → merge_follows
+    discover_articles    → fetch_user_articles  → merge_article_meta
+
+``discover_bookmarks`` was removed — bookmarks are private, not social graph data.
 """
 
 from __future__ import annotations

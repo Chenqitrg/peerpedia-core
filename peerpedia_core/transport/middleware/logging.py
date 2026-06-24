@@ -1,7 +1,12 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""Request audit logging middleware."""
+"""Request audit logging middleware.
+
+Logs every request: method, path, status code, and duration in ms.
+Also attaches a ``Server-Time`` header (Unix timestamp) to every response
+for client-side clock sync verification.
+"""
 
 import logging
 import time

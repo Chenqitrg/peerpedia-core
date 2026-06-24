@@ -1,7 +1,11 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""Simple in-memory rate limiter — per-IP, sliding-window."""
+"""Simple in-memory rate limiter — per-IP, sliding-window.
+
+Defaults: 60 requests per 10‑second window per client IP.
+Returns ``429`` when exceeded.  State is in-memory — restart clears all.
+"""
 
 import time
 from collections import defaultdict

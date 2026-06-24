@@ -1,7 +1,19 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""Social discovery merge — DB writes for metadata pulled from peers.
+"""Merge functions for P2P social graph exchange.
+
+Called by ``social/exchange.py`` (fetch-then-merge orchestration).
+Each function takes a list of dicts from a remote peer and merges them
+into the local DB — inserting new rows, skipping duplicates::
+
+    merge_users             — create User rows for newly discovered peers
+    merge_follows           — insert Follow rows for a user's social graph
+    merge_article_meta      — insert Article rows for discovered articles
+    merge_bookmarks         — insert Bookmark rows (deprecated, kept for compat)
+    merge_script_maintainers— insert maintainer rows from sync
+
+""""""Social discovery merge — DB writes for metadata pulled from peers.
 
 Pure DB operations — no HTTP, no git.  Only imports from ``storage/db/``.
 """

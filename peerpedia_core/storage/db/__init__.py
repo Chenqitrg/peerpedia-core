@@ -11,6 +11,7 @@ from peerpedia_core.storage.db.engine import (  # noqa: F401 — facade re-expor
     get_engine,
     get_session,
     init_db,
+    migrate_db,
 )
 from peerpedia_core.storage.db.session_utils import db_session_scope as _db_session_scope
 
@@ -21,12 +22,14 @@ def db_session(database_url: str):
 
 
 def db_repl_setup(database_url: str):
-    """Set up the database for a long-lived REPL session.
+    """Set up the database for a long-lived REPL or server session.
 
-    Returns (engine, session).  The caller owns the session lifecycle —
-    it must call session.close() when done.
+    Creates tables, applies migrations.  Returns (engine, session).
+    The caller owns the session lifecycle — it must call session.close()
+    when done.
     """
     engine = get_engine(database_url)
     init_db(engine)
+    migrate_db(engine)
     session = get_session(engine)
     return engine, session

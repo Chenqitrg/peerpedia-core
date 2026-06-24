@@ -3,13 +3,26 @@
 
 """Ed25519 request-signing auth middleware.
 
-Authenticated requests carry ``Authorization: Peerpedia <uid>:<ts>:<sig>``.
-The middleware verifies the signature against the user's Ed25519 public key
-(loaded from the local DB via the DB session middleware, which runs first).
+Every authenticated request carries an ``Authorization`` header::
 
-Public routes (no auth required):
-    ``/health``, bundle sync endpoints (authenticated via commit signatures
-    on the git objects themselves), and first-time article push.
+    Peerpedia <user_id>:<timestamp>:<body_sha256_hex>:<signature_hex>
+
+The signature covers ``<method>:<path>:<user_id>:<ts>:<body_hash>``.
+The body hash prevents tampering — replaying a signed header with a
+different body will fail verification.  For GET requests, body_hash is "".
+
+This middleware runs AFTER ``DBSessionMiddleware`` so ``request.state.db``
+is available to look up the user's public key.  On success,
+``request.state.user_id`` is set for downstream handlers.
+
+Public routes (no auth required)
+    Bundle sync endpoints — authenticated via Ed25519 commit signatures
+    on the git objects themselves:
+    ``/health``, ``/head``, ``/bundle``, ``/sync``, ``/ancestor/**``,
+    ``/repo``.
+
+If a public key is not found for the claimed user, or the signature is
+invalid, returns ``401 {"error": "Authentication required"}``.
 """
 
 from starlette.middleware.base import BaseHTTPMiddleware

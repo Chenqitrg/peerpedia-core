@@ -1,7 +1,24 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""Article bundle routes — git sync endpoints."""
+"""Article routes — git bundle sync + content + search + history.
+
+Every handler is a thin wrapper: parse HTTP input → delegate to
+``bundle/server`` or ``commands/`` → return JSON / binary response.
+
+Route summary (see ``http_server.py`` docstring for the full table)::
+
+    GET  /api/v1/articles/{id}              → _article        metadata
+    GET  /api/v1/articles/{id}/head         → _head           git HEAD hash
+    GET  /api/v1/articles/{id}/bundle?since=→ _bundle         git bundle bytes
+    POST /api/v1/articles/{id}/sync         → _sync           apply bundle
+    GET  /api/v1/articles/{id}/ancestor/{h} → _ancestor       is-ancestor probe
+    POST /api/v1/articles                   → _push_article   first-time upload
+    GET  /api/v1/articles/{id}/repo         → _repo           first-time download
+    GET  /api/v1/articles/{id}/history      → _history        commit log
+    GET  /api/v1/articles/{id}/source       → _source         markdown/typst text
+    GET  /api/v1/search?q=&status=          → _search         article search
+"""
 
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response

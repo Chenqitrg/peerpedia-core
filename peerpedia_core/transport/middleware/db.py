@@ -1,7 +1,15 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""DB session middleware — creates a SQLite session per request."""
+"""DB session middleware — creates a SQLite session per request.
+
+Runs BEFORE ``AuthMiddleware`` so auth can look up the user's public key.
+Skips session creation for git-only routes (head, bundle, ancestor, repo)
+to avoid wasting connections on operations that only touch the filesystem.
+
+TODO(infra): URL prefix/suffix matching is fragile.  Use explicit route
+metadata to declare DB dependency per-route instead.
+""""""DB session middleware — creates a SQLite session per request."""
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request

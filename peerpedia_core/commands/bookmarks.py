@@ -1,7 +1,11 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""Bookmark operations -- thin wrappers so CLI doesn't import storage/db directly."""
+"""Bookmark operations — local-only reading list.
+
+Bookmarks are private — not pushed to servers or visible to followers.
+Use ``share`` (TODO) for public recommendations.
+"""
 
 from __future__ import annotations
 

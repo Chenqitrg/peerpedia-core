@@ -1,7 +1,19 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""Social/user routes — social graph endpoints."""
+"""User routes — social graph (following / followers / articles).
+
+Every handler reads/writes the DB through ``social/server`` functions.
+All routes require auth (Ed25519 signature via ``AuthMiddleware``)::
+
+    GET  /api/v1/users/{id}/following  → _following    who this user follows
+    GET  /api/v1/users/{id}/followers  → _followers    who follows this user
+    GET  /api/v1/users/{id}/articles   → _articles     articles by this user
+    POST /api/v1/users/{id}/follow     → _follow       follow a user
+    POST /api/v1/users/{id}/unfollow   → _unfollow     unfollow a user
+
+Bookmark routes were removed — bookmarks are local-only, not shared.
+"""
 
 from starlette.requests import Request
 from starlette.responses import JSONResponse

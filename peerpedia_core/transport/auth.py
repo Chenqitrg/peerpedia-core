@@ -1,19 +1,35 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""Ed25519 request signing — challenge-free auth matching commit signing.
+"""Ed25519 request signing — the same key pair used for git commit signing.
 
-Every authenticated request carries an ``Authorization: Peerpedia`` header::
+No passwords, no JWT, no separate registration.  A user's Ed25519 identity
+is derived once from password+salt at registration, stored as ``public_key``
+in the DB, and used for both commit signing AND HTTP request signing.
 
-    Peerpedia <user_id>:<ts>:<body_sha256_hex>:<signature_hex>
+API
+---
+Client side (called by CLI before each network request)::
 
-The signature covers ``<method>:<path>:<user_id>:<ts>:<body_hash>``.  The
-body hash prevents tampering — an attacker can't replay a signed header
-with a different body.  For GET requests, the body hash is "".  The server
-looks up the user's public key and verifies the signature.
+    sign_auth_header(method, path, user_id, private_key_bytes, *, body=b"")
+        → "Peerpedia <uid>:<ts>:<body_hash>:<sig_hex>"
 
-This is the same Ed25519 key pair used for git commit signing — no separate
-password or JWT needed.
+Server side (called by AuthMiddleware)::
+
+    verify_auth_header(header, method, path, public_key_hex, *, body=b"")
+        → user_id (str) if valid, None if invalid
+
+Format
+------
+The ``Authorization`` header value has 4 colon-separated fields::
+
+    Peerpedia <user_id>:<unix_timestamp>:<body_sha256_hex>:<signature_hex>
+
+The signature covers ``<method>:<path>:<user_id>:<ts>:<body_hash>``.
+Timestamp must be within ±30s of server time (replay window).
+Body hash is SHA-256 hex, or "" for GET/empty requests.
+
+Backward-compatible with the 3-field format (no body hash) for GET requests.
 """
 
 from __future__ import annotations

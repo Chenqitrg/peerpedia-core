@@ -1,7 +1,12 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""Shared utilities used by route handlers."""
+"""Shared utilities used by route handlers.
+
+Currently only ``_validate_id`` — rejects non-UUID path parameters
+to prevent path traversal attacks.  All article/user route handlers
+call this before touching the filesystem or DB.
+"""
 
 import re
 

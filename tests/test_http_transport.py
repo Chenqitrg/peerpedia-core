@@ -10,7 +10,7 @@ import pytest
 
 from peerpedia_core.exceptions import TransportError
 from peerpedia_core.transport.http_client import (
-    fetch_articles,
+    fetch_user_articles,
     fetch_followers,
     fetch_following,
 )
@@ -56,12 +56,12 @@ class TestFetchArticles:
         mock_resp = httpx.Response(200, json=[])
         with patch("peerpedia_core.transport.http_client.httpx.get") as mock_get:
             mock_get.return_value = mock_resp
-            fetch_articles("http://peer:8080", "alice", limit=5, offset=10)
+            fetch_user_articles("http://peer:8080", "alice", limit=5, offset=10)
             call_kwargs = mock_get.call_args.kwargs
             assert call_kwargs["params"] == {"limit": 5, "offset": 10}
 
     def test_success(self):
         mock_resp = httpx.Response(200, json=[{"id": "art-1", "title": "Paper", "status": "published"}])
         with patch("peerpedia_core.transport.http_client.httpx.get", return_value=mock_resp):
-            result = fetch_articles("http://peer:8080", "alice")
+            result = fetch_user_articles("http://peer:8080", "alice")
         assert result == [{"id": "art-1", "title": "Paper", "status": "published"}]

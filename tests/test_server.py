@@ -105,7 +105,7 @@ def test_ancestor_article_not_found(client):
     assert resp.status_code == 404
 
 
-def test_post_article_missing_id(client):
+def test_push_article_repo_handler_missing_id(client):
     """POST /articles with empty body → 400."""
     resp = client.post("/api/v1/articles", json={})
     assert resp.status_code == 400

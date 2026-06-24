@@ -168,7 +168,7 @@ def apply_sync_bundle(
 
     The caller must have already called ``ingest_bundle`` to verify + fetch
     objects into the repo.  This function only does the merge and DB
-    reconciliation.  It does NOT import from ``sync/``.
+    reconciliation.  It does NOT import from ``bundle/`` or ``transport/``.
 
     After merge: syncs reviews from git, recomputes article score, and
     triggers publish_ready_articles to catch any newly-publishable articles.

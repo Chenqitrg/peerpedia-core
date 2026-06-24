@@ -40,7 +40,6 @@ def _print_panel(title: str, content: str, style: str = "info") -> None:
 def _print_table(headers: list[str], rows: list[list[str]], title: str | None = None) -> None:
     """Show a list as a table."""
     table = Table(title=title, border_style="muted")
-    # TODO(perf): original headers.index(h) was O(n²); fixed with enumerate.
     for i, h in enumerate(headers):
         table.add_column(h, style="bold" if i == 0 else "")
     for row in rows:

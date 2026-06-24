@@ -174,14 +174,14 @@ class TestDiscoverOrchestration:
     def test_articles_none_raises(self, db):
         """None from fetch (not found) → ProtocolError (fail fast)."""
         _make_user(db, "alice", "Alice")
-        with patch("peerpedia_core.social.exchange.fetch_articles", return_value=None):
+        with patch("peerpedia_core.social.exchange.fetch_user_articles", return_value=None):
             with pytest.raises(ProtocolError, match="returned None"):
                 discover_articles(db, "http://peer:8080", "alice")
 
     def test_articles_raises_on_transport_error(self, db):
         """TransportError from fetch → ConnectionError propagated."""
         _make_user(db, "alice", "Alice")
-        with patch("peerpedia_core.social.exchange.fetch_articles",
+        with patch("peerpedia_core.social.exchange.fetch_user_articles",
                    side_effect=TransportError("timeout")):
             with pytest.raises(ConnectionError, match="Failed to fetch articles"):
                 discover_articles(db, "http://peer:8080", "alice")

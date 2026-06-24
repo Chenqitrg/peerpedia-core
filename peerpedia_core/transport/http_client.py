@@ -13,18 +13,21 @@ Functions -- each mirrors a server endpoint
 fetch_head(server, article_id) -> str | None
     GET /api/v1/articles/{id}/head -> server's HEAD hash, or None if 404.
 
-push_bundle(server, article_id, bundle_bytes) -> str
+push_bundle(server, article_id, bundle_bytes) -> None
     POST /api/v1/articles/{id}/sync with raw bundle bytes.
-    Returns "ok", "conflict", or "error".
+    Raises ConflictError on 409 (history diverged).
 
-fetch_bundle(server, article_id, since_hash) -> bytes | None
-    GET /api/v1/articles/{id}/bundle?since=<hash> -> raw bundle bytes.
+pull_article_repo(server, article_id) -> bytes | None
+    GET /api/v1/articles/{id}/bundle (no since) -> full bundle for first clone.
+
+fetch_incremental_bundle(server, article_id, since_hash) -> bytes | None
+    GET /api/v1/articles/{id}/bundle?since=<hash> -> incremental bundle bytes.
 
 ancestor_probe(server, article_id) -> Callable[[str], bool]
     Returns a probe function for ``find_common_ancestor``.
     GET /api/v1/articles/{id}/ancestor/{hash} -> boolean.
 
-post_article(server, article_id, bundle_b64) -> bool
+push_article_repo(server, article_id, bundle_b64) -> bool
     POST /api/v1/articles (first-time push).  Payload is base64-encoded
     tar.gz of the entire article repo.
 
@@ -46,7 +49,7 @@ import json
 
 import httpx
 
-from peerpedia_core.exceptions import ProtocolError, TransportError
+from peerpedia_core.exceptions import ConflictError, ProtocolError, TransportError
 
 # TODO(perf): every function uses standalone httpx.get/post() — no connection
 # pooling.  Each sync_article cycle makes up to 14 HTTP calls, each paying
@@ -86,26 +89,33 @@ def fetch_head(server: str, article_id: str) -> str | None:
     """
     try:
         resp = httpx.get(f"{_api_url(server, article_id)}/head", timeout=30)
-        if resp.status_code == 200:
-            # TODO(perf): resp.json() parses full JSON for a single field.
-            # Use resp.text and simple extraction for the "hash" value.
-            try:
-                return resp.json().get("hash")
-            except json.JSONDecodeError as e:
-                raise ProtocolError(
-                    f"Malformed JSON from {server} for {article_id}/head"
-                ) from e
     except httpx.HTTPError as e:
         raise TransportError(
             f"fetch_head failed for {article_id} at {server}: {e}"
         ) from e
-    return None
+
+    if resp.status_code == 200:
+        try:
+            return resp.json().get("hash")
+        except json.JSONDecodeError as e:
+            raise ProtocolError(
+                f"Malformed JSON from {server} for {article_id}/head"
+            ) from e
+
+    if resp.status_code == 404:
+        return None
+
+    raise ProtocolError(
+        f"fetch_head: unexpected status {resp.status_code} from {server}"
+    )
 
 
-def push_bundle(server: str, article_id: str, bundle_bytes: bytes) -> str:
-    """POST /sync → "ok" | "conflict" | "error".
+def push_bundle(server: str, article_id: str, bundle_bytes: bytes) -> None:
+    """POST /sync with raw bundle bytes → None on success.
 
+    Raises ``ConflictError`` on 409 (history diverged — pull first).
     Raises ``TransportError`` on network failure.
+    Raises ``ProtocolError`` on unexpected status codes.
     """
     try:
         resp = httpx.post(
@@ -114,23 +124,29 @@ def push_bundle(server: str, article_id: str, bundle_bytes: bytes) -> str:
             headers={"Content-Type": "application/octet-stream"},
             timeout=60,
         )
-        if resp.status_code == 200:
-            return "ok"
-        if resp.status_code == 409:
-            return "conflict"
     except httpx.HTTPError as e:
         raise TransportError(
             f"push_bundle failed for {article_id} at {server}: {e}"
         ) from e
+
+    if resp.status_code == 200:
+        return
+
+    if resp.status_code == 409:
+        raise ConflictError(
+            f"push_bundle: history diverged for {article_id} at {server}"
+        )
+
     raise ProtocolError(
         f"push_bundle: unexpected status {resp.status_code} from {server}"
     )
 
 
-def fetch_bundle(server: str, article_id: str, since_hash: str | None) -> bytes | None:
+def fetch_incremental_bundle(server: str, article_id: str, since_hash: str | None) -> bytes | None:
     """GET /bundle?since= → bundle bytes, or None if not found.
 
     Raises ``TransportError`` on network failure.
+    Raises ``ProtocolError`` on unexpected status codes.
     """
     try:
         resp = httpx.get(
@@ -138,40 +154,67 @@ def fetch_bundle(server: str, article_id: str, since_hash: str | None) -> bytes 
             params={"since": since_hash} if since_hash else None,
             timeout=60,
         )
-        if resp.status_code == 200 and resp.content:
-            return resp.content
     except httpx.HTTPError as e:
         raise TransportError(
-            f"fetch_bundle failed for {article_id} at {server}: {e}"
+            f"fetch_incremental_bundle failed for {article_id} at {server}: {e}"
         ) from e
-    return None
+
+    if resp.status_code == 200 and resp.content:
+        return resp.content
+
+    if resp.status_code == 404:
+        return None
+
+    raise ProtocolError(
+        f"fetch_incremental_bundle: unexpected status {resp.status_code} from {server}"
+    )
 
 
-def post_article(server: str, article_id: str, bundle_b64: str) -> bool:
-    """POST /articles with base64 tar.gz → True on success.
+def pull_article_repo(server: str, article_id: str) -> bytes | None:
+    """GET /api/v1/articles/{id}/repo → base64-encoded tar.gz, or None if 404.
+
+    First-time clone — downloads the full article repo as a tar.gz (the same
+    format sent by ``push_article_repo``).  Unlike ``fetch_incremental_bundle``,
+    this works when the local peer has no existing repo.
+
+    TODO(protocol): the server does not expose GET /repo yet — this stub
+    falls back to the full-bundle endpoint, which requires a pre-existing
+    repo to apply.  Add ``GET /api/v1/articles/{id}/repo`` on the server
+    (tar the article repo, base64-encode it) and switch this function to use it.
+    """
+    return fetch_incremental_bundle(server, article_id, since_hash=None)
+
+
+def push_article_repo(server: str, article_id: str, bundle_b64: str) -> bool:
+    """POST /api/v1/articles with base64 tar.gz → True on success.
+
+    Only sends ``id`` and ``repo_bundle`` — the server unpacks the tar.gz
+    to create the article repo and reads everything else from git history.
 
     Raises ``TransportError`` on network failure.
     """
     try:
         resp = httpx.post(
-            f"{_api_url(server, '')}s",
+            f"{server}/api/v1/articles",
             json={
                 "id": article_id,
-                "title": "",
-                "content": "",
-                "format": "markdown",
-                "commit_message": "Initial push",
                 "repo_bundle": bundle_b64,
             },
             timeout=60,
         )
-        return resp.status_code in (200, 201)
     except httpx.HTTPError as e:
         raise TransportError(
-            f"post_article failed for {article_id} at {server}: {e}"
+            f"push_article_repo failed for {article_id} at {server}: {e}"
         ) from e
+
+    if resp.status_code in (200, 201):
+        return True
+
+    if resp.status_code == 409:
+        return False
+
     raise ProtocolError(
-        f"post_article: unexpected status {resp.status_code} from {server}"
+        f"push_article_repo: unexpected status {resp.status_code} from {server}"
     )
 
 
@@ -182,56 +225,71 @@ def fetch_following(server: str, user_id: str) -> list[dict] | None:
     """GET /users/{id}/following → list of user dicts, or None if not found.
 
     Raises ``TransportError`` on network failure.
-    Raises ``ProtocolError`` on malformed JSON response.
+    Raises ``ProtocolError`` on malformed JSON or unexpected status.
     """
     try:
         resp = httpx.get(
             f"{server}/api/v1/users/{user_id}/following",
             timeout=30,
         )
-        if resp.status_code == 200:
-            try:
-                return resp.json()
-            except json.JSONDecodeError as e:
-                raise ProtocolError(
-                    f"Malformed JSON from {server} for users/{user_id}/following"
-                ) from e
     except httpx.HTTPError as e:
         raise TransportError(
             f"fetch_following failed for {user_id} at {server}: {e}"
         ) from e
-    return None
+
+    if resp.status_code == 200:
+        try:
+            return resp.json()
+        except json.JSONDecodeError as e:
+            raise ProtocolError(
+                f"Malformed JSON from {server} for users/{user_id}/following"
+            ) from e
+
+    if resp.status_code == 404:
+        return None
+
+    raise ProtocolError(
+        f"fetch_following: unexpected status {resp.status_code} from {server}"
+    )
 
 
 def fetch_followers(server: str, user_id: str) -> list[dict] | None:
     """GET /users/{id}/followers → list of user dicts, or None if not found.
 
     Raises ``TransportError`` on network failure.
-    Raises ``ProtocolError`` on malformed JSON response.
+    Raises ``ProtocolError`` on malformed JSON or unexpected status.
     """
     try:
         resp = httpx.get(
             f"{server}/api/v1/users/{user_id}/followers",
             timeout=30,
         )
-        if resp.status_code == 200:
-            try:
-                return resp.json()
-            except json.JSONDecodeError as e:
-                raise ProtocolError(
-                    f"Malformed JSON from {server} for users/{user_id}/followers"
-                ) from e
     except httpx.HTTPError as e:
         raise TransportError(
             f"fetch_followers failed for {user_id} at {server}: {e}"
         ) from e
-    return None
+
+    if resp.status_code == 200:
+        try:
+            return resp.json()
+        except json.JSONDecodeError as e:
+            raise ProtocolError(
+                f"Malformed JSON from {server} for users/{user_id}/followers"
+            ) from e
+
+    if resp.status_code == 404:
+        return None
+
+    raise ProtocolError(
+        f"fetch_followers: unexpected status {resp.status_code} from {server}"
+    )
 
 
 def push_follow(server: str, follower_id: str, followed_id: str) -> bool:
-    """POST /users/{follower_id}/follow → True on success.
+    """POST /users/{follower_id}/follow → True on success, False if not found.
 
     Raises ``TransportError`` on network failure.
+    Raises ``ProtocolError`` on unexpected status codes.
     """
     try:
         resp = httpx.post(
@@ -239,17 +297,27 @@ def push_follow(server: str, follower_id: str, followed_id: str) -> bool:
             json={"followed_id": followed_id},
             timeout=30,
         )
-        return resp.status_code == 200
     except httpx.HTTPError as e:
         raise TransportError(
             f"push_follow failed for {follower_id} at {server}: {e}"
         ) from e
 
+    if resp.status_code == 200:
+        return True
+
+    if resp.status_code == 404:
+        return False
+
+    raise ProtocolError(
+        f"push_follow: unexpected status {resp.status_code} from {server}"
+    )
+
 
 def push_unfollow(server: str, follower_id: str, followed_id: str) -> bool:
-    """POST /users/{follower_id}/unfollow → True on success.
+    """POST /users/{follower_id}/unfollow → True on success, False if not found.
 
     Raises ``TransportError`` on network failure.
+    Raises ``ProtocolError`` on unexpected status codes.
     """
     try:
         resp = httpx.post(
@@ -257,17 +325,33 @@ def push_unfollow(server: str, follower_id: str, followed_id: str) -> bool:
             json={"followed_id": followed_id},
             timeout=30,
         )
-        return resp.status_code == 200
     except httpx.HTTPError as e:
         raise TransportError(
             f"push_unfollow failed for {follower_id} at {server}: {e}"
         ) from e
 
+    if resp.status_code == 200:
+        return True
+
+    if resp.status_code == 404:
+        return False
+
+    raise ProtocolError(
+        f"push_unfollow: unexpected status {resp.status_code} from {server}"
+    )
+
+
+# TODO(privacy): push_bookmark and fetch_bookmarks should be removed — bookmarks
+# are private reading lists, not social graph data.  The discovery model
+# "fetch bookmarks of followed users" leaks private reading history.
+# Replace with explicit ``share`` (see social-share TODO in cli/parser.py)
+# where users publicly recommend articles to followers.
 
 def push_bookmark(server: str, user_id: str, article_id: str) -> bool:
-    """POST /users/{user_id}/bookmark → True on success.
+    """POST /users/{user_id}/bookmark → True on success, False if not found.
 
     Raises ``TransportError`` on network failure.
+    Raises ``ProtocolError`` on unexpected status codes.
     """
     try:
         resp = httpx.post(
@@ -275,43 +359,59 @@ def push_bookmark(server: str, user_id: str, article_id: str) -> bool:
             json={"article_id": article_id},
             timeout=30,
         )
-        return resp.status_code == 200
     except httpx.HTTPError as e:
         raise TransportError(
             f"push_bookmark failed for {user_id} at {server}: {e}"
         ) from e
+
+    if resp.status_code == 200:
+        return True
+
+    if resp.status_code == 404:
+        return False
+
+    raise ProtocolError(
+        f"push_bookmark: unexpected status {resp.status_code} from {server}"
+    )
 
 
 def fetch_bookmarks(server: str, user_id: str) -> list[dict] | None:
     """GET /users/{id}/bookmarks → list of bookmark dicts, or None if not found.
 
     Raises ``TransportError`` on network failure.
-    Raises ``ProtocolError`` on malformed JSON response.
+    Raises ``ProtocolError`` on malformed JSON or unexpected status.
     """
     try:
         resp = httpx.get(
             f"{server}/api/v1/users/{user_id}/bookmarks",
             timeout=30,
         )
-        if resp.status_code == 200:
-            try:
-                return resp.json()
-            except json.JSONDecodeError as e:
-                raise ProtocolError(
-                    f"Malformed JSON from {server} for users/{user_id}/bookmarks"
-                ) from e
     except httpx.HTTPError as e:
         raise TransportError(
             f"fetch_bookmarks failed for {user_id} at {server}: {e}"
         ) from e
-    return None
+
+    if resp.status_code == 200:
+        try:
+            return resp.json()
+        except json.JSONDecodeError as e:
+            raise ProtocolError(
+                f"Malformed JSON from {server} for users/{user_id}/bookmarks"
+            ) from e
+
+    if resp.status_code == 404:
+        return None
+
+    raise ProtocolError(
+        f"fetch_bookmarks: unexpected status {resp.status_code} from {server}"
+    )
 
 
-def fetch_articles(server: str, user_id: str, limit: int = 20, offset: int = 0) -> list[dict] | None:
+def fetch_user_articles(server: str, user_id: str, limit: int = 20, offset: int = 0) -> list[dict] | None:
     """GET /users/{id}/articles?limit=&offset= → list of article dicts, or None if not found.
 
     Raises ``TransportError`` on network failure.
-    Raises ``ProtocolError`` on malformed JSON response.
+    Raises ``ProtocolError`` on malformed JSON or unexpected status.
     """
     try:
         resp = httpx.get(
@@ -319,15 +419,22 @@ def fetch_articles(server: str, user_id: str, limit: int = 20, offset: int = 0) 
             params={"limit": limit, "offset": offset},
             timeout=30,
         )
-        if resp.status_code == 200:
-            try:
-                return resp.json()
-            except json.JSONDecodeError as e:
-                raise ProtocolError(
-                    f"Malformed JSON from {server} for users/{user_id}/articles"
-                ) from e
     except httpx.HTTPError as e:
         raise TransportError(
-            f"fetch_articles failed for {user_id} at {server}: {e}"
+            f"fetch_user_articles failed for {user_id} at {server}: {e}"
         ) from e
-    return None
+
+    if resp.status_code == 200:
+        try:
+            return resp.json()
+        except json.JSONDecodeError as e:
+            raise ProtocolError(
+                f"Malformed JSON from {server} for users/{user_id}/articles"
+            ) from e
+
+    if resp.status_code == 404:
+        return None
+
+    raise ProtocolError(
+        f"fetch_user_articles: unexpected status {resp.status_code} from {server}"
+    )

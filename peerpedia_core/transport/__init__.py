@@ -9,13 +9,14 @@ When switching from HTTP to P2P, only this file changes.
 from peerpedia_core.transport.health import is_online
 from peerpedia_core.transport.http_client import (
     ancestor_probe,
-    fetch_articles,
+    pull_article_repo,
+    fetch_user_articles,
     fetch_bookmarks,
-    fetch_bundle,
+    fetch_incremental_bundle,
     fetch_followers,
     fetch_following,
     fetch_head,
-    post_article,
+    push_article_repo,
     push_bookmark,
     push_bundle,
     push_follow,

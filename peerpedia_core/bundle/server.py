@@ -5,7 +5,7 @@ r"""Server-side bundle handlers — mirror of ``bundle_client``.
 
 These functions are the server's half of the sync protocol.  They receive
 decoded HTTP request data and call into ``git_bundle`` and ``commands``.
-They contain NO HTTP code — the routing layer in ``server/app.py``
+They contain NO HTTP code — the routing layer in ``transport/http_server.py``
 (Starlette/ASGI) parses requests, maps exceptions to status codes, and
 calls these handlers.  Start the server with ``peerpedia server start``.
 

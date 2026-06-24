@@ -9,6 +9,42 @@ HTTP requests, calls handlers, and returns HTTP responses.
 
 Error handling: every ``PeerpediaError`` subclass maps to a specific HTTP
 status code.  Unhandled exceptions → 500 with traceback in debug mode.
+
+TODO(auth): zero authentication on all endpoints — anyone can push bundles,
+follow users, or read social graphs for any user_id.  Add request signing
+or bearer tokens so the server can verify the caller's identity.
+TODO(infra): no request body size limit on POST /sync — a multi-GB bundle
+body is read entirely into memory.  Add Content-Length check or streaming
+limit before ``await request.body()``.
+TODO(infra): no rate limiting — any endpoint can be hammered.
+TODO(infra): DB session middleware uses URL prefix/suffix matching to decide
+which routes need a session.  Fragile — a new route that needs DB but
+doesn't match the pattern silently gets no session.  Use route-level
+middleware or explicit dependency declaration.
+TODO(infra): 500 errors include traceback in response body — information leak
+in production.  Gate behind a debug flag or strip in non-debug mode.
+TODO(content): no article content API — peers must sync the full git bundle
+just to read an article.  Add GET /api/v1/articles/{id}?format=html that
+returns compiled output so a reader doesn't need to sync first.
+TODO(search): no article or user search endpoint — discovery is purely
+social-graph-based.  Add GET /api/v1/search?q=... and /api/v1/users?q=...
+so peers can find content without knowing exact IDs.
+TODO(discovery): no bootstrap peer or server directory — new users must
+know a server URL out-of-band.  Add a seed peer list or peer exchange
+endpoint so the network is discoverable.
+TODO(security): path traversal — ``article_id`` and ``user_id`` from URL
+params are used directly in filesystem paths.  Validate that both are
+UUIDs or safe identifiers before passing to ``ARTICLES_DIR / id``.
+TODO(infra): no logging — zero ``print``, ``logging``, or structured log
+output.  Errors, requests, and potential attacks are invisible.
+TODO(infra): ``limit`` query param has no upper bound — ``limit=99999999``
+fetches the entire database in one request.
+TODO(correctness): ``ValueError`` and ``TypeError`` map to HTTP 400 — an
+internal bug that raises ValueError is reported as a client error,
+masking the real problem.  At minimum, log the traceback.
+TODO(privacy): ``u.to_dict()`` in social handlers may expose sensitive
+fields (public_key, email).  Audit the User.to_dict() output and
+strip fields that should not leave the server.
 """
 
 from __future__ import annotations
@@ -90,8 +126,13 @@ class DBSessionMiddleware(BaseHTTPMiddleware):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-async def _health(request: Request) -> JSONResponse:
-    """GET /health → 200 ``{"status": "ok"}``.  No database access."""
+def _health(request: Request) -> JSONResponse:
+    """GET /health → 200 ``{"status": "ok"}``.  No database access.
+
+    TODO(infra): this is a fake health check — always returns 200 even if
+    the database or filesystem is broken.  Add a real dependency check
+    (e.g. verify articles directory exists, DB is reachable).
+    """
     return JSONResponse({"status": "ok"})
 
 
@@ -144,7 +185,7 @@ async def _ancestor(request: Request) -> JSONResponse:
     return JSONResponse({"ancestor": result})
 
 
-async def _post_article(request: Request) -> JSONResponse:
+async def _push_article_repo_handler(request: Request) -> JSONResponse:
     """POST /api/v1/articles → 201 with new HEAD, or 400 on missing fields.
 
     Validates ``id`` and ``repo_bundle`` before delegating to
@@ -323,7 +364,7 @@ _ROUTES = [
         _ancestor,
         methods=["GET"],
     ),
-    Route("/api/v1/articles", _post_article, methods=["POST"]),
+    Route("/api/v1/articles", _push_article_repo_handler, methods=["POST"]),
     Route("/api/v1/users/{user_id}/following", _following, methods=["GET"]),
     Route("/api/v1/users/{user_id}/followers", _followers, methods=["GET"]),
     Route("/api/v1/users/{user_id}/articles", _articles, methods=["GET"]),

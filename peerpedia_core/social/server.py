@@ -3,7 +3,7 @@
 
 """Social discovery server handlers — pure logic, no HTTP.
 
-Called by the routing layer in ``server/app.py`` (start with
+Called by the routing layer in ``transport/http_server.py`` (start with
 ``peerpedia server start``).  Thin wrappers around ``commands/`` —
 the server layer never touches DB directly.
 """

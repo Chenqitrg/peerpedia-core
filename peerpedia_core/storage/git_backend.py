@@ -44,7 +44,7 @@ Reviews arrive through two paths:
    write_review_to_git() → upsert_review(commit_hash=return_value)
    Both git and DB are updated atomically.
 
-2. Remote sync (``commands/sync.py:apply_sync_bundle``):
+2. Remote sync (``commands/bundle.py:apply_sync_bundle``):
    git merge FETCH_HEAD → ... → sync_reviews_from_worktree() → upsert_review()
    The bundle merged new review files into git, but nobody told the DB.
    ``sync_reviews_from_worktree`` closes this gap by reading every scores.json from
@@ -100,6 +100,8 @@ def commit_article(
     author_email: str,
     signing_key: Path | None,
     pubkey_hex: str | None,
+    *,
+    allow_empty: bool = False,
 ) -> str:
     """Stage all changes and commit. Returns the commit hash.
 
@@ -113,20 +115,20 @@ def commit_article(
     Non-platform commits MUST be signed — unsigned commits pollute local
     history and are rejected on sync.  Platform commits (system@peerpedia)
     are exempt.
+
+    Set *allow_empty* to True when an empty commit is semantically
+    meaningful (e.g., recording a status transition with no file changes).
     """
     import os
 
     repo = git.Repo(repo_path)
     repo.git.add(A=True)
 
-    # Fail fast: refuse to create an empty commit.  The caller should
-    # check is_dirty() before calling if the no-op is intentional, or
-    # pass --allow-empty when an empty commit is semantically meaningful
-    # (e.g., recording a status transition with no file changes).
-    if not repo.is_dirty(untracked_files=True) and repo.head.is_valid():
+    # Fail fast: refuse to create an empty commit unless explicitly allowed.
+    if not allow_empty and not repo.is_dirty(untracked_files=True) and repo.head.is_valid():
         raise ValueError(
             "nothing to commit — repo is clean; "
-            "caller should skip or pass --allow-empty if intentional"
+            "pass allow_empty=True if intentional (e.g., status transition)"
         )
 
     # Fail fast: all non-platform commits must be signed.

@@ -7,11 +7,11 @@ Client-side functions mirror the server-side handlers in ``bundle_server``::
 
       CLIENT (bundle_client)              SERVER (bundle_server)
       ─────────────────────               ──────────────────────
-      sync_article() → orchestrates        server/app.py (ASGI routing)
+      sync_article() → orchestrates        transport/http_server.py (ASGI routing)
         ├─ find_merge_base()   ↔   check_ancestor()
         │    └─ monotonic_search            └─ is_ancestor()
         ├─ pull_incremental()   ↔   get_bundle()
-        │    └─ fetch_bundle(HTTP)          └─ create_bundle()
+        │    └─ fetch_incremental_bundle(HTTP)          └─ create_bundle()
         └─ push_incremental()   ↔   apply_sync()
              └─ create_bundle()             └─ apply_bundle()
 
@@ -38,7 +38,7 @@ touch the DB — it only moves git objects.
 
 Reviewer's checklist
 --------------------
-- Does every HTTP call go through ``transport/http.py`` (not httpx directly)?
+- Does every HTTP call go through ``transport/http_client.py`` (not httpx directly)?
 - Is ``ff_only=True`` on all pushes?  (PeerPedia rejects force-pushes.)
 - On 409, does the retry pull before re-pushing?
 """
@@ -154,7 +154,7 @@ def pull_incremental(
 ) -> str:
     """Pull server commits from *since_hash* to server HEAD.
 
-    1. ``fetch_bundle`` — GET /bundle?since=… (HTTP) → bytes
+    1. ``fetch_incremental_bundle`` — GET /bundle?since=… (HTTP) → bytes
     2. ``ingest_bundle`` — verify + fetch objects into git (pure git)
     3. ``apply_sync_bundle`` — merge + DB reconcile (via commands)
 
@@ -164,7 +164,7 @@ def pull_incremental(
 
     Raises ``ProtocolError`` on transport failure or empty bundle.
     """
-    bundle_bytes = fetch_bundle(server, article_id, since_hash)
+    bundle_bytes = fetch_incremental_bundle(server, article_id, since_hash)
     if not bundle_bytes:
         raise ProtocolError(
             f"pull_incremental: server returned empty bundle for article {article_id}"
@@ -176,8 +176,10 @@ def pull_incremental(
 def pull_new_article(db: Session, server: str, article_id: str) -> str | None:
     """Pull an article that doesn't exist locally.
 
-    Initializes a new git repo, then does a full bundle pull from *server*.
-    Returns the new HEAD hash, or None if the server doesn't have the article.
+    TODO(protocol): currently uses ``fetch_incremental_bundle(since_hash=None)``
+    (git bundle) — but ``push_article_repo`` sends a tar.gz.  The first-time
+    pull should receive a tar.gz via ``pull_article_repo`` and unpack it,
+    mirroring the push side.  See also ``transport/http_client.py:pull_article_repo``.
     """
     repo_path = DEFAULT_ARTICLES_DIR / article_id
     init_repo(repo_path)
@@ -196,12 +198,8 @@ def push_incremental(
     (conflict / error).
     """
     bundle_bytes = create_bundle(DEFAULT_ARTICLES_DIR / article_id, since_hash)
-    result = push_bundle(server, article_id, bundle_bytes)
-    if result == "ok":
-        return to_hash
-    raise ProtocolError(
-        f"push_incremental: server returned {result!r} for article {article_id}"
-    )
+    push_bundle(server, article_id, bundle_bytes)
+    return to_hash
 
 
 def upload_article(server: str, article_id: str) -> bool:
@@ -226,17 +224,17 @@ def upload_article(server: str, article_id: str) -> bool:
         tar.add(str(rp), arcname=article_id)
     bundle_b64 = base64.b64encode(buf.getvalue()).decode("ascii")
 
-    return post_article(server, article_id, bundle_b64)
+    return push_article_repo(server, article_id, bundle_b64)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# HTTP transport — delegated to transport/http.py
+# HTTP transport — delegated to transport/http_client.py
 # ═══════════════════════════════════════════════════════════════════════════
 
 from peerpedia_core.transport import (
     ancestor_probe,
-    fetch_bundle,
+    fetch_incremental_bundle,
     fetch_head,
-    post_article,
+    push_article_repo,
     push_bundle,
 )

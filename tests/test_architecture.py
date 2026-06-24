@@ -441,3 +441,91 @@ def test_no_direct_model_mutation():
                     f"{rel}:{node.lineno}: direct mutation of .{target.attr} — "
                     f"use the corresponding CRUD function instead"
                 )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# I. Docstring integrity — no stale file path references
+# ═══════════════════════════════════════════════════════════════════════════════
+
+import re
+
+# RST backtick references that contain a path: ``commands/sync.py``,
+# ``peerpedia_core/bundle/client.py``, ``transport/http_server.py``.
+# Must contain at least one "/" so bare filenames like ``parser.py``
+# (informal module references) are not treated as paths.
+_DOCSTRING_PATH_RE = re.compile(r"``([^`]*/[^`]+\.py)``")
+
+
+def _extract_path_refs(docstring: str, *, exclude_todo: bool = True) -> list[str]:
+    """Extract file path references from a module docstring.
+
+    Skips references inside ``.. todo::`` blocks — those are aspirational
+    (files planned but not yet created), not stale.
+    """
+    text = docstring
+    if exclude_todo:
+        # Remove ``.. todo::`` sections before matching
+        text = re.sub(r"\.\. todo::.*?(\n\n|\Z)", "", text, flags=re.DOTALL)
+    refs: list[str] = []
+    for m in _DOCSTRING_PATH_RE.finditer(text):
+        refs.append(m.group(1))
+    return refs
+
+
+def test_docstrings_no_stale_paths():
+    """Module docstrings must not reference files that no longer exist.
+
+    Every ``peerpedia_core/foo/bar.py`` or ``commands/foo.py`` in a
+    docstring is checked against the filesystem.  A stale reference
+    means a rename or move was not reflected in the docstring — the
+    call graph or architecture description is now lying to the reader.
+    """
+    for f in _all_modules():
+        doc = ast.get_docstring(ast.parse(f.read_text()))
+        if not doc:
+            continue
+        rel = _rel(f)
+        for ref in _extract_path_refs(doc):
+            # Resolve relative paths against the parent of peerpedia_core/
+            if ref.startswith("peerpedia_core/"):
+                target = ROOT.parent / ref
+            else:
+                # e.g. "commands/sync.py" → peerpedia_core/commands/sync.py
+                target = ROOT / ref
+            if not target.exists():
+                raise AssertionError(
+                    f"{rel}: docstring references ``{ref}`` — file not found"
+                )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# J. CRUD gate — only commands/ may import storage/db/crud_*.py
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Modules allowed to import CRUD functions directly.
+# - commands/ orchestrates DB writes — its job is to call CRUD
+# - storage/db/ files import each other (crud_article → crud_user, etc.)
+# - commands/__init__.py is the facade that re-exports for external callers
+_CRUD_IMPORT_ALLOWED = {
+    "peerpedia_core/commands/",
+    "peerpedia_core/storage/db/",
+}
+
+
+def test_only_commands_imports_crud():
+    """Outside commands/ and storage/db/, no module may import from
+    ``storage.db.crud_*`` directly.  Use ``commands/`` facade instead.
+
+    ``storage.db.models`` (domain entities) is exempt — any module may
+    import Article, User, etc. for type annotations.
+    """
+    for f in _all_modules():
+        rel = _rel(f)
+        if any(rel.startswith(p) for p in _CRUD_IMPORT_ALLOWED):
+            continue
+        for m, _name, _internal in _imports(f):
+            if m.startswith("peerpedia_core.storage.db.crud_"):
+                raise AssertionError(
+                    f"{rel}: imports {m} — "
+                    "use commands/ facade instead of importing CRUD directly"
+                )

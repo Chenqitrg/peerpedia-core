@@ -225,6 +225,30 @@ def build_parser() -> argparse.ArgumentParser:
     # TODO(release): data migration — schema evolves, need upgrade path for users.
     # TODO(ux-onboarding): first-run wizard — register + create first article flow.
     # TODO(ux-onboarding): group commands in --help (Account / Article / Review).
+    # TODO(ux-network): --server flag required on every network command — users
+    #   must either set PEERPEDIA_SERVER env var or pass --server every time.
+    #   Save a default server URL in config so users set it once.
+    # TODO(ux-network): social pull is manual — after ``follow`` the user must
+    #   explicitly run ``following --server`` to see the followed user's content.
+    #   Auto-pull on follow.
+    # TODO(ux-discovery): no way to discover peers — users must know a peer's
+    #   URL and user_id out-of-band.  Add a ``peerpedia discover`` command that
+    #   suggests peers based on the social graph.
+    # TODO(ux-feedback): commands that push to a remote server (follow, bookmark)
+    #   succeed silently even if the server is unreachable — the push is
+    #   best-effort with a dim warning.  Surface network errors more visibly
+    #   so users know their changes haven't propagated.
+    # TODO(ux-feedback): after ``sync push``, report which articles were synced
+    #   and to which peers — currently just shows a count.
+    # TODO(ux-history): no browsing history — after reading an article, there is
+    #   no record of what you've read.  Add a read-history log so users can
+    #   revisit recently-viewed articles and avoid losing track of papers.
+    # TODO(social-share): no way to recommend articles — users can bookmark
+    #   but bookmarks are private.  Add ``peerpedia share <article_id>`` that
+    #   posts article metadata to the user's profile so followers see the
+    #   recommendation and can pull the full text from the source peer.
+    #   Unlike fork (creates a copy), share is a pointer — followers fetch
+    #   from the original source.
     import importlib.metadata
 
     try:

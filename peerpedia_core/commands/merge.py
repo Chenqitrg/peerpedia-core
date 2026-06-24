@@ -25,6 +25,17 @@ triggers re-review.  If the target was already in sedimentation, it stays
 in sedimentation (``set_sink_start`` only resets the timer, which is the
 correct behavior — the merge adds new content that needs review).
 
+Fork-then-merge workflow
+------------------------
+After publication, a direct edit to the article triggers a 7-day
+sedimentation period — the article re-enters peer review before it can be
+published again.  For non-trivial changes, authors should work on a **fork**
+instead: create a fork via ``peerpedia fork``, make all changes on the fork,
+then propose merging back with ``peerpedia merge propose``.  The maintainer
+accepts the merge with ``peerpedia merge accept``.  This way, all changes
+arrive in a single merge commit, and the article goes through re-review
+only once — not once per edit.
+
 Reviewer's checklist
 --------------------
 - Is the ``was_published`` check done *before* the merge?  The merge itself
@@ -45,7 +56,10 @@ from peerpedia_core.storage.db.crud_maintainer import get_maintainer_ids
 from peerpedia_core.storage.db.crud_merge import accept_merge_proposal, get_merge_proposal
 from peerpedia_core.storage.db.crud_user import get_user
 from peerpedia_core.storage.db.crud_merge import create_merge_proposal as _create
-from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, MergeConflictError, get_head_hash, merge_git_repos
+from peerpedia_core.storage.git_backend import (
+    DEFAULT_ARTICLES_DIR, MergeConflictError, commit_article,
+    get_head_hash, merge_git_repos,
+)
 
 from peerpedia_core.commands.articles import rebuild_article_authors
 
@@ -76,11 +90,7 @@ def accept_merge(db: Session, article_id: str, proposal_id: str, user_id: str) -
         raise NotFoundError(f"Fork article repo not found: {mp.fork_article_id}")
 
     # G2b: check status before merge — if published, trigger re-sedimentation
-    # TODO(perf): article already fetched at line 64; reuse it instead of
-    # re-querying.  If the refetch is meant to catch concurrent changes,
-    # use session.refresh() instead.
-    article = get_article(db, article_id)
-    was_published = article is not None and article.status == "published"
+    was_published = article.status == "published"
 
     try:
         merge_git_repos(target_repo, fork_repo, user.name)
@@ -93,6 +103,17 @@ def accept_merge(db: Session, article_id: str, proposal_id: str, user_id: str) -
     rebuild_article_authors(db, article_id)
 
     if was_published:
+        # Record status transition in git so it survives P2P sync.
+        # The merge itself is already committed — this is an empty commit
+        # that marks the re-sedimentation triggered by the merge.
+        commit_article(
+            target_repo,
+            "[status] sedimentation",
+            "PeerPedia",
+            "system@peerpedia",
+            signing_key=None, pubkey_hex=None,
+            allow_empty=True,
+        )
         set_sink_start(db, article_id, params.sink.edit_article_default_days)
 
     mp = accept_merge_proposal(db, proposal_id)

@@ -36,8 +36,8 @@ merge.py
     authors from git history, and triggers re-sedimentation if the target
     article was published.
 
-sync.py
-    Sync bundle application.  ``apply_sync_bundle`` merges fetched git
+bundle.py
+    Bundle application.  ``apply_sync_bundle`` merges fetched git
     objects and reconciles DB state.  ``sync_reviews_from_worktree`` reads every
     reviews/*/scores.json from the git worktree and upserts into the DB
     Review cache — closing the gap where sync'd reviews were invisible to

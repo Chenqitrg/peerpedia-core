@@ -18,7 +18,7 @@ from peerpedia_core.storage.db import Session
 from peerpedia_core.commands import merge_article_meta, merge_bookmarks, merge_follows, merge_users
 from peerpedia_core.exceptions import ProtocolError, TransportError
 from peerpedia_core.transport import (
-    fetch_articles,
+    fetch_user_articles,
     fetch_bookmarks,
     fetch_followers,
     fetch_following,
@@ -73,7 +73,7 @@ def discover_articles(
     the server is unreachable.  Raises ProtocolError on malformed responses.
     """
     data = _fetch_or_raise(
-        partial(fetch_articles, limit=limit, offset=offset),
+        partial(fetch_user_articles, limit=limit, offset=offset),
         server, user_id, "articles",
     )
     return merge_article_meta(db, data)

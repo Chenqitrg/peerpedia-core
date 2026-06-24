@@ -11,16 +11,15 @@ that is the caller's responsibility.
 Call graph::
 
     publish_ready_articles
+      ├► prereq: caller calls commands.sync_reviews_from_worktree()
       ├► DB: query Article.status == "sedimentation"
       ├► for each ready article:
-      │     ├▻ commands.sync.sync_reviews_from_worktree    (deferred import)
       │     ├► recompute_article_score
       │     ├► workflow.sedimentation.apply_no_review_penalty
       │     └► article.status = "published"
-      ├► db.commit()                     ← Phase 1: status changes
       ├► for each affected author:
       │     └► recompute_author_reputation
-      └► db.commit()                     ← Phase 2: reputation updates
+      └► returns count (caller is responsible for db.commit())
 
     recompute_article_score
       ├► DB: get_article, get_reviews_for_article, get_author_ids
@@ -57,7 +56,7 @@ from peerpedia_core.config.params import params
 from peerpedia_core.storage.db.crud_article import get_article, get_articles_by_author, get_author_ids, list_articles, update_article_score, update_article_status
 from peerpedia_core.storage.db.crud_review import get_reviews_for_article, upsert_review
 from peerpedia_core.storage.db.crud_user import get_user, get_users_by_ids, list_users, update_user_reputation
-from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, commit_article, is_repo_dirty, list_review_dirs, read_review_scores
+from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, commit_article
 from peerpedia_core.types.scores import ReputationScores
 from peerpedia_core.workflow.reputation import (
     blend_reputation,
@@ -101,8 +100,9 @@ def publish_ready_articles(db: Session) -> int:
         if not is_ready_to_publish(eta):
             continue
 
-        # NOTE: caller must call sync_reviews_from_worktree() before publish_ready_articles().
-        # This function no longer imports from sync to avoid circular dependency.
+        # NOTE: caller must call sync_reviews_from_worktree() before
+        # publish_ready_articles().  This function does not import from
+        # commands/bundle to avoid circular dependency.
 
         # Compute score by aggregating all reviews
         # TODO(perf): recompute_article_score already fetches reviews internally
@@ -118,16 +118,18 @@ def publish_ready_articles(db: Session) -> int:
             score = apply_no_review_penalty(score)
 
         # Git commit records the status transition for P2P sync.
-        # Only commit if dirty — a scoring operation above may have
-        # already captured all changes.
+        # If scoring produced changes, they ride on this commit.
+        # If nothing changed, allow_empty creates a marker commit
+        # so the published status survives sync.
         rp = DEFAULT_ARTICLES_DIR / article.id
-        if (rp / ".git").is_dir() and is_repo_dirty(rp):
+        if (rp / ".git").is_dir():
             commit_article(
                 rp,
                 "[status] published",
                 "PeerPedia",
                 "system@peerpedia",
                 signing_key=None, pubkey_hex=None,
+                allow_empty=True,
             )
 
         # Then DB.

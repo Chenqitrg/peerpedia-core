@@ -113,20 +113,18 @@ def _find_article_file(article_id: str) -> Path:
     _die(f"No source file found for article {article_id}")
 
 
-def _resolve_and_display_article(db, article) -> None:
+def _resolve_and_display_article(db, article, *, author_ids: list[str] | None = None) -> None:
     """Resolve full article metadata from DB + source file, then display.
 
-    Internal helper used by ``create``, ``show``, ``search``, ``feed``, and
-    ``mine`` handlers.  Reads the article source file to extract frontmatter,
-    resolves author UUIDs to names, then delegates to the pure
-    ``display_article`` renderer in ``cli/display.py``.
+    If *author_ids* is passed, it is used directly (allows batch preloading
+    in list handlers).  Otherwise ``get_author_ids`` queries the DB.
     """
     raw = _find_article_file(article.id).read_text()
     fm = parse_frontmatter(raw)
     _render_article(
         title=fm.get("title", article.title),
         status=article.status,
-        authors=get_author_ids(db, article.id),
+        authors=author_ids if author_ids is not None else get_author_ids(db, article.id),
         score=article.score,
         abstract=fm.get("abstract", article.abstract),
     )

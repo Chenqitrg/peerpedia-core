@@ -8,7 +8,7 @@ individual handler files directly.  Handlers themselves must NOT import
 from ``storage/`` — they call ``commands/`` for all data access.
 """
 
-from peerpedia_core.cli.handlers.account import _cmd_account_search, _cmd_login, _cmd_register, _cmd_whoami
+from peerpedia_core.cli.handlers.account import _cmd_account_search, _cmd_login, _cmd_recover, _cmd_register, _cmd_whoami
 from peerpedia_core.cli.handlers.articles import (
     _cmd_article_create,
     _cmd_article_delete,

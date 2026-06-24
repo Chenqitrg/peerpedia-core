@@ -102,9 +102,6 @@ def publish_ready_articles(db: Session) -> int:
         # commands/bundle to avoid circular dependency.
 
         # Compute score by aggregating all reviews
-        # TODO(perf): recompute_article_score already fetches reviews internally
-        # (line 156).  The get_reviews_for_article call on line 109 duplicates
-        # that query.  Either pass reviews through or fetch once.
         score = recompute_article_score(db, article.id)
 
         # Check for community reviews and apply penalty if none
@@ -172,18 +169,16 @@ def recompute_article_score(db: Session, article_id: str) -> dict | None:
     for u in reviewer_users:
         user_weight_map[u.id] = get_reviewer_weight(u.reputation if u.reputation else None)
 
-    review_dicts = [
-        {
+    review_dicts = []
+    reviewer_weights: dict[str, float] = {}
+    for r in all_reviews:
+        review_dicts.append({
             "scores": r.scores,
             "is_self": r.reviewer_id in authors,
             "reviewer_id": r.reviewer_id,
             "scope": r.scope,
-        }
-        for r in all_reviews
-    ]
-    # TODO(perf): two iterations over all_reviews (review_dicts + reviewer_weights)
-    # could be merged into a single pass.
-    reviewer_weights = {r.reviewer_id: user_weight_map.get(r.reviewer_id, 1.0) for r in all_reviews}
+        })
+        reviewer_weights[r.reviewer_id] = user_weight_map.get(r.reviewer_id, 1.0)
 
     scope_weights = {
         "sedimentation": params.score.sedimentation_scope_weight,
@@ -196,15 +191,16 @@ def recompute_article_score(db: Session, article_id: str) -> dict | None:
     return score
 
 
-def recompute_author_reputation(db: Session, user_id: str) -> ReputationScores:
+def recompute_author_reputation(db: Session, user_id: str, *, user=None) -> ReputationScores:
     """Compute and persist a blended reputation for *user_id*.
+
+    Pass *user* to avoid a re-fetch when the caller already has the User
+    object (e.g. ``recalculate_all_reputations`` already called ``list_users``).
 
     Raises ValueError if the user does not exist.
     """
-    # TODO(perf): when called from recalculate_all_reputations, the user was
-    # already loaded by list_users.  This get_user re-fetches it — 2N+1 queries
-    # instead of N+2.  Accept the User object directly or batch-load.
-    user = get_user(db, user_id)
+    if user is None:
+        user = get_user(db, user_id)
     if user is None:
         raise ValueError(f"User not found: {user_id}")
 
@@ -228,6 +224,6 @@ def recalculate_all_reputations(db: Session) -> int:
     Returns the number of users whose reputation was (re)computed.
     """
     users = list_users(db)
-    for user in users:
-        recompute_author_reputation(db, user.id)
+    for u in users:
+        recompute_author_reputation(db, u.id, user=u)
     return len(users)

@@ -22,6 +22,7 @@ from peerpedia_core.cli.handlers import (
     _cmd_fork,
     _cmd_account_search,
     _cmd_login,
+    _cmd_recover,
     _cmd_maintainer_add, _cmd_maintainer_list, _cmd_maintainer_remove,
     _cmd_merge_accept, _cmd_merge_propose,
     _cmd_mother,
@@ -65,6 +66,9 @@ COMMAND_GROUPS = [
             (("--name",), {"required": True, "help": "Your display name"}),
         ]),
         ("login", _cmd_login, [
+            (("--name",), {"required": True, "help": "Your display name"}),
+        ]),
+        ("recover", _cmd_recover, [
             (("--name",), {"required": True, "help": "Your display name"}),
         ]),
         ("whoami", _cmd_whoami, []),

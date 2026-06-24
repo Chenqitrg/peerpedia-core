@@ -11,7 +11,7 @@ from peerpedia_core.cli.helpers import (
 )
 from peerpedia_core.cli.display import _stars, console
 from peerpedia_core.cli.bundle_utils import _try_sync
-from peerpedia_core.commands import submit_review, get_reviews_for_article, get_user
+from peerpedia_core.commands import get_reviews_for_article, get_user, get_users_by_ids, submit_review
 
 
 @_with_db
@@ -56,10 +56,13 @@ def _cmd_review_list(db, args):
 
     show_mode = getattr(args, "show", "meta")
 
+    # Batch-load reviewers to avoid N+1 queries.
+    reviewer_ids = {r.reviewer_id for r in reviews}
+    users_by_id = {u.id: u for u in get_users_by_ids(db, reviewer_ids)}
+
     for r in reviews:
         ts = r.created_at.strftime("%Y-%m-%d %H:%M") if r.created_at else "unknown"
-        # TODO(perf): N+1 — per-review get_user query.  Batch with get_users_by_ids.
-        reviewer = get_user(db, r.reviewer_id)
+        reviewer = users_by_id.get(r.reviewer_id)
         label = reviewer.name if reviewer else r.reviewer_id[:8]
         console.print(f"[bold]{label}[/]  [muted]{ts}[/]  {_stars(r.scores)}")
         console.print()

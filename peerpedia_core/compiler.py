@@ -42,7 +42,7 @@ CompilerBackend (ABC)   Abstract: compile(), extract_metadata()
 TypstBackend            Calls ``typst compile`` via subprocess
 MarkdownBackend         Pure Python: markdown -> HTML with math protection
 
-Frontmatter helpers (used by commands/articles.py)
+Frontmatter helpers (used by commands/articles/)
 --------------------------------------------------
 extract_frontmatter     Parse YAML frontmatter from source text
 parse_frontmatter       Same as extract, with error handling
@@ -53,7 +53,7 @@ _strip_frontmatter      Remove frontmatter, return body only
 Callers
 -------
 - ``cli.py``: ``_cmd_compile`` -> ``detect_format`` -> backend.compile()
-- ``commands/articles.py``: ``create_article_with_content`` ->
+- ``commands/articles/``: ``create_article_with_content`` ->
   ``make_article_frontmatter``; ``update_article_content`` ->
   ``make_article_frontmatter`` + ``_strip_frontmatter``
 

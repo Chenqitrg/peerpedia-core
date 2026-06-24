@@ -1,11 +1,8 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""Account commands — register, login, whoami.
+"""Account commands — register, login, recover, whoami.
 
-TODO(recovery): key recovery — ``account recover`` re-derives the Ed25519
-key from password+salt stored in DB.  Determinstic scrypt→Ed25519 means
-a user who remembers their password can recover their identity on any device.
 TODO(multi-device): ``account login`` on a new device.  Currently session
 is a local file; multi-device needs the recovered private key + P2P identity
 sync (social graph transport, not git bundle).
@@ -97,6 +94,42 @@ def _cmd_login(db, args):
         _json_out({"id": user.id, "name": user.name})
     else:
         _ok(f"Logged in as [accent]{user.name}[/] (id: {user.id[:8]})")
+
+
+@_with_db
+def _cmd_recover(db, args):
+    """Recover a user's Ed25519 key from password + stored salt.
+
+    Re-derives the key pair deterministically (scrypt + Ed25519) and
+    writes the session file.  Works on any device — the user only needs
+    their password; the salt is fetched from the local DB (synced via P2P).
+
+    args: --name, --json
+    """
+
+    user = get_user_by_name(db, args.name)
+    if len(user) == 0:
+        _die(f"User '{args.name}' not found.")
+    if len(user) > 1:
+        _die(f"Multiple users named '{args.name}'. "
+             f"Use user ID to recover: {', '.join(u.id for u in user)}")
+    user = user[0]
+
+    if user.salt is None:
+        _die(f"User '{args.name}' has no stored salt — key was not derived. "
+             "Please re-register: peerpedia account register --name {args.name}")
+
+    password = getpass.getpass("Password: ")
+    private_key_bytes, pubkey_bytes = derive_key_pair(password, user.salt)
+    if pubkey_bytes.hex() != user.public_key:
+        _die("Wrong password.")
+
+    _write_session(user.id, user.name, private_key_bytes.hex())
+
+    if args.json:
+        _json_out({"id": user.id, "name": user.name, "pubkey": user.public_key})
+    else:
+        _ok(f"Recovered key for [accent]{user.name}[/] (id: {user.id[:8]})")
 
 
 @_with_db

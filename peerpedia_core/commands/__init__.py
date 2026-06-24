@@ -121,7 +121,8 @@ from peerpedia_core.commands.discover import (
 from peerpedia_core.config.paths import ARTICLES_DIR
 from peerpedia_core.storage.db import db_repl_setup as _db_repl_setup
 from peerpedia_core.storage.db.session_utils import db_session_scope as _db_session_scope
-from peerpedia_core.storage.db.crud_article import insert_article
+from peerpedia_core.storage.db.crud_article import get_author_ids_batch, insert_article
+from peerpedia_core.storage.db.crud_user import get_users_by_ids
 
 
 def db_session(database_url: str):
@@ -176,9 +177,11 @@ __all__ = [
     "get_article",
     "get_article_view",
     "get_author_ids",
+    "get_author_ids_batch",
     "get_follower_views",
     "get_following_views",
     "get_user_view",
+    "get_users_by_ids",
     "get_followers",
     "get_following",
     "get_bookmarks_for_user",

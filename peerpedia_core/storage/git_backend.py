@@ -295,9 +295,6 @@ def get_diff_between(repo_path: Path, hash1: str, hash2: str) -> dict:
     total_deletions = 0
     diff_files: dict[str, dict[str, int]] = {}
 
-    # TODO(perf): diff content loaded twice — once in diff_parts and once for
-    # line counting.  Iterate patch lines once, building diff_text and counting
-    # insertions/deletions in a single pass.
     for d in c1.diff(c2, create_patch=True):
         fname = d.a_path or d.b_path or ""
         if d.a_path:
@@ -308,8 +305,13 @@ def get_diff_between(repo_path: Path, hash1: str, hash2: str) -> dict:
             continue
 
         diff_parts.append(patch)
-        ins = sum(1 for l in patch.split("\n") if l.startswith("+") and not l.startswith("+++"))
-        dels = sum(1 for l in patch.split("\n") if l.startswith("-") and not l.startswith("---"))
+        ins = 0
+        dels = 0
+        for line in patch.split("\n"):
+            if line.startswith("+") and not line.startswith("+++"):
+                ins += 1
+            elif line.startswith("-") and not line.startswith("---"):
+                dels += 1
         diff_files[fname] = {"insertions": ins, "deletions": dels}
         total_insertions += ins
         total_deletions += dels
@@ -356,8 +358,6 @@ def merge_git_repos(target: Path, fork: Path, author_name: str) -> str:
     remote_name = f"fork-{fork.name}"
     try:
         target_repo.create_remote(remote_name, str(fork))
-        # TODO(perf): fetch pulls ALL refs from fork repo.  Use --single-branch
-        # since we only need the default branch.
         target_repo.git.fetch(remote_name)
 
         # Fork repos have exactly one branch — take the first remote ref

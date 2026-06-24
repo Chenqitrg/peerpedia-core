@@ -15,7 +15,7 @@ from peerpedia_core.cli.bundle_utils import _sync_server, _try_sync
 from peerpedia_core.social import discover_articles
 from peerpedia_core.commands import (
     assert_article_integrity, create_article_with_content,
-    get_article, get_article_view, list_article_views, list_articles, publish_article,
+    get_article, get_article_view, get_author_ids_batch, list_article_views, list_articles, publish_article,
     publish_ready_articles, delete_article, update_article_content, get_user,
 )
 
@@ -140,11 +140,9 @@ def _cmd_article_list(db, args):
     if not articles:
         console.print("[muted]No articles.[/]")
         return
-    # TODO(perf): per-article _resolve_and_display_article does a disk read +
-    # DB query for author IDs (N+1).  Use get_author_ids_batch for the display
-    # loop and cache file reads.
+    author_map = get_author_ids_batch(db, [a.id for a in articles])
     for a in articles:
-        _resolve_and_display_article(db, a)
+        _resolve_and_display_article(db, a, author_ids=author_map.get(a.id, []))
 
 
 @_with_db

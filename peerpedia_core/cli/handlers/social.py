@@ -21,15 +21,15 @@ from peerpedia_core.commands import (
     get_article, merge_article_meta,
 )
 from peerpedia_core.transport import fetch_article_meta
-from peerpedia_core.social import discover_followers, discover_following
+from peerpedia_core.social import discover_articles, discover_followers, discover_following
 from peerpedia_core.transport import push_follow, push_unfollow
 
 def _pull_social(db, user_id: str) -> None:
-    """Pull social graph for *user_id* from the peer server.  Best-effort.
+    """Pull social graph + articles for *user_id* from the peer server.  Best-effort.
 
-    Discovers who *user_id* follows and who follows *user_id*, merging
-    new users and follows into the local DB.  Reads ``PEERPEDIA_SERVER``
-    from env.  Warns on each invocation if the server is unreachable.
+    Discovers who *user_id* follows, who follows *user_id*, and their
+    articles — merging everything into the local DB.  Reads
+    ``PEERPEDIA_SERVER`` from env.
     """
     server = os.environ.get("PEERPEDIA_SERVER")
     if not server:
@@ -38,6 +38,7 @@ def _pull_social(db, user_id: str) -> None:
     try:
         discover_following(db, server, user_id)
         discover_followers(db, server, user_id)
+        discover_articles(db, server, user_id)
     except Exception as e:
         console.print(f"[dim]⚠ Social pull from {server} failed: {e}[/]")
 
@@ -231,3 +232,5 @@ def _cmd_followers(db, args):
     else:
         users = get_followers(db, args.user)
         _ok(f"Followers {len(users)} user(s)")
+
+

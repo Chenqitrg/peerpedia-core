@@ -52,11 +52,20 @@ def articles_dir():
     """
     with tempfile.TemporaryDirectory() as tmp:
         # Patch every module that imports DEFAULT_ARTICLES_DIR
+        _submodules = [
+            "peerpedia_core.commands.articles.create",
+            "peerpedia_core.commands.articles.delete",
+            "peerpedia_core.commands.articles.fork",
+            "peerpedia_core.commands.articles.publish",
+            "peerpedia_core.commands.articles.rollback",
+            "peerpedia_core.commands.articles.update",
+            "peerpedia_core.commands.articles._helpers",
+        ]
         patches = [
             patch.object(git_backend, "DEFAULT_ARTICLES_DIR", Path(tmp)),
             patch("peerpedia_core.commands.merge.DEFAULT_ARTICLES_DIR", Path(tmp)),
             patch("peerpedia_core.commands.articles.DEFAULT_ARTICLES_DIR", Path(tmp)),
-        ]
+        ] + [patch(f"{m}.DEFAULT_ARTICLES_DIR", Path(tmp)) for m in _submodules]
         for p in patches:
             p.start()
         try:

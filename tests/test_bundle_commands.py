@@ -140,6 +140,13 @@ def articles_dir():
             "peerpedia_core.storage.git_backend",
             "peerpedia_core.commands.bundle",
             "peerpedia_core.commands.articles",
+            "peerpedia_core.commands.articles.create",
+            "peerpedia_core.commands.articles.delete",
+            "peerpedia_core.commands.articles.fork",
+            "peerpedia_core.commands.articles.publish",
+            "peerpedia_core.commands.articles.rollback",
+            "peerpedia_core.commands.articles.update",
+            "peerpedia_core.commands.articles._helpers",
             "peerpedia_core.commands.workflow",
         ]
         patches = [patch(f"{m}.DEFAULT_ARTICLES_DIR", Path(tmp)) for m in patch_modules]

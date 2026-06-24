@@ -36,12 +36,44 @@ def _utcnow() -> datetime:
 
 
 class Article(Base):
+    """An academic article — the core entity.  Content lives in git; DB stores metadata, scores, and state.
+
+    State machine: ``draft`` → ``sedimentation`` → ``published``.
+    Status transitions are recorded as git commits (``[status] ...``) so
+    they survive P2P sync without a consensus protocol.
+    """
     __tablename__ = "articles"
 
     id = Column(String, primary_key=True, default=_new_id)
     title = Column(String, nullable=False)
     abstract = Column(String, nullable=True)
     keywords = Column(JSONList, nullable=True)
+    # TODO(tag-system): upgrade from flat JSONList to a wiki-style Tag entity.
+    #
+    # Tag model:
+    #   Tag(id, name, description, canonical_id)
+    #   canonical_id → Tag.id (nullable FK to self) — when set, this tag is
+    #     a synonym/redirect to the canonical tag.  Queries resolve via
+    #     WHERE COALESCE(canonical_id, id) = ?.
+    #   ArticleTag(article_id, tag_id) — normalized join table replacing JSONList.
+    #
+    # Tag-tag relations (subfield_of, related_to, see_also) use the same
+    # ArticleTag pattern: a TagRelation(from_tag_id, to_tag_id, relation_type)
+    # table.  A tag becomes a subfield of another by adding a relation row —
+    # no separate hierarchy model needed.
+    #
+    # Synonym detection (crowdsourced via publishing, not community patrol):
+    #   1. At publish time, the author selects tags AND marks which ones they
+    #      consider synonymous (e.g. "量子物理" ≈ "量子力学").  This is a
+    #      TagSynonymVote(from_tag_id, to_tag_id, voter_id, article_id).
+    #   2. Votes sync with the article bundle — every publication is a ballot.
+    #   3. When enough distinct authors vote A ≈ B (threshold T, e.g. 5),
+    #      auto-merge: A.canonical_id = B.id.  No central authority needed.
+    #   4. Aliases persist — "量子物理" still exists, resolves to "量子力学".
+    #
+    # This turns tag governance from maintenance work into a byproduct of
+    # publishing.  No dedicated patrolling, no central committee.
+    # CLI: peerpedia tag merge <source> <target> (manual override)
     categories = Column(JSONList, nullable=True)
     status = Column(String, nullable=False, default="draft", index=True)  # draft|sedimentation|published
     score = Column(JSONDict, nullable=True)  # FiveDimScores as dict
@@ -80,6 +112,7 @@ class Article(Base):
 
 
 class Review(Base):
+    """A peer review — cached in DB after being committed to git.  Scores are five-dimensional (originality, rigor, completeness, pedagogy, impact)."""
     __tablename__ = "reviews"
     __table_args__ = (
         UniqueConstraint("article_id", "reviewer_id", "scope", "commit_hash", name="uq_review_article_reviewer_scope_commit"),
@@ -91,6 +124,11 @@ class Review(Base):
     reviewer_id = Column(String, ForeignKey("users.id"), nullable=False)
     scope = Column(String, nullable=False)  # "sedimentation" | "published" — matches article.status
     scores = Column(JSONDict, nullable=False)  # FiveDimScores as dict
+    # TODO(review-thread): add a `thread` column (JSONDict or similar) for
+    # reviewer-author discussion messages.  Currently reviews are one-way —
+    # the reviewer submits scores+comment, the author has no reply path.
+    # Thread messages should be written to the git repo under the reviewer's
+    # directory (reviews/{id}/threads/*.md) for audit trail.
     created_at = Column(DateTime, nullable=False, default=_utcnow)
     updated_at = Column(DateTime, nullable=False, default=_utcnow, onupdate=_utcnow)
 
@@ -99,6 +137,7 @@ class Review(Base):
 
 
 class ArticleAuthor(Base):
+    """Join table: who *contributed* to an article (derived from git commit authors).  Orthogonal to ScriptMaintainer."""
     __tablename__ = "article_authors"
     __table_args__ = (UniqueConstraint("article_id", "author_id", name="uq_article_author"),)
 
@@ -129,6 +168,12 @@ class ScriptMaintainer(Base):
 
 
 class User(Base):
+    """A peer in the network.  Identity is an Ed25519 key pair derived from password+salt.
+
+    ``public_key`` and ``salt`` are shareable via P2P sync.  ``salt`` is
+    needed for key recovery on a new device.  ``name`` is NOT unique — two
+    peers can independently register the same name (P2P compatibility).
+    """
     __tablename__ = "users"
 
     id = Column(String, primary_key=True)
@@ -162,6 +207,7 @@ class User(Base):
 
 
 class Follow(Base):
+    """Directed social graph edge: *follower_id* follows *followed_id*.  Self-follow is prevented by check constraint."""
     __tablename__ = "follows"
     __table_args__ = (
         UniqueConstraint("follower_id", "followed_id", name="uq_follow"),
@@ -177,6 +223,7 @@ class Follow(Base):
 
 
 class Bookmark(Base):
+    """Private bookmark — a user saves an article for later.  Not shared via P2P social graph."""
     __tablename__ = "bookmarks"
     __table_args__ = (UniqueConstraint("user_id", "article_id", name="uq_bookmark"),)
 
@@ -189,6 +236,7 @@ class Bookmark(Base):
 
 
 class MergeProposal(Base):
+    """Tracks a request to merge a fork back into its origin article.  Status: open → accepted/rejected."""
     __tablename__ = "merge_proposals"
 
     id = Column(String, primary_key=True, default=_new_id)
@@ -204,6 +252,7 @@ class MergeProposal(Base):
 
 
 class Citation(Base):
+    """Directed citation edge between two articles.  ``forward_prob`` estimates P(cited | cites)."""
     __tablename__ = "citations"
     __table_args__ = (UniqueConstraint("from_article_id", "to_article_id", name="uq_citation"),)
 

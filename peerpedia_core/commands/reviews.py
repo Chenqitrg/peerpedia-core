@@ -7,6 +7,13 @@ TODO(review-feedback): after a review, the reviewer should be notified when
 the article publishes (outcome feedback loop).  Currently a reviewer writes
 a review and never learns whether their input mattered.
 
+TODO(author-rebuttal): after receiving reviews, the author should be able to
+write a formal rebuttal — a structured point-by-point response to each review,
+stored in the git repo under the reviewer's directory (reviews/{id}/threads/).
+This is standard in academic peer review: author responds, reviewers discuss,
+editor decides.  Currently the review is one-way and final — no author
+response path exists.
+
 Call graph::
 
     submit_review
@@ -120,6 +127,15 @@ def submit_review(
 
     for aid in author_ids:
         recompute_author_reputation(db, aid)
+
+    # TODO(author-reply): authors cannot reply to reviews.  The reply should
+    # be written to the reviewer's directory in the git repo (e.g.
+    # reviews/{anon_id}/threads/{timestamp}-reply.md), forming a complete
+    # conversation record.  The old system had a Review.thread field and a
+    # POST .../reviews/{id}/messages endpoint for this.
+    #
+    # TODO(review-update): reviews are immutable after submission.  Reviewers
+    # cannot correct scores or update comments if they discover an error.
 
     return {"review_id": r.id, "scores": r.scores, "commit_hash": commit_hash}
 

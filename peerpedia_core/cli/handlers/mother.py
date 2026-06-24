@@ -1,7 +1,16 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""?Mother — interactive user guide."""
+"""?Mother — interactive user guide.
+
+TODO(mother-agent): currently a static guide printed as a Rich panel.
+Mother will evolve into an AI agent backed by an API endpoint.  The CLI
+handler will become a thin client that connects to a local or remote
+Mother agent, sending user questions and receiving interactive guidance,
+writing assistance, and navigation help.  The agent should have access
+to the user's local article graph, social graph, and citation network
+to provide context-aware responses.
+"""
 
 from __future__ import annotations
 

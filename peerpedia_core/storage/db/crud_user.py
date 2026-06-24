@@ -110,14 +110,17 @@ def create_user(
 
 
 def get_user(session: Session, user_id: str) -> User | None:
+    """Return a user by ID, or None."""
     return session.get(User, user_id)
 
 
 def get_user_by_name(session: Session, name: str) -> list[User]:
+    """Return all users with the given name (may be multiple — P2P allows duplicates)."""
     return session.query(User).filter(User.name == name).all()
 
 
 def list_users(session: Session) -> list[User]:
+    """Return all users, newest first."""
     return session.query(User).order_by(User.created_at.desc()).all()
 
 
@@ -167,6 +170,7 @@ def update_user_salt(session: Session, user_id: str, salt_hex: str) -> None:
 
 
 def update_user_reputation(session: Session, user_id: str, reputation: dict) -> None:
+    """Persist a new ReputationScores dict for *user_id*.  Raises ValueError if not found."""
     rows = session.query(User).filter(User.id == user_id).update(
         {"reputation": reputation}, synchronize_session="fetch"
     )
@@ -179,6 +183,7 @@ def update_user_reputation(session: Session, user_id: str, reputation: dict) -> 
 
 
 def follow_user(session: Session, follower_id: str, followed_id: str) -> Follow:
+    """Create a follow relationship.  Raises ValueError on self-follow."""
     if follower_id == followed_id:
         raise ValueError("A user cannot follow themselves")
     f = Follow(follower_id=follower_id, followed_id=followed_id)
@@ -188,6 +193,7 @@ def follow_user(session: Session, follower_id: str, followed_id: str) -> Follow:
 
 
 def unfollow_user(session: Session, follower_id: str, followed_id: str) -> None:
+    """Remove a follow relationship.  Idempotent — no-op if not following."""
     f = session.query(Follow).filter(Follow.follower_id == follower_id, Follow.followed_id == followed_id).first()
     if f:
         session.delete(f)
@@ -195,10 +201,12 @@ def unfollow_user(session: Session, follower_id: str, followed_id: str) -> None:
 
 
 def is_following(session: Session, follower_id: str, followed_id: str) -> bool:
+    """Return True if *follower_id* follows *followed_id*."""
     return session.query(Follow).filter(Follow.follower_id == follower_id, Follow.followed_id == followed_id).first() is not None
 
 
 def get_followers(session: Session, user_id: str) -> list[User]:
+    """Return users who follow *user_id* (single JOIN query)."""
     return (
         session.query(User)
         .join(Follow, User.id == Follow.follower_id)
@@ -208,6 +216,7 @@ def get_followers(session: Session, user_id: str) -> list[User]:
 
 
 def get_following(session: Session, user_id: str) -> list[User]:
+    """Return users that *user_id* follows (single JOIN query)."""
     return (
         session.query(User)
         .join(Follow, User.id == Follow.followed_id)
@@ -217,8 +226,10 @@ def get_following(session: Session, user_id: str) -> list[User]:
 
 
 def get_follower_count(session: Session, user_id: str) -> int:
+    """Return the number of followers *user_id* has."""
     return session.query(Follow).filter(Follow.followed_id == user_id).count()
 
 
 def get_following_count(session: Session, user_id: str) -> int:
+    """Return the number of users *user_id* follows."""
     return session.query(Follow).filter(Follow.follower_id == user_id).count()

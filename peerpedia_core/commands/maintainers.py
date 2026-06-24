@@ -22,6 +22,12 @@ Transfer is achieved via add(new) + remove(self), always add before remove
 to ensure at least one maintainer exists at all times.
 """
 
+# TODO(maintainer-transfer): a maintainer cannot voluntarily leave their role,
+# and there is no transfer mechanism.  If the sole maintainer disappears, the
+# article becomes unmaintainable — no one can edit, publish, or add new
+# maintainers.  Needs: (1) maintainer self-removal, (2) transfer/community
+# takeover for orphaned articles.
+
 from __future__ import annotations
 
 from peerpedia_core.storage.db import Session

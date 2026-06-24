@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""HTTP route handlers — thin wrappers around bundle/server and social/server."""
+"""HTTP route handlers — thin wrappers that parse HTTP and delegate to commands/."""
 
 from peerpedia_core.transport.routes.articles import ROUTES as ARTICLE_ROUTES
 from peerpedia_core.transport.routes.users import ROUTES as USER_ROUTES

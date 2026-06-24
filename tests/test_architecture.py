@@ -108,7 +108,7 @@ def test_no_internal_peerpedia_imports():
         # ── Circular dependency breaks ──────────────────────────────────
         ("peerpedia_core/commands/integrity.py",
          "peerpedia_core.commands.articles"):
-            "circular: articles.py → integrity.py → articles.py (rebuild_article_authors)",
+            "circular: articles/__init__.py → integrity.py → articles._helpers (rebuild_article_authors)",
     }
 
     for f in _all_modules():

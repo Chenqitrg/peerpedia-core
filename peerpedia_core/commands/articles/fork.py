@@ -10,6 +10,7 @@ import uuid
 from peerpedia_core.storage.db import Session
 from peerpedia_core.exceptions import NotFoundError
 from peerpedia_core.policies.articles import assert_can_fork_article
+from peerpedia_core.commands.integrity import assert_article_integrity
 from peerpedia_core.storage.db.crud_article import (
     create_article,
     get_article as _get_article,
@@ -32,6 +33,8 @@ def fork_article(db: Session, article_id: str, user_id: str) -> dict:
         NotAuthorizedError: article not forkable (policy)
         ConflictError: user already forked this article
     """
+    assert_article_integrity(db, article_id, level="light")
+
     user = get_user(db, user_id)
     if user is None:
         raise NotFoundError("User not found")

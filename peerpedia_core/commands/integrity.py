@@ -104,6 +104,11 @@ def _repair_from_git(db: Session, article_id: str, repo_path: Path) -> None:
 
     rebuild_article_authors(db, article_id)
     _sync_status_from_git(db, article_id, repo_path)
+    # TODO(G9): call sync_reviews_from_worktree(db, article_id) before
+    # recompute_article_score.  Currently recompute_article_score reads
+    # review scores from the DB cache, not from git.  If a review exists
+    # in git but not in DB (e.g. crash after git write, before DB upsert),
+    # _repair_from_git will recompute the score using stale data.
     recompute_article_score(db, article_id)
 
 

@@ -57,6 +57,11 @@ def publish_article(
     if old_status != "draft":
         raise NotAuthorizedError("Only draft articles can be published")
 
+    # TODO(sedimentation-cap): check count of author's articles currently in
+    # sedimentation before allowing publish.  Without a cap (e.g. 3-5), a
+    # malicious user can flood the pool with garbage articles, consuming
+    # peer storage and diluting reviewer attention.
+
     write_review_to_git(
         article_id, user_id, self_review, comment, user.name, f"{user_id}@peerpedia",
         signing_key_bytes=signing_key_bytes, pubkey_hex=pubkey_hex,
@@ -87,6 +92,10 @@ def publish_article(
     recompute_article_score(db, article_id)
 
     rp = DEFAULT_ARTICLES_DIR / article_id
+    # TODO(self-review-order): this check runs AFTER all mutations (git write
+    # + DB status change + sink_start + score recompute at L60-87).  If it
+    # somehow fails, the article is already in sedimentation with side effects
+    # committed.  Move this check before L60.
     if not (rp / ".git").is_dir():
         raise BadRequestError("self_review is required before publishing — no git repo found")
     try:

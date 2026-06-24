@@ -10,6 +10,7 @@ from peerpedia_core.config.params import params
 from peerpedia_core.exceptions import NotFoundError
 from peerpedia_core.frontmatter import make_article_frontmatter, strip_frontmatter
 from peerpedia_core.policies.articles import assert_can_edit_article
+from peerpedia_core.commands.integrity import assert_article_integrity
 from peerpedia_core.storage.db.crud_article import (
     get_article as _get_article,
     set_sink_start,
@@ -33,6 +34,8 @@ def update_article_content(
     Returns:
         {"id": <article_id>, "title": ..., "status": ..., "commit_hash": ...}
     """
+    assert_article_integrity(db, article_id, level="light")
+
     user = get_user(db, user_id)
     if user is None:
         raise NotFoundError("User not found")
@@ -85,6 +88,12 @@ def update_article_content(
     rebuild_article_authors(db, article_id, since_hash=a.last_author_rebuild_hash)
 
     if old_status == "published":
+        # TODO(G1): commit a "[status] sedimentation" marker commit *before*
+        # set_sink_start so integrity repair can detect a crash between the
+        # git write and the DB write.  Currently commit_article at L71 writes
+        # a plain message — if the process dies before L91, the DB stays
+        # "published" with unreviewed content in git and no [status] marker
+        # for _repair_from_git to find.
         set_sink_start(db, article_id, params.sink.edit_article_default_days)
 
     return {"id": a.id, "title": a.title, "status": a.status, "commit_hash": commit_hash}

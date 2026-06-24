@@ -79,6 +79,11 @@ def merge_follows(db: Session, follower_id: str, entries: list[dict]) -> int:
 
     Raises ValueError if any entry is missing *id*, or if a self-follow
     is detected.
+
+    TODO(unfollow-propagation): this function only ADDS follows.  Unfollows
+    are never propagated — if user A unfollows B locally, remote peers never
+    learn about it and still see A following B.  The social graph diverges
+    permanently.  Needs either a tombstone mechanism or a full graph sync.
     """
     _require_keys(entries, "id", label="follows")
 

@@ -9,6 +9,7 @@ from peerpedia_core.storage.db import Session
 from peerpedia_core.config.params import params
 from peerpedia_core.exceptions import NotFoundError
 from peerpedia_core.policies.articles import assert_can_rollback_article
+from peerpedia_core.commands.integrity import assert_article_integrity
 from peerpedia_core.storage.db.crud_article import (
     get_article as _get_article,
     set_sink_start,
@@ -38,6 +39,8 @@ def rollback_article(
     creates a new signed commit.  The result is a linear history that peers
     can fast-forward to without conflicts.
     """
+    assert_article_integrity(db, article_id, level="light")
+
     user = get_user(db, user_id)
     if user is None:
         raise NotFoundError("User not found")
@@ -63,7 +66,14 @@ def rollback_article(
     key_path = write_key_to_tempfile(signing_key_bytes)
     try:
         new_hash = commit_article(
-            rp, f"Rollback to {target_hash[:8]}", user.name, f"{user_id}@peerpedia",
+            rp,
+            # TODO(G3): use "[status] sedimentation" marker message instead
+            # of a plain message.  This is the only command that changes a
+            # published article's content without writing a [status] commit.
+            # If the process dies at L76 (set_sink_start), integrity repair
+            # has no marker to detect the divergence.
+            f"Rollback to {target_hash[:8]}",
+            user.name, f"{user_id}@peerpedia",
             signing_key=key_path, pubkey_hex=pubkey_hex,
         )
     finally:

@@ -42,6 +42,9 @@ def get_user_by_name(db: Session, name: str) -> list:
 
 def update_user_public_key(db: Session, user_id: str, pubkey_hex: str):
     """Set the public key for a user."""
+    # TODO(account-lifecycle): users cannot delete/deactivate their account,
+    # cannot change their display name (no update_user_name), and cannot
+    # export their data.  The User model has no is_active or deleted_at flag.
     return _update_pubkey(db, user_id, pubkey_hex)
 
 

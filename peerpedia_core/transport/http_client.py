@@ -13,6 +13,7 @@ With pooling, all requests on the same host reuse one connection.
 """
 
 import json
+import threading
 
 import httpx
 
@@ -20,25 +21,29 @@ from peerpedia_core.exceptions import ConflictError, ProtocolError, TransportErr
 from peerpedia_core.transport.auth import sign_auth_header
 
 _client: httpx.Client | None = None
+_client_lock = threading.Lock()
 
 
 def _get_client() -> httpx.Client:
-    """Return a shared ``httpx.Client`` with connection pooling."""
+    """Return a shared ``httpx.Client`` with connection pooling (thread-safe)."""
     global _client
     if _client is None:
-        _client = httpx.Client(
-            limits=httpx.Limits(max_keepalive_connections=10, max_connections=20),
-            timeout=httpx.Timeout(30.0),
-        )
+        with _client_lock:
+            if _client is None:
+                _client = httpx.Client(
+                    limits=httpx.Limits(max_keepalive_connections=10, max_connections=20),
+                    timeout=httpx.Timeout(30.0),
+                )
     return _client
 
 
 def close_client() -> None:
     """Close the shared HTTP client (call on shutdown)."""
     global _client
-    if _client is not None:
-        _client.close()
-        _client = None
+    with _client_lock:
+        if _client is not None:
+            _client.close()
+            _client = None
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

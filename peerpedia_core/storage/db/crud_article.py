@@ -182,6 +182,7 @@ def list_articles(
 
 
 def count_articles(session: Session, status: str | set[str] | None = None, author_id: str | None = None) -> int:
+    """Count articles matching optional status and author filters."""
     q = session.query(Article)
     if isinstance(status, set):
         if status:
@@ -200,6 +201,11 @@ def update_article_compiled(
     output: str | None,
     pages: list[str] | None,
 ) -> Article:
+    """Cache compiled output (HTML/PDF/etc.) for an article.
+
+    Called by the compiler pipeline after rendering.  Not yet wired into
+    the production compiler path — currently only exercised in tests.
+    """
     a = session.get(Article, article_id)
     if a is None:
         raise ValueError(f"Article {article_id} not found")
@@ -211,6 +217,12 @@ def update_article_compiled(
 
 
 def update_article_status(session: Session, article_id: str, new_status: str) -> None:
+    """Transition *article_id* to *new_status*.  Raises ValueError if not found.
+
+    Uses targeted UPDATE to avoid loading ``compiled_output`` (which may
+    be 100KB+).  Expires the session afterward so subsequent ``get()``
+    calls reload from DB.
+    """
     _VALID_STATUSES = {"draft", "sedimentation", "published"}
     if new_status not in _VALID_STATUSES:
         raise ValueError(f"Invalid status {new_status!r}, must be one of {_VALID_STATUSES}")
@@ -233,6 +245,7 @@ def update_article_score(session: Session, article_id: str, score: dict) -> None
 
 
 def increment_fork_count(session: Session, article_id: str) -> None:
+    """Atomically increment ``fork_count`` by 1. Raises ValueError if not found."""
     rows = session.query(Article).filter(Article.id == article_id).update(
         {"fork_count": Article.fork_count + 1}, synchronize_session="fetch"
     )
@@ -242,6 +255,7 @@ def increment_fork_count(session: Session, article_id: str) -> None:
 
 
 def set_sink_start(session: Session, article_id: str, duration_days: int) -> None:
+    """Enter sedimentation and start the sink timer (targeted UPDATE)."""
     from datetime import datetime, timezone
 
     rows = session.query(Article).filter(Article.id == article_id).update(
@@ -325,12 +339,17 @@ def update_witnessed_at(session: Session, article_id: str) -> None:
     Called when the server receives new commits via sync — the server clock
     proves "this article had this commit by this time," defending against
     local clock manipulation for priority claims.
+
+    Raises ``ValueError`` if *article_id* does not exist.
     """
     from datetime import datetime, timezone
 
-    session.query(Article).filter(Article.id == article_id).update(
+    rows = session.query(Article).filter(Article.id == article_id).update(
         {"witnessed_at": datetime.now(timezone.utc)},
-        synchronize_session=False,
+        synchronize_session="fetch",
     )
+    if rows == 0:
+        raise ValueError(f"Article {article_id} not found")
+    session.expire_all()
 
 

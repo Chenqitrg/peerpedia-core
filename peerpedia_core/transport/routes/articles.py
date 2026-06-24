@@ -25,6 +25,7 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
 from peerpedia_core.bundle.server import (
+    apply_sync,
     check_article_ancestor,
     get_article_bundle,
     get_article_commit_history,
@@ -34,7 +35,6 @@ from peerpedia_core.bundle.server import (
     read_article_source_content,
 )
 from peerpedia_core.commands import (
-    apply_sync_bundle,
     get_article_view,
     list_article_views,
 )
@@ -78,7 +78,7 @@ async def _sync(request: Request) -> JSONResponse:
         )
     bundle_bytes = await request.body()
     db = request.state.db
-    new_head = apply_sync_bundle(db, article_id, bundle_bytes)
+    new_head = apply_sync(db, article_id, bundle_bytes)
     return JSONResponse({"head": new_head})
 
 

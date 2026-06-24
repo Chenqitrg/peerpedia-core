@@ -12,6 +12,11 @@ Every function takes pre-fetched data (Article, author_ids, maintainer_ids)
 and either returns the article or raises a semantic exception.  The caller
 (``commands/``) is responsible for fetching data before calling.
 
+TODO(moderation): users cannot delete published articles by design
+(influence is irreversible), but there is no platform-level moderation
+layer to remove illegal/harmful content.  Needs: admin role, article
+hide/delete by admin, report mechanism, content review workflow.
+
 Permission matrix
 -----------------
 
@@ -156,28 +161,59 @@ def assert_can_download_content(
 
 
 def assert_can_edit_article(article: Article, maintainer_ids: list[str], user: User) -> Article:
+    """Raise if *user* is not a maintainer, or article is in sedimentation.
+
+    Maintainers can edit articles in ``draft`` or ``published`` status.
+    Sedimentation articles are immutable — they cannot be edited during
+    the peer-review window.
+    """
     _assert_maintainer(article, maintainer_ids, user, "edit")
     return article
 
 
 def assert_can_delete_article(article: Article, maintainer_ids: list[str], user: User) -> Article:
+    """Raise if *user* is not a maintainer, or article is not in ``draft``.
+
+    Only draft articles can be deleted.  Once published or in
+    sedimentation, the article is part of the permanent record.
+    """
     _assert_maintainer(article, maintainer_ids, user, "delete", allowed_statuses={"draft"})
     return article
 
 
 def assert_can_rollback_article(article: Article, maintainer_ids: list[str], user: User) -> Article:
+    """Raise if *user* is not a maintainer, or article is in sedimentation.
+
+    Rollback creates a forward commit (never rewrites history), so it is
+    allowed on draft and published articles but NOT during sedimentation
+    when the article is under active peer review.
+    """
     _assert_maintainer(article, maintainer_ids, user, "rollback")
     return article
 
 
 def assert_can_publish_article(article: Article, maintainer_ids: list[str], user: User) -> Article:
-    # TODO: unanimous consent — all maintainers must confirm before publishing.
+    """Raise if *user* is not a maintainer, or article is in sedimentation.
+
+    Publishing transitions a draft article into the sedimentation pool
+    for peer review.  Once in sedimentation, an article publishes
+    automatically when the sink timer expires — manual re-publish is
+    not allowed.
+
+    TODO: unanimous consent — all maintainers must confirm before publishing.
+    """
     _assert_maintainer(article, maintainer_ids, user, "publish")
     return article
 
 
 def assert_can_accept_merge(article: Article, maintainer_ids: list[str], user: User) -> Article:
-    # TODO: consent model — merge acceptance should require all maintainers.
+    """Raise if *user* is not a maintainer, or article is in sedimentation.
+
+    Merge proposals can be accepted on draft or published articles.
+    Sedimentation articles are immutable during peer review.
+
+    TODO: consent model — merge acceptance should require all maintainers.
+    """
     _assert_maintainer(article, maintainer_ids, user, "accept merge")
     return article
 
@@ -194,11 +230,23 @@ def assert_can_submit_review(article: Article) -> Article:
 
 
 def assert_can_extend_sink(article: Article, maintainer_ids: list[str], user: User) -> Article:
+    """Raise if *user* is not a maintainer, or article is not in sedimentation.
+
+    Only sedimentation articles can have their sink timer extended.
+    The caller must also enforce the maximum total sink duration
+    (``params.sink.max_days``).
+    """
     _assert_maintainer(article, maintainer_ids, user, "extend sink", allowed_statuses={"sedimentation"})
     return article
 
 
 def assert_can_sync_article(article: Article, maintainer_ids: list[str], user: User) -> Article:
+    """Raise if *user* is not a maintainer, or article is in sedimentation.
+
+    Sync (P2P bundle exchange) is allowed on draft and published articles.
+    Sedimentation articles are immutable — sync would change the content
+    under active peer review.
+    """
     _assert_maintainer(article, maintainer_ids, user, "sync")
     return article
 

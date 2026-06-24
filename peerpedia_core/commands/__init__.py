@@ -19,17 +19,15 @@ Hard rules
 
 Submodules
 ----------
-articles.py
-    Article lifecycle: create, update, publish, fork, rollback.
-    These are the most complex functions because they must coordinate git
-    commits with DB metadata sync.  Every function follows git-first: commit
-    content to the git repo, then update the DB cache.
+articles/ (package)
+    Article lifecycle — split into create, update, publish, fork, rollback,
+    delete (each ~50-80 lines).  ``__init__.py`` provides read wrappers and
+    re-exports the full public API for backward compatibility.
 
 reviews.py
     Review submission.  ``submit_review`` writes review files to the git
     worktree (scores.json + threads/*.md), commits, then caches scores in
-    the DB.  ``write_review_to_git`` is the low-level git writer shared
-    with articles.py's ``publish_article``.
+    the DB.
 
 merge.py
     Merge proposal acceptance.  ``accept_merge`` runs git merge, rebuilds
@@ -37,26 +35,27 @@ merge.py
     article was published.
 
 bundle.py
-    Bundle application.  ``apply_sync_bundle`` merges fetched git
-    objects and reconciles DB state.  ``sync_reviews_from_worktree`` reads every
-    reviews/*/scores.json from the git worktree and upserts into the DB
-    Review cache — closing the gap where sync'd reviews were invisible to
-    scoring.
+    Bundle application.  ``apply_sync_bundle`` merges fetched git objects and
+    reconciles DB state.  ``sync_reviews_from_worktree`` reads reviews from
+    git worktree into the DB cache.
 
 workflow.py
-    Scheduled and reactive workflow orchestration.
-    ``publish_ready_articles`` scans for sedimentation articles whose sink
-    time has elapsed and publishes them.  ``recompute_article_score`` and
-    ``recompute_author_reputation`` are the DB-aware wrappers that gather
-    data, call pure workflow/ functions, and write results back.
+    Scoring and reputation orchestration.  ``recompute_article_score`` and
+    ``recompute_author_reputation`` gather data, call pure workflow/ functions,
+    and write results back.
+
+integrity.py
+    Article integrity verification — commit signatures and DB/git consistency
+    checks.  Three levels: light (access), full (sync/publish).
+
+views.py
+    View layer — returns response-ready dicts.  The ONLY place that calls
+    ``.to_dict()`` and composes author enrichment.
 
 Design invariants
 -----------------
 - All crud functions in this package call ``session.flush()`` only.
   ``session.commit()`` is the caller's responsibility (CLI/REPL entry).
-- Internal cross-module imports (e.g. articles.py importing from reviews.py)
-  use deferred imports inside function bodies to avoid circular dependencies
-  at import time.
 - Public API is re-exported here; callers should import from
   ``peerpedia_core.commands``, not from submodules directly.
 """
@@ -118,6 +117,23 @@ from peerpedia_core.commands.discover import (
     merge_script_maintainers,
     merge_users,
 )
+
+# TODO(citation-wiring): citation CRUD (crud_citation.py) is fully
+# implemented and tested (100% coverage), but never imported here or exposed
+# to CLI/HTTP.  Users cannot add citations, view an article's citation graph,
+# or see "cited by" chains.  The compiler does not resolve [@key] markers.
+# Wiring plan:
+#   1. Import get_cites / get_cited_by / create_or_update_citation here
+#   2. Add CLI commands: peerpedia citation add <from> <to>
+#   3. Add citation list to article show output
+#   4. Wire compiler to resolve [@key] → rendered references
+# TODO(notification-system): there is no notification mechanism — no event
+# table, no polling endpoint, no push.  Users are unaware of: reviews on
+# their articles, merge proposals targeting their articles, new followers,
+# articles they follow being published, or sedimentation expiry.  A P2P
+# notification system is complex, but a local event table with a
+# ``peerpedia notifications`` CLI command is a feasible first step.
+
 from peerpedia_core.config.paths import ARTICLES_DIR
 from peerpedia_core.storage.db import db_repl_setup as _db_repl_setup
 from peerpedia_core.storage.db.session_utils import db_session_scope as _db_session_scope

@@ -90,9 +90,10 @@ def accept_merge(db: Session, article_id: str, proposal_id: str, user_id: str) -
     if not (fork_repo / ".git").is_dir():
         raise NotFoundError(f"Fork article repo not found: {mp.fork_article_id}")
 
-    # G2b: check status before merge — if published, trigger re-sedimentation
-    was_published = article.status == "published"
-
+    # G2b: merge_git_repos succeeds → if process dies here before the
+    # [status] commit, the DB stays "published" with merged content in git
+    # and no marker for integrity repair.  The gap between L97 and L110 is
+    # a crash window.
     try:
         merge_git_repos(target_repo, fork_repo, user.name)
     except MergeConflictError:
@@ -119,6 +120,15 @@ def accept_merge(db: Session, article_id: str, proposal_id: str, user_id: str) -
 
     mp = accept_merge_proposal(db, proposal_id)
     head_hash = get_head_hash(target_repo)
+
+    # TODO(proposal-close): the proposal creator cannot withdraw/close their
+    # own proposal.  Only the target maintainer can accept; there is no
+    # decline or cancel path for the proposer.  The old system had
+    # reject_merge_proposal in CRUD (intentionally unwired — maintainers
+    # should not be able to dismiss contributions), but a proposer-side
+    # close/withdraw mechanism is missing entirely.  Closed proposals should
+    # be archived, not deleted.
+
     return {"id": article.id, "title": article.title, "status": article.status,
             "commit_hash": head_hash}
 

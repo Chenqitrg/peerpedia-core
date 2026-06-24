@@ -12,6 +12,10 @@ count) lives in the database so it can be queried and aggregated.
 
 Pure local git — does not depend on bundle or sync modules.
 
+TODO(article-diff): expose a diff function for comparing two commits.
+git_backend already has all the primitives — this is pure wiring.  The old
+system had GET /articles/{id}/diff/{h1}/{h2}.
+
 **Hard constraint**: this module depends on GitPython + stdlib +
 ``peerpedia_core.config.paths`` (for ``ARTICLES_DIR``) and
 ``peerpedia_core.exceptions`` (for ``ConflictError``, the base of
@@ -71,6 +75,13 @@ def init_article_repo(repo_path: Path) -> Path:
 
     The repo is valid after this call — it has a HEAD and can be merged
     into without untracked-file conflicts.
+
+    TODO(branch-protection): article repos use a single-mainline model —
+    collaboration is via fork + merge proposal, not branches.  GitHub's
+    branch model exists for shared-repo teamwork; PeerPedia's model is
+    one-repo-per-author with fork-based contribution.  Instead of preventing
+    branch creation, the simpler fix is: sync protocol only reads/writes
+    ``refs/heads/main``, silently ignoring other branches.  No hook needed.
     """
     repo_path.mkdir(parents=True, exist_ok=True)
     repo = git.Repo.init(repo_path)

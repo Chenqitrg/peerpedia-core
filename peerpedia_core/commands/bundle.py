@@ -270,6 +270,11 @@ def _verify_new_commits(db: Session, repo_path: Path, *, since_hash: str) -> Non
         if user.public_key is None:
             update_user_public_key(db, user_id, pubkey_hex)
         elif user.public_key != pubkey_hex:
+            # TODO(key-rotation-notify): key rotation is compatible with
+            # TOFU only if the key owner notifies peers to update before
+            # pushing new commits.  Currently there is no protocol for this
+            # — no push_key_rotation endpoint, no gossip.  When a user
+            # rotates, peers hit this error with no recovery path.
             raise SignatureVerificationError(
                 f"Pubkey mismatch for {user_id}: "
                 f"expected {user.public_key[:16]}..., "

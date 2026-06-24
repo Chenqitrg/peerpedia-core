@@ -6,6 +6,15 @@ r"""Compiler backends for Typst, Markdown, and bTeX.
 Converts article source files into rendered output (HTML, PDF, SVG, PNG).
 The backend is selected based on the article's format field.
 
+TODO(citation-compile): resolve [@key] citation markers in Markdown/Typst
+source and render a references list.  Currently citation markers pass through
+unchanged to output.  Needs: parse [@key] → query Citation table → format
+reference entry → append to compiled output.
+
+TODO(multi-file-articles): support articles composed of multiple source files
+(e.g. chapter1.md, chapter2.md, figures/, data/).  Currently _find_article_file
+hardcodes article.md or article.typ as the sole source file.
+
 Architecture
 ------------
 ::

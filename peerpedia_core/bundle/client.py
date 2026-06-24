@@ -64,6 +64,7 @@ from peerpedia_core.bundle.git_bundle import (
 from peerpedia_core.bundle.server import ingest_article
 from peerpedia_core.config.paths import ARTICLES_DIR as DEFAULT_ARTICLES_DIR
 from peerpedia_core.transport import pull_article_repo
+from peerpedia_core.transport.health import check_clock_skew
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -92,6 +93,18 @@ def sync_article(db: Session, server: str, article_id: str) -> dict:
         local_head: str = get_head(rp)
     except (FileNotFoundError, ValueError):
         return {"synced": False, "head": None}
+
+    # Check clock sync before any sync operations — if the local clock is
+    # far from the server, commit timestamps are untrustworthy for priority
+    # claims.  Refuse to sync until the user fixes their system clock.
+    skew = check_clock_skew(server)
+    if skew is not None and abs(skew) > 30:
+        direction = "behind" if skew > 0 else "ahead"
+        raise ProtocolError(
+            f"Clock skew with {server}: {abs(skew)}s {direction}. "
+            "Fix your system clock before syncing — "
+            "commit timestamps would be unreliable for priority claims."
+        )
 
     server_head = fetch_head(server, article_id)
 

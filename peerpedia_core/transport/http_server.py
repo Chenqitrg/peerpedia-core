@@ -25,6 +25,7 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 
 from peerpedia_core.config.paths import ARTICLES_DIR, DB_URL
+from peerpedia_core.storage.db.engine import get_engine, init_db, migrate_db
 from peerpedia_core.exceptions import (
     BadRequestError,
     ConflictError,
@@ -38,6 +39,7 @@ from peerpedia_core.exceptions import (
 from peerpedia_core.storage.db import db_session
 from peerpedia_core.transport.middleware import AuthMiddleware, DBSessionMiddleware
 from peerpedia_core.transport.middleware.logging import AuditLogMiddleware
+from peerpedia_core.transport.middleware.ratelimit import RateLimitMiddleware
 from peerpedia_core.transport.routes import ALL_ROUTES
 
 logger = logging.getLogger(__name__)
@@ -120,9 +122,15 @@ _ROUTES = ALL_ROUTES + [Route("/health", _health, methods=["GET"])]
 
 def create_app() -> Starlette:
     """Build the Starlette ASGI app with all routes, middleware, and error handlers."""
+    # Apply pending DB migrations on startup
+    engine = get_engine(DB_URL)
+    init_db(engine)
+    migrate_db(engine)
+
     handlers = {k: _error_handler for k in _ERROR_MAP}
 
     middleware = [
+        Middleware(RateLimitMiddleware),
         Middleware(AuditLogMiddleware),
         Middleware(DBSessionMiddleware),
     ]

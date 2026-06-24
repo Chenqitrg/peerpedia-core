@@ -39,25 +39,30 @@ def _sync_loop(db, server, items, label, *, on_success=None):
     *on_success* is called with ``(db, op)`` after each successful sync
     (e.g. to remove from the pending queue).
     """
-    synced = 0
+    synced = []
+    failed = []
     for op in items:
         article_id = op["id"]
         try:
             result = sync_article(db, server, article_id)
         except (TransportError, ProtocolError) as e:
             console.print(f"[warning]⚠ {article_id[:8]}: {e.detail}[/]")
+            failed.append((article_id[:8], str(e.detail)))
             continue
         except ConflictError as e:
             console.print(f"[warning]⚠ {article_id[:8]}: {e.detail}[/]")
+            failed.append((article_id[:8], "conflict"))
             continue
         if result["synced"]:
             db.commit()
             if on_success:
                 on_success(op)
-            synced += 1
+            synced.append(article_id[:8])
+            head = result.get("head", "")
+            console.print(f"  [success]✓[/] {article_id[:8]} → {head[:8]}")
 
-    if synced > 0:
-        _ok(f"{label} {synced} article(s)")
+    if synced:
+        _ok(f"{label} {len(synced)} article(s): {', '.join(synced)}")
     else:
         _print_panel(label, "[muted]Nothing to sync.[/]")
 

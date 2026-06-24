@@ -330,3 +330,18 @@ def get_article_by_fork_and_author(
     )
 
 
+def update_witnessed_at(session: Session, article_id: str) -> None:
+    """Record the current UTC time as the witness timestamp for *article_id*.
+
+    Called when the server receives new commits via sync — the server clock
+    proves "this article had this commit by this time," defending against
+    local clock manipulation for priority claims.
+    """
+    from datetime import datetime, timezone
+
+    session.query(Article).filter(Article.id == article_id).update(
+        {"witnessed_at": datetime.now(timezone.utc)},
+        synchronize_session=False,
+    )
+
+

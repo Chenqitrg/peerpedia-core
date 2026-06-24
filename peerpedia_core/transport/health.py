@@ -20,6 +20,8 @@ Reviewer's checklist
 
 from __future__ import annotations
 
+import time
+
 import httpx
 
 
@@ -40,3 +42,20 @@ def is_online(server_url: str, timeout: float = 5.0) -> bool:
         return response.status_code == 200
     except httpx.HTTPError:
         return False
+
+
+def check_clock_skew(server_url: str, timeout: float = 5.0) -> int | None:
+    """Return the clock skew in seconds (server_time - local_time), or None.
+
+    Positive → local clock is behind the server.
+    Negative → local clock is ahead.
+    None → server unreachable or missing header.
+    """
+    try:
+        response = httpx.get(f"{server_url}/health", timeout=timeout)
+        server_ts = response.headers.get("Server-Time")
+        if server_ts:
+            return int(server_ts) - int(time.time())
+    except (httpx.HTTPError, ValueError):
+        pass
+    return None

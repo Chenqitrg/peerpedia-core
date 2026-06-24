@@ -8,7 +8,8 @@ from __future__ import annotations
 import os
 
 from peerpedia_core.cli.helpers import (
-    _with_db, _resolve_user, _get_session_user, _resolve_and_display_article, _ok, _die, _json_out,
+    _with_db, _resolve_user, _get_session_user, _get_session_key,
+    _resolve_and_display_article, _ok, _die, _json_out,
 )
 from peerpedia_core.cli.display import console
 from peerpedia_core.cli.bundle_utils import _sync_server, _try_sync
@@ -17,7 +18,9 @@ from peerpedia_core.commands import (
     add_bookmark, remove_bookmark,
     follow_user, unfollow_user,
     get_followers, get_following,
+    get_article, merge_article_meta,
 )
+from peerpedia_core.transport import fetch_article_meta
 from peerpedia_core.social import discover_followers, discover_following
 from peerpedia_core.transport import push_follow, push_unfollow
 
@@ -51,10 +54,13 @@ def _push_social(action: str, **kwargs) -> None:
         console.print("[dim]⚠ No PEERPEDIA_SERVER set — social push skipped.[/]")
         return
     try:
+        key = _get_session_key()
         if action == "follow":
-            push_follow(server, kwargs["follower_id"], kwargs["followed_id"])
+            push_follow(server, kwargs["follower_id"], kwargs["followed_id"],
+                        private_key_bytes=key)
         elif action == "unfollow":
-            push_unfollow(server, kwargs["follower_id"], kwargs["followed_id"])
+            push_unfollow(server, kwargs["follower_id"], kwargs["followed_id"],
+                          private_key_bytes=key)
     except Exception as e:
         console.print(f"[dim]⚠ Social sync ({action}) to {server} failed: {e}[/]")
 
@@ -111,14 +117,34 @@ def _cmd_bookmark_add(db, args):
 
     args: article_id [positional], --json
     """
-    add_bookmark(db, _get_session_user(), args.article_id)
+    user_id = _get_session_user()
+    article_id = args.article_id
+    add_bookmark(db, user_id, article_id)
     db.commit()
-    _try_sync(db)
-    _push_social("bookmark", user_id=_get_session_user(), article_id=args.article_id)
+
+    # Pull article metadata + source + compile it so it's readable offline.
+    existing = get_article(db, article_id)
+    if existing is None:
+        server = os.environ.get("PEERPEDIA_SERVER")
+        if server:
+            try:
+                meta = fetch_article_meta(server, article_id)
+                if meta:
+                    merge_article_meta(db, [meta])
+                    db.commit()
+                    console.print(
+                        f"[dim]Pulled metadata for [accent]{article_id[:8]}[/] "
+                        f"from {server}[/]"
+                    )
+            except Exception as e:
+                console.print(
+                    f"[dim]⚠ Could not pull metadata for {article_id[:8]}: {e}[/]"
+                )
+
     if args.json:
         _json_out({"bookmarked": True})
     else:
-        _ok(f"Bookmarked [accent]{args.article_id[:8]}[/]")
+        _ok(f"Bookmarked [accent]{article_id[:8]}[/]")
 
 
 @_with_db

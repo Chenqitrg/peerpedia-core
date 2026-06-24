@@ -83,7 +83,7 @@ from peerpedia_core.commands.maintainers import (
 )
 from peerpedia_core.commands.merge import accept_merge, create_merge_proposal
 from peerpedia_core.commands.reviews import get_reviews_for_article, submit_review
-from peerpedia_core.commands.bundle import apply_sync_bundle, sync_reviews_from_worktree
+from peerpedia_core.commands.bundle import apply_sync_bundle, assert_article_integrity, sync_reviews_from_worktree
 from peerpedia_core.commands.users import (
     create_user,
     follow_user,
@@ -130,6 +130,7 @@ __all__ = [
     "db_session",
     "add_maintainer_to_article",
     "apply_sync_bundle",
+    "assert_article_integrity",
     "count_articles",
     "create_article_with_content",
     "create_merge_proposal",

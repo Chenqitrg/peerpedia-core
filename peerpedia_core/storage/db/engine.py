@@ -13,8 +13,9 @@ Provides:
 from __future__ import annotations
 
 import json
+import logging
 
-from sqlalchemy import Engine, create_engine
+from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 from sqlalchemy.types import Text, TypeDecorator
 
@@ -91,6 +92,27 @@ def get_engine(database_url: str) -> Engine:
 def init_db(engine: Engine) -> None:
     """Create all tables if they don't exist."""
     Base.metadata.create_all(engine)
+
+
+def migrate_db(engine: Engine) -> None:
+    """Apply schema migrations — add columns that don't exist yet.
+
+    SQLite has no ``IF NOT EXISTS`` for ``ALTER TABLE ADD COLUMN``, so
+    we catch the duplicate-column error and ignore it.
+    """
+    _log = logging.getLogger(__name__)
+    _migrations = [
+        "ALTER TABLE articles ADD COLUMN witnessed_at DATETIME",
+    ]
+    with engine.connect() as conn:
+        for sql in _migrations:
+            try:
+                conn.execute(text(sql))
+                conn.commit()
+                _log.info("Migration applied: %s", sql)
+            except Exception:
+                # Column already exists — no DDL for IF NOT EXISTS in SQLite
+                conn.rollback()
 
 
 _factory_cache: dict = {}

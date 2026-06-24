@@ -10,6 +10,7 @@ from peerpedia_core.transport.health import is_online
 from peerpedia_core.transport.http_client import (
     ancestor_probe,
     pull_article_repo,
+    fetch_article_meta,
     fetch_user_articles,
     fetch_incremental_bundle,
     fetch_followers,

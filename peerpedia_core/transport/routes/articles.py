@@ -17,7 +17,7 @@ from peerpedia_core.bundle.server import (
 )
 from peerpedia_core.config.paths import ARTICLES_DIR
 from peerpedia_core.exceptions import BadRequestError, NotFoundError
-from peerpedia_core.commands import list_articles as search_articles
+from peerpedia_core.commands import get_article, get_author_ids, list_articles as search_articles
 from peerpedia_core.storage.git_backend import get_commit_history, read_article_source
 from peerpedia_core.transport.shared import _validate_id
 
@@ -84,6 +84,20 @@ async def _push_article_repo(request: Request) -> JSONResponse:
     return JSONResponse({"head": new_head}, status_code=201)
 
 
+async def _article(request: Request) -> JSONResponse:
+    """GET /api/v1/articles/{article_id} → article metadata dict, or 404."""
+    article_id = request.path_params["article_id"]
+    _validate_id(article_id, "article_id")
+
+    db = getattr(request.state, "db", None)
+    if db is None:
+        raise NotFoundError(f"Article '{article_id}' not found")
+    a = get_article(db, article_id)
+    if a is None:
+        raise NotFoundError(f"Article '{article_id}' not found")
+    return JSONResponse({**a.to_dict(), "authors": get_author_ids(db, a.id)})
+
+
 async def _history(request: Request) -> JSONResponse:
     """GET /api/v1/articles/{id}/history?max= → commit history."""
     article_id = request.path_params["article_id"]
@@ -138,6 +152,7 @@ async def _repo(request: Request) -> JSONResponse:
 
 
 ROUTES = [
+    Route("/api/v1/articles/{article_id}", _article, methods=["GET"]),
     Route("/api/v1/articles/{article_id}/head", _head, methods=["GET"]),
     Route("/api/v1/articles/{article_id}/bundle", _bundle, methods=["GET"]),
     Route("/api/v1/articles/{article_id}/sync", _sync, methods=["POST"]),

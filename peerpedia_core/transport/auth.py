@@ -5,11 +5,12 @@
 
 Every authenticated request carries an ``Authorization: Peerpedia`` header::
 
-    Peerpedia <user_id>:<timestamp>:<signature_hex>
+    Peerpedia <user_id>:<ts>:<body_sha256_hex>:<signature_hex>
 
-The signature covers ``<method>:<path>:<user_id>:<timestamp>``.  The server
-looks up the user's public key and verifies with Ed25519.  Timestamp must
-be within ±60s of server time to prevent replay.
+The signature covers ``<method>:<path>:<user_id>:<ts>:<body_hash>``.  The
+body hash prevents tampering — an attacker can't replay a signed header
+with a different body.  For GET requests, the body hash is "".  The server
+looks up the user's public key and verifies the signature.
 
 This is the same Ed25519 key pair used for git commit signing — no separate
 password or JWT needed.
@@ -17,10 +18,11 @@ password or JWT needed.
 
 from __future__ import annotations
 
+import hashlib
 import time
 import warnings
 
-from peerpedia_core.crypto import _load_public_key, verify_signature
+from peerpedia_core.crypto import sign_detached, verify_signature
 
 
 def sign_auth_header(
@@ -28,16 +30,19 @@ def sign_auth_header(
     path: str,
     user_id: str,
     private_key_bytes: bytes,
+    *,
+    body: bytes = b"",
 ) -> str:
     """Build an ``Authorization: Peerpedia ...`` header value.
 
-    The signature covers ``method:path:user_id:timestamp``, binding the
-    request to a specific user and time window.
+    The signature covers ``method:path:user_id:ts:body_hash``, binding the
+    request to a specific user, time window, and body content.
     """
     ts = str(int(time.time()))
-    message = f"{method}:{path}:{user_id}:{ts}".encode("utf-8")
-    sig = _sign_detached(private_key_bytes, message)
-    return f"Peerpedia {user_id}:{ts}:{sig.hex()}"
+    body_hash = _sha256_hex(body)
+    message = f"{method}:{path}:{user_id}:{ts}:{body_hash}".encode("utf-8")
+    sig = sign_detached(private_key_bytes, message)
+    return f"Peerpedia {user_id}:{ts}:{body_hash}:{sig.hex()}"
 
 
 def verify_auth_header(
@@ -45,6 +50,8 @@ def verify_auth_header(
     method: str,
     path: str,
     public_key_hex: str,
+    *,
+    body: bytes = b"",
 ) -> str | None:
     """Verify a ``Peerpedia`` auth header.  Returns user_id if valid, None otherwise.
 
@@ -53,23 +60,29 @@ def verify_auth_header(
         method: HTTP method (GET, POST, ...).
         path: Request path (e.g. ``/api/v1/users/alice/following``).
         public_key_hex: The user's Ed25519 public key as a hex string.
+        body: The request body bytes (empty for GET).
     """
     try:
         scheme, payload = header_value.split(" ", 1)
         if scheme != "Peerpedia":
             return None
         parts = payload.split(":")
-        if len(parts) != 3:
+        if len(parts) == 4:
+            user_id, ts_str, body_hash, sig_hex = parts
+        elif len(parts) == 3:
+            # Backward-compat: old format without body hash (no body)
+            user_id, ts_str, sig_hex = parts
+            body_hash = ""
+        else:
             return None
-        user_id, ts_str, sig_hex = parts
     except ValueError:
         return None
 
-    # Replay window — clock skew + short-term replay protection
+    # Replay window — tight to limit replay, loose enough for clock skew
     try:
         ts = int(ts_str)
         now = int(time.time())
-        if abs(now - ts) > 60:
+        if abs(now - ts) > 30:
             return None
     except ValueError:
         return None
@@ -79,7 +92,11 @@ def verify_auth_header(
     except ValueError:
         return None
 
-    message = f"{method}:{path}:{user_id}:{ts_str}".encode("utf-8")
+    actual_body_hash = _sha256_hex(body)
+    if body_hash != actual_body_hash:
+        return None
+
+    message = f"{method}:{path}:{user_id}:{ts_str}:{body_hash}".encode("utf-8")
     pubkey_bytes = bytes.fromhex(public_key_hex)
     if not verify_signature(pubkey_bytes, message, sig_bytes):
         return None
@@ -87,6 +104,7 @@ def verify_auth_header(
     return user_id
 
 
-# ── Internal (wrap crypto.py functions) ──────────────────────────────────
-
-from peerpedia_core.crypto import sign_detached as _sign_detached
+def _sha256_hex(data: bytes) -> str:
+    if not data:
+        return ""
+    return hashlib.sha256(data).hexdigest()

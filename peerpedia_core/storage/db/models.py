@@ -56,6 +56,7 @@ class Article(Base):
     forked_from = Column(String, nullable=True)
     fork_count = Column(Integer, nullable=False, default=0)
     last_author_rebuild_hash = Column(String, nullable=True)  # HEAD commit hash of last author rebuild
+    witnessed_at = Column(DateTime, nullable=True)  # server clock when a new commit arrived via sync — proves "existed by"
     created_at = Column(DateTime, nullable=False, default=_utcnow)
     updated_at = Column(DateTime, nullable=False, default=_utcnow, onupdate=_utcnow)
 
@@ -73,6 +74,7 @@ class Article(Base):
             "sink_start": str(self.sink_start) if self.sink_start else None,
             "sink_duration_days": self.sink_duration_days,
             "created_at": str(self.created_at) if self.created_at else None,
+            "witnessed_at": str(self.witnessed_at) if self.witnessed_at else None,
         }
 
 

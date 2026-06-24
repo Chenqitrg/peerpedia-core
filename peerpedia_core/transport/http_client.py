@@ -53,6 +53,7 @@ import json
 import httpx
 
 from peerpedia_core.exceptions import ConflictError, ProtocolError, TransportError
+from peerpedia_core.transport.auth import sign_auth_header
 
 # TODO(perf): every function uses standalone httpx.get/post() — no connection
 # pooling.  Each sync_article cycle makes up to 14 HTTP calls, each paying
@@ -369,16 +370,28 @@ def fetch_followers(server: str, user_id: str) -> list[dict] | None:
     )
 
 
-def push_follow(server: str, follower_id: str, followed_id: str) -> bool:
+def push_follow(
+    server: str,
+    follower_id: str,
+    followed_id: str,
+    *,
+    private_key_bytes: bytes | None = None,
+) -> bool:
     """POST /users/{follower_id}/follow → True on success, False if not found.
 
-    Raises ``TransportError`` on network failure.
-    Raises ``ProtocolError`` on unexpected status codes.
+    If *private_key_bytes* is provided, the request is signed with the
+    user's Ed25519 key (``Authorization: Peerpedia`` header).
     """
+    path = f"/api/v1/users/{follower_id}/follow"
+    body = json.dumps({"followed_id": followed_id}).encode("utf-8")
+    headers: dict[str, str] = {}
+    if private_key_bytes:
+        headers["Authorization"] = sign_auth_header(
+            "POST", path, follower_id, private_key_bytes, body=body,
+        )
     try:
         resp = httpx.post(
-            f"{server}/api/v1/users/{follower_id}/follow",
-            json={"followed_id": followed_id},
+            f"{server}{path}", content=body, headers=headers,
             timeout=30,
         )
     except httpx.HTTPError as e:
@@ -397,16 +410,27 @@ def push_follow(server: str, follower_id: str, followed_id: str) -> bool:
     )
 
 
-def push_unfollow(server: str, follower_id: str, followed_id: str) -> bool:
+def push_unfollow(
+    server: str,
+    follower_id: str,
+    followed_id: str,
+    *,
+    private_key_bytes: bytes | None = None,
+) -> bool:
     """POST /users/{follower_id}/unfollow → True on success, False if not found.
 
-    Raises ``TransportError`` on network failure.
-    Raises ``ProtocolError`` on unexpected status codes.
+    If *private_key_bytes* is provided, the request is signed.
     """
+    path = f"/api/v1/users/{follower_id}/unfollow"
+    body = json.dumps({"followed_id": followed_id}).encode("utf-8")
+    headers: dict[str, str] = {}
+    if private_key_bytes:
+        headers["Authorization"] = sign_auth_header(
+            "POST", path, follower_id, private_key_bytes, body=body,
+        )
     try:
         resp = httpx.post(
-            f"{server}/api/v1/users/{follower_id}/unfollow",
-            json={"followed_id": followed_id},
+            f"{server}{path}", content=body, headers=headers,
             timeout=30,
         )
     except httpx.HTTPError as e:
@@ -422,6 +446,31 @@ def push_unfollow(server: str, follower_id: str, followed_id: str) -> bool:
 
     raise ProtocolError(
         f"push_unfollow: unexpected status {resp.status_code} from {server}"
+    )
+
+
+def fetch_article_meta(server: str, article_id: str) -> dict | None:
+    """GET /api/v1/articles/{id} → article metadata dict, or None if 404."""
+    try:
+        resp = httpx.get(f"{_api_url(server, article_id)}", timeout=30)
+    except httpx.HTTPError as e:
+        raise TransportError(
+            f"fetch_article_meta failed for {article_id} at {server}: {e}"
+        ) from e
+
+    if resp.status_code == 200:
+        try:
+            return resp.json()
+        except json.JSONDecodeError as e:
+            raise ProtocolError(
+                f"Malformed JSON from {server} for {article_id}"
+            ) from e
+
+    if resp.status_code == 404:
+        return None
+
+    raise ProtocolError(
+        f"fetch_article_meta: unexpected status {resp.status_code} from {server}"
     )
 
 

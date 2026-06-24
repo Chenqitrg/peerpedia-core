@@ -14,8 +14,8 @@ from peerpedia_core.cli.display import console
 from peerpedia_core.cli.bundle_utils import _sync_server, _try_sync
 from peerpedia_core.social import discover_articles
 from peerpedia_core.commands import (
-    create_article_with_content, get_article, get_author_ids,
-    list_articles, publish_article,
+    assert_article_integrity, create_article_with_content,
+    get_article, get_author_ids, list_articles, publish_article,
     publish_ready_articles, delete_article, update_article_content, get_user,
 )
 
@@ -68,6 +68,7 @@ def _cmd_article_show(db, args):
     args: id [positional], --show [full|meta|content], --json
 
     """
+    assert_article_integrity(db, args.id)
     article = get_article(db, args.id)
     if not article:
         _die(f"Article [accent]{args.id}[/] not found")
@@ -152,6 +153,7 @@ def _cmd_article_edit(db, args):
 
     args: id [positional], --content, --title, --no-editor, --json
     """
+    assert_article_integrity(db, args.id)
     import difflib
 
     user_id = _get_session_user()
@@ -206,6 +208,7 @@ def _cmd_article_publish(db, args):
 
     args: id [positional], --scores, --json
     """
+    assert_article_integrity(db, args.id)
     user_id = _get_session_user()
     key_bytes = _get_session_key()
     user = get_user(db, user_id)

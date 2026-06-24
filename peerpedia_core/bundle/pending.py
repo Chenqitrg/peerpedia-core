@@ -52,8 +52,17 @@ def _read() -> list[PendingOp]:
         data = json.loads(PENDING_FILE.read_text())
         if isinstance(data, list):
             return data
-    except (json.JSONDecodeError, OSError):
-        pass
+        raise ValueError(
+            f"Pending queue is not a JSON array: {PENDING_FILE}"
+        )
+    except json.JSONDecodeError as e:
+        raise ValueError(
+            f"Corrupted pending queue at {PENDING_FILE}: {e}"
+        ) from e
+    except OSError as e:
+        raise ValueError(
+            f"Cannot read pending queue at {PENDING_FILE}: {e}"
+        ) from e
     return []
 
 

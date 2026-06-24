@@ -28,13 +28,12 @@ class AuthMiddleware(BaseHTTPMiddleware):
     """
 
     _PUBLIC_PREFIXES = ("/health",)
-    _PUBLIC_ROUTES = frozenset({"/api/v1/articles"})
-    _PUBLIC_PATHS = ("/head", "/bundle", "/sync", "/ancestor/")
+    _PUBLIC_PATHS = ("/head", "/bundle", "/sync", "/ancestor/", "/repo")
 
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
 
-        if path in self._PUBLIC_ROUTES or path.startswith(self._PUBLIC_PREFIXES):
+        if path.startswith(self._PUBLIC_PREFIXES):
             return await call_next(request)
         for fragment in self._PUBLIC_PATHS:
             if fragment in path:
@@ -60,11 +59,16 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if user is None or not user.public_key:
             return self._unauthorized()
 
+        # Read the body for signature verification, then make it available
+        # to the route handler via request.state.body.
+        body = await request.body()
+
         result = verify_auth_header(
             auth_header,
             request.method,
             path,
             user.public_key,
+            body=body,
         )
         if result is None:
             return self._unauthorized()

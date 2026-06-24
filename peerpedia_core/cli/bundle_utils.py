@@ -15,7 +15,9 @@ from peerpedia_core.cli.display import console
 from peerpedia_core.cli.helpers import DEFAULT_ARTICLES_DIR, _die
 from peerpedia_core.exceptions import ConflictError, ProtocolError, TransportError
 from peerpedia_core.bundle import count as pending_count, sync_article
+from peerpedia_core.config.paths import DATA_ROOT
 from peerpedia_core.transport import is_online
+from peerpedia_core.transport.health import check_clock_skew
 
 def _try_sync(db, server: str | None = None) -> None:
     """Sync all local articles with the server if online.  No-op otherwise.
@@ -53,13 +55,43 @@ def _try_sync(db, server: str | None = None) -> None:
 
 
 def _sync_server(args) -> str:
-    """Return the peer server URL from --server flag or PEERPEDIA_SERVER env var.
+    """Return the peer server URL from --server flag, env var, or saved default.
 
-    Raises SystemExit if neither is set — no default, no fallback.
+    The last-used server URL is saved to ``~/.peerpedia/server_default`` so
+    users don't need to pass ``--server`` on every command.
     """
-    srv = args.server if getattr(args, "server", None) else os.environ.get("PEERPEDIA_SERVER")
+    srv = getattr(args, "server", None) or os.environ.get("PEERPEDIA_SERVER")
     if not srv:
+        default_file = DATA_ROOT / "server_default"
+        try:
+            if default_file.is_file():
+                srv = default_file.read_text().strip()
+        except OSError as e:
+            _die(f"Cannot read default server from {default_file}: {e}")
+    if not srv:
+        _die("No peer server configured.  Set PEERPEDIA_SERVER or pass --server.")
+
+    _save_default_server(srv)
+
+    # Check clock sync before any network operation.
+    skew = check_clock_skew(srv)
+    if skew is not None and abs(skew) > 30:
+        direction = "behind" if skew > 0 else "ahead"
         _die(
-            "No peer server configured.  Set PEERPEDIA_SERVER or pass --server."
+            f"Clock is {abs(skew)}s {direction} {srv}. "
+            "Fix your system clock before syncing — "
+            "commit timestamps would be unreliable for priority claims."
         )
+
     return srv
+
+
+def _save_default_server(url: str) -> None:
+    """Persist *url* as the default server for future commands."""
+    try:
+        DATA_ROOT.mkdir(parents=True, exist_ok=True)
+        (DATA_ROOT / "server_default").write_text(url)
+    except OSError as e:
+        console.print(
+            f"[dim]⚠ Cannot save default server to {DATA_ROOT}: {e}[/]"
+        )

@@ -21,7 +21,7 @@ class DBSessionMiddleware(BaseHTTPMiddleware):
     Use route-level middleware or explicit dependency declaration.
     """
 
-    _DB_ROUTES = frozenset({"/api/v1/users", "/api/v1/search"})
+    _DB_ROUTES = frozenset({"/api/v1/users", "/api/v1/search", "/api/v1/articles"})
     _DB_SUFFIXES = ("/sync",)
 
     async def dispatch(self, request: Request, call_next):

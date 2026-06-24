@@ -225,9 +225,6 @@ def build_parser() -> argparse.ArgumentParser:
     # TODO(release): data migration — schema evolves, need upgrade path for users.
     # TODO(ux-onboarding): first-run wizard — register + create first article flow.
     # TODO(ux-onboarding): group commands in --help (Account / Article / Review).
-    # TODO(ux-network): --server flag required on every network command — users
-    #   must either set PEERPEDIA_SERVER env var or pass --server every time.
-    #   Save a default server URL in config so users set it once.
     # TODO(ux-network): social pull is manual — after ``follow`` the user must
     #   explicitly run ``following --server`` to see the followed user's content.
     #   Auto-pull on follow.
@@ -238,8 +235,6 @@ def build_parser() -> argparse.ArgumentParser:
     #   succeed silently even if the server is unreachable — the push is
     #   best-effort with a dim warning.  Surface network errors more visibly
     #   so users know their changes haven't propagated.
-    # TODO(ux-feedback): after ``sync push``, report which articles were synced
-    #   and to which peers — currently just shows a count.
     # TODO(ux-history): no browsing history — after reading an article, there is
     #   no record of what you've read.  Add a read-history log so users can
     #   revisit recently-viewed articles and avoid losing track of papers.

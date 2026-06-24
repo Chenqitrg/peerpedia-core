@@ -210,56 +210,48 @@ def update_article_compiled(
     return a
 
 
-def update_article_status(session: Session, article_id: str, new_status: str) -> Article:
+def update_article_status(session: Session, article_id: str, new_status: str) -> None:
     _VALID_STATUSES = {"draft", "sedimentation", "published"}
     if new_status not in _VALID_STATUSES:
         raise ValueError(f"Invalid status {new_status!r}, must be one of {_VALID_STATUSES}")
-    # TODO(perf): loads full Article (including compiled_output which may be
-    # 100KB+) just to set one field.  Use targeted UPDATE:
-    #   session.query(Article).filter(Article.id==article_id).update({"status": new_status})
-    a = session.get(Article, article_id)
-    if a is None:
+    rows = session.query(Article).filter(Article.id == article_id).update(
+        {"status": new_status}, synchronize_session="fetch"
+    )
+    if rows == 0:
         raise ValueError(f"Article {article_id} not found")
-    a.status = new_status
-    session.flush()
-    return a
+    session.expire_all()
 
 
-def update_article_score(session: Session, article_id: str, score: dict) -> Article:
+def update_article_score(session: Session, article_id: str, score: dict) -> None:
     """Set the computed score for an article. Raises ValueError if not found."""
-    # TODO(perf): loads full Article (including compiled_output) just for score.
-    # Use targeted UPDATE.
-    a = session.get(Article, article_id)
-    if a is None:
+    rows = session.query(Article).filter(Article.id == article_id).update(
+        {"score": score}, synchronize_session="fetch"
+    )
+    if rows == 0:
         raise ValueError(f"Article {article_id} not found")
-    a.score = score
-    session.flush()
-    return a
+    session.expire_all()
 
 
-def increment_fork_count(session: Session, article_id: str) -> Article:
-    # TODO(perf): loads full Article just for ++fork_count.  Use atomic update:
-    #   session.query(Article).filter(Article.id==article_id).update({"fork_count": Article.fork_count + 1})
-    a = session.get(Article, article_id)
-    if a is None:
+def increment_fork_count(session: Session, article_id: str) -> None:
+    rows = session.query(Article).filter(Article.id == article_id).update(
+        {"fork_count": Article.fork_count + 1}, synchronize_session="fetch"
+    )
+    if rows == 0:
         raise ValueError(f"Article {article_id} not found")
-    a.fork_count += 1
-    session.flush()
-    return a
+    session.expire_all()
 
 
-def set_sink_start(session: Session, article_id: str, duration_days: int) -> Article:
+def set_sink_start(session: Session, article_id: str, duration_days: int) -> None:
     from datetime import datetime, timezone
 
-    # TODO(perf): loads full Article for 3-field update. Use targeted UPDATE.
-    a = session.get(Article, article_id)
-    if a is None:
+    rows = session.query(Article).filter(Article.id == article_id).update(
+        {"status": "sedimentation", "sink_start": datetime.now(timezone.utc),
+         "sink_duration_days": duration_days},
+        synchronize_session="fetch",
+    )
+    if rows == 0:
         raise ValueError(f"Article {article_id} not found")
-    a.status = "sedimentation"
-    a.sink_start = datetime.now(timezone.utc)
-    a.sink_duration_days = duration_days
-    session.flush()
-    return a
+    session.expire_all()
 
 
 def delete_article(session: Session, article_id: str) -> None:
@@ -272,12 +264,6 @@ def delete_article(session: Session, article_id: str) -> None:
 
     Raises ValueError if the article does not exist.
     """
-    # TODO(perf): loads full Article just for existence check. Use
-    # session.query(Article.id).filter(Article.id==article_id).first().
-    a = session.get(Article, article_id)
-    if a is None:
-        raise ValueError(f"Article {article_id} not found")
-
     # Delete related records
     session.query(ArticleAuthor).filter(ArticleAuthor.article_id == article_id).delete()
     session.query(ScriptMaintainer).filter(ScriptMaintainer.article_id == article_id).delete()
@@ -288,11 +274,14 @@ def delete_article(session: Session, article_id: str) -> None:
         (MergeProposal.fork_article_id == article_id) | (MergeProposal.target_article_id == article_id)
     ).delete()
 
-    session.delete(a)
+    rows = session.query(Article).filter(Article.id == article_id).delete()
+    if rows == 0:
+        raise ValueError(f"Article {article_id} not found")
     session.flush()
+    session.expire_all()
 
 
-def extend_sink(session: Session, article_id: str, extra_days: int, max_days: int = 180) -> Article:
+def extend_sink(session: Session, article_id: str, extra_days: int, max_days: int = 180) -> None:
     """Author extends sink time. Can be called repeatedly up to max_days.
 
     Raises ValueError if extra_days <= 0.
@@ -300,19 +289,19 @@ def extend_sink(session: Session, article_id: str, extra_days: int, max_days: in
     """
     if extra_days <= 0:
         raise ValueError(f"extra_days must be positive, got {extra_days}")
-    # TODO(perf): loads full Article for 2-field update. Use targeted UPDATE.
-    a = session.get(Article, article_id)
-    if a is None:
+    row = session.query(Article.sink_duration_days, Article.sink_extended_count).filter(
+        Article.id == article_id
+    ).first()
+    if row is None:
         raise ValueError(f"Article {article_id} not found")
-    old_total = a.sink_duration_days
-    new_total = a.sink_duration_days + extra_days
-    if new_total > max_days:
-        new_total = max_days
-    a.sink_duration_days = new_total
-    if new_total > old_total:
-        a.sink_extended_count += 1
-    session.flush()
-    return a
+    old_total, old_count = row
+    new_total = min(old_total + extra_days, max_days)
+    extended_count = old_count + 1 if new_total > old_total else old_count
+    session.query(Article).filter(Article.id == article_id).update(
+        {"sink_duration_days": new_total, "sink_extended_count": extended_count},
+        synchronize_session="fetch",
+    )
+    session.expire_all()
 
 
 def get_article_by_fork_and_author(

@@ -54,7 +54,7 @@ from peerpedia_core.exceptions import NotAuthorizedError, SignatureVerificationE
 from peerpedia_core.storage.db.crud_article import get_article, update_article_status, update_witnessed_at
 from peerpedia_core.storage.db.crud_maintainer import get_maintainer_ids
 from peerpedia_core.storage.db.crud_review import upsert_review
-from peerpedia_core.storage.db.crud_user import get_user, update_user_public_key
+from peerpedia_core.storage.db.crud_user import get_user, get_users_by_ids, update_user_public_key
 from peerpedia_core.crypto import pubkey_hex_to_ssh_line
 from peerpedia_core.storage.git_backend import (
     DEFAULT_ARTICLES_DIR,
@@ -235,7 +235,17 @@ def _verify_new_commits(db: Session, repo_path: Path, *, since_hash: str) -> Non
     same user_id (TOFU: first encounter stores, mismatch rejects).
     Platform commits (author_email == system@peerpedia) are skipped.
     """
-    for commit in get_commit_history(repo_path, since_hash=since_hash):
+    commits = list(get_commit_history(repo_path, since_hash=since_hash))
+
+    # Batch-load users to avoid N+1 queries.
+    user_ids = {
+        _extract_user_id_from_email(c["author_email"])
+        for c in commits
+        if c["author_email"] != _PLATFORM_EMAIL
+    }
+    users_by_id = {u.id: u for u in get_users_by_ids(db, user_ids)}
+
+    for commit in commits:
         author_email = commit["author_email"]
         if author_email == _PLATFORM_EMAIL:
             continue
@@ -248,20 +258,14 @@ def _verify_new_commits(db: Session, repo_path: Path, *, since_hash: str) -> Non
                 "has no Pubkey trailer — unsigned human commit"
             )
 
-        # Verify the git signature (allowed_signers needs SSH-format key).
+        # Verify the git signature.
         ssh_line = pubkey_hex_to_ssh_line(pubkey_hex)
         verify_commit_signature(repo_path, commit_hash, ssh_line, author_email)
 
-        # TOFU pubkey consistency — check against stored pubkey.
+        # TOFU pubkey consistency.
         user_id = _extract_user_id_from_email(author_email)
-        # TODO(perf): per-commit get_user query without batch or cache.  If a
-        # bundle brings 50 commits from 30 users, that's 50 DB queries.  Batch
-        # user lookups by collecting unique user_ids first, then query once.
-        user = get_user(db, user_id)
+        user = users_by_id.get(user_id)
         if user is None:
-            # First encounter: user record doesn't exist locally yet.
-            # Expected for brand-new peers; pubkey is recorded when the
-            # user is first created via create_article.
             continue
         if user.public_key is None:
             update_user_public_key(db, user_id, pubkey_hex)

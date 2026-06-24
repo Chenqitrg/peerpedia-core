@@ -16,6 +16,8 @@ from sqlalchemy.orm import Session
 
 from peerpedia_core.storage.db.engine import get_engine, get_session, init_db
 
+_db_initialized: set[str] = set()
+
 
 @contextmanager
 def db_session_scope(database_url: str) -> Generator[Session, None, None]:
@@ -27,10 +29,9 @@ def db_session_scope(database_url: str) -> Generator[Session, None, None]:
             # session commits on exit; rolls back on exception
     """
     engine = get_engine(database_url)
-    # TODO(perf): init_db() (create_all) called on every session scope entry —
-    # queries sqlite_master on every CRUD operation.  Move to engine
-    # initialization (called once per process lifetime).
-    init_db(engine)
+    if database_url not in _db_initialized:
+        init_db(engine)
+        _db_initialized.add(database_url)
     session = get_session(engine)
     try:
         yield session

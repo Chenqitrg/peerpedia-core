@@ -82,11 +82,8 @@ def search_monotonic_boundary(
     first_yes = -1    # distance where probe returned True
 
     # Phase 1 — k-exponential probe: k^0, k^1, k^2, …
-    i = 0
+    dist = 1
     while True:
-        # TODO(perf): k ** i recomputes power via exponentiation each iteration.
-        # Use running product: dist *= k (with dist starting at 1).
-        dist = k ** i   # 1, k, k², …
         if dist > max_index:
             break
 
@@ -97,7 +94,7 @@ def search_monotonic_boundary(
             first_yes = dist
             break
         last_no = dist
-        i += 1
+        dist *= k
 
     # No True found within range — check the last element.
     # The boundary may lie between the last probe and max_index.

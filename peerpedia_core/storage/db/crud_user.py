@@ -146,36 +146,33 @@ def get_users_by_ids(session: Session, user_ids: set[str]) -> list[User]:
     return users
 
 
-def update_user_public_key(session: Session, user_id: str, pubkey_hex: str) -> User:
+def update_user_public_key(session: Session, user_id: str, pubkey_hex: str) -> None:
     """Set the public_key for a user. Raises ValueError if user not found."""
-    # TODO(perf): loads full User for single-field update. Use targeted UPDATE.
-    u = session.get(User, user_id)
-    if u is None:
+    rows = session.query(User).filter(User.id == user_id).update(
+        {"public_key": pubkey_hex}, synchronize_session="fetch"
+    )
+    if rows == 0:
         raise ValueError(f"User {user_id} not found")
-    u.public_key = pubkey_hex
-    session.flush()
-    return u
+    session.expire_all()
 
 
-def update_user_salt(session: Session, user_id: str, salt_hex: str) -> User:
+def update_user_salt(session: Session, user_id: str, salt_hex: str) -> None:
     """Set the scrypt salt for a user. Raises ValueError if user not found."""
-    # TODO(perf): loads full User for single-field update. Use targeted UPDATE.
-    u = session.get(User, user_id)
-    if u is None:
+    rows = session.query(User).filter(User.id == user_id).update(
+        {"salt": salt_hex}, synchronize_session="fetch"
+    )
+    if rows == 0:
         raise ValueError(f"User {user_id} not found")
-    u.salt = salt_hex
-    session.flush()
-    return u
+    session.expire_all()
 
 
-def update_user_reputation(session: Session, user_id: str, reputation: dict) -> User:
-    # TODO(perf): loads full User for single-field update. Use targeted UPDATE.
-    u = session.get(User, user_id)
-    if u is None:
+def update_user_reputation(session: Session, user_id: str, reputation: dict) -> None:
+    rows = session.query(User).filter(User.id == user_id).update(
+        {"reputation": reputation}, synchronize_session="fetch"
+    )
+    if rows == 0:
         raise ValueError(f"User {user_id} not found")
-    u.reputation = reputation
-    session.flush()
-    return u
+    session.expire_all()
 
 
 # ── Follow ───────────────────────────────────────────────────────────────
@@ -202,19 +199,21 @@ def is_following(session: Session, follower_id: str, followed_id: str) -> bool:
 
 
 def get_followers(session: Session, user_id: str) -> list[User]:
-    # TODO(perf): two queries instead of one JOIN.  Use:
-    #   session.query(User).join(Follow, User.id==Follow.follower_id).filter(Follow.followed_id==user_id)
-    follower_ids = session.query(Follow.follower_id).filter(Follow.followed_id == user_id).all()
-    ids = [row[0] for row in follower_ids]
-    return session.query(User).filter(User.id.in_(ids)).all() if ids else []
+    return (
+        session.query(User)
+        .join(Follow, User.id == Follow.follower_id)
+        .filter(Follow.followed_id == user_id)
+        .all()
+    )
 
 
 def get_following(session: Session, user_id: str) -> list[User]:
-    # TODO(perf): two queries instead of one JOIN.  Use:
-    #   session.query(User).join(Follow, User.id==Follow.followed_id).filter(Follow.follower_id==user_id)
-    followed_ids = session.query(Follow.followed_id).filter(Follow.follower_id == user_id).all()
-    ids = [row[0] for row in followed_ids]
-    return session.query(User).filter(User.id.in_(ids)).all() if ids else []
+    return (
+        session.query(User)
+        .join(Follow, User.id == Follow.followed_id)
+        .filter(Follow.follower_id == user_id)
+        .all()
+    )
 
 
 def get_follower_count(session: Session, user_id: str) -> int:

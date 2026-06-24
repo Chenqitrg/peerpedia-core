@@ -147,28 +147,24 @@ def create_bundle(repo_path: Path, since_hash: str | None = None) -> bytes:
 
     repo = git.Repo(repo_path)
     rev_range = f"{since_hash}..HEAD" if since_hash else "HEAD"
-
-    # TODO(perf): create_bundle writes bundle to disk then reads it back
-    # (double I/O + double memory).  Use repo.git.bundle("create", ...) with
-    # as_process=True to pipe stdout directly, eliminating the temp file.
-    with tempfile.NamedTemporaryFile(suffix=".bundle", delete=False) as f:
-        bundle_path = f.name
-    try:
-        repo.git.bundle("create", bundle_path, rev_range)
-        return Path(bundle_path).read_bytes()
-    finally:
-        Path(bundle_path).unlink(missing_ok=True)
+    proc = repo.git.bundle("create", "-", rev_range, as_process=True)
+    stdout, _stderr = proc.communicate()
+    return stdout
 
 
 # ── Ancestor helpers ─────────────────────────────────────────────────────────
 
 
-def is_ancestor(repo_path: Path, maybe_ancestor: str) -> bool:
-    """Check if *maybe_ancestor* exists in the repo and is an ancestor of HEAD."""
+def is_ancestor(repo_path: Path, maybe_ancestor: str, *, repo: git.Repo | None = None) -> bool:
+    """Check if *maybe_ancestor* exists in the repo and is an ancestor of HEAD.
 
-    if not (repo_path / ".git").is_dir():
-        raise FileNotFoundError(f"Git repo not found: {repo_path}")
-    repo = git.Repo(repo_path)
+    Pass *repo* to avoid opening ``.git/`` twice when called from a function
+    that already has a ``Repo`` object.
+    """
+    if repo is None:
+        if not (repo_path / ".git").is_dir():
+            raise FileNotFoundError(f"Git repo not found: {repo_path}")
+        repo = git.Repo(repo_path)
     try:
         repo.git.merge_base("--is-ancestor", maybe_ancestor, "HEAD")
         return True
@@ -209,32 +205,34 @@ def find_common_ancestor(
         raise ValueError(f"Repo has no commits: {repo_path}")
 
     # ── Fast path: local-ahead ───────────────────────────────────────────
-    # TODO(perf): is_ancestor also creates a git.Repo(repo_path) internally.
-    # Pass repo directly to avoid opening .git/ twice for the fast-path check.
-    if server_head is not None and is_ancestor(repo_path, server_head):
+    if server_head is not None and is_ancestor(repo_path, server_head, repo=repo):
         return server_head
 
-    # TODO(perf): list() materializes up to 20k Commit objects (4-8 MB) but
-    # the k-exponential search only probes ~10 of them.  Replace with lazy
-    # indexable sequence or rev-list --skip to avoid 1000x allocation waste.
-    commits = list(repo.iter_commits(max_count=max_depth + 1))
+    import time as _time
+
+    def _hash_at(dist: int) -> str:
+        """Return the commit hash at position *dist* (lazy, single rev-list call)."""
+        result = repo.git.rev_list("HEAD", max_count=1, skip=dist)
+        return result.strip()
 
     def probe_at(dist: int) -> bool | None:
-        """Map index to commit hash, wrap with retries."""
-        h = commits[dist].hexsha
-        # TODO(perf): retries with no backoff — transient network blips get
-        # no recovery time.  Add exponential backoff (0.5s, 1s, 2s).
-        for _ in range(retries + 1):
+        """Map index to commit hash, wrap with retries + exponential backoff."""
+        h = _hash_at(dist)
+        for attempt in range(retries + 1):
             result = probe(h)
             if result is not None:
                 return result
+            if attempt < retries:
+                _time.sleep(0.5 * (2 ** attempt))  # 0.5s, 1s, 2s, ...
         return None
 
     # ── Full search: server-ahead or diverged ────────────────────────────
-    boundary = search_monotonic_boundary(probe_at, len(commits) - 1, k=k)
+    total = int(repo.git.rev_list("HEAD", count=True))
+    max_idx = min(total, max_depth) - 1
+    boundary = search_monotonic_boundary(probe_at, max_idx, k=k)
     if boundary is None:
         return None
-    return commits[boundary].hexsha
+    return _hash_at(boundary)
 
 
 # ── Full-repo pack / unpack (tar.gz) ──────────────────────────────────────

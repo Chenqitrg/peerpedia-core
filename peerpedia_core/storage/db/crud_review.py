@@ -53,10 +53,12 @@ def upsert_review(
     article's current status.  Uses
     (article_id, reviewer_id, scope, commit_hash) as the unique key.
     """
-    # TODO(perf): loads full Article (including compiled_output) just to read
-    # article.status.  Use session.get(Article, article_id, options=[load_only(Article.status)])
-    # or a subquery.
-    article = session.get(Article, article_id)
+    from sqlalchemy.orm import load_only  # noqa: PLC0415
+
+    article = session.get(
+        Article, article_id,
+        options=[load_only(Article.status)],
+    )
     if article is None:
         raise ValueError(f"Article {article_id} not found")
 

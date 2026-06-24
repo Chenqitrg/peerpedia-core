@@ -938,9 +938,11 @@ $$
                 a.sink_duration_days = sink_days + elapsed
                 session.commit()
             else:
-                a = set_sink_start(session, a.id, sink_days)
+                set_sink_start(session, a.id, sink_days)
+                session.refresh(a)
         elif status == "published":
-            a = update_article_status(session, a.id, "published")
+            update_article_status(session, a.id, "published")
+            session.refresh(a)
 
         if ad.get("score"):
             a.score = ad["score"]

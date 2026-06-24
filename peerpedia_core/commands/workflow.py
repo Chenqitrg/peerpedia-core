@@ -48,7 +48,7 @@ Reviewer's checklist
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import timedelta, timezone
 
 from peerpedia_core.storage.db import Session
 
@@ -91,9 +91,6 @@ def publish_ready_articles(db: Session) -> int:
 
         st = article.sink_start
         if st.tzinfo is None:
-            # TODO(perf): import timezone inside loop — Python caches after
-            # first iteration, but module-level import is cleaner.
-            from datetime import timezone
             st = st.replace(tzinfo=timezone.utc)
         eta = st + timedelta(days=article.sink_duration_days)
 

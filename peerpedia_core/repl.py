@@ -234,9 +234,6 @@ def _dispatch(cmd_str: str) -> bool:
     argv = ["peerpedia"] + mapping + args_list[1:]
 
     try:
-        # TODO(perf): build_parser() recreated on every REPL command dispatch.
-        # Cache at module level or on first call.
-        parser = build_parser()
         # Suppress argparse error output
         import io
         old_stderr = sys.stderr

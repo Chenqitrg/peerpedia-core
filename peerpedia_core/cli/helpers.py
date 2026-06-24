@@ -22,6 +22,9 @@ from peerpedia_core.commands import db_session, get_author_ids, get_user_by_name
 from peerpedia_core.config.paths import ARTICLES_DIR as DEFAULT_ARTICLES_DIR, DB_PATH, DB_URL, SESSION_FILE
 
 
+_data_dir_ready = False
+
+
 def _with_db(func):
     """Helper for all command functions: gives them a database session.
 
@@ -39,9 +42,9 @@ def _with_db(func):
 
     @functools.wraps(func)
     def wrapper(args):
-        # TODO(perf): mkdir syscall on every command invocation.  After the
-        # first call the directory exists — cache with a module-level boolean.
-        DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+        if not _data_dir_ready:
+            DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+            _data_dir_ready = True
         try:
             with db_session(DB_URL) as db:
                 return func(db, args)
@@ -210,10 +213,7 @@ def _prompt_commit_message(diff: str = "") -> str:
     )
     if diff:
         header += "# Changes:\n#\n"
-        # TODO(perf): string += in loop is O(n²) for large diffs.  Use
-        # "# " + "\n# ".join(diff.splitlines()) instead.
-        for line in diff.splitlines():
-            header += f"# {line}\n"
+        header += "# " + "\n# ".join(diff.splitlines()) + "\n"
     editor = os.environ.get("EDITOR", "vim")
     with tempfile.NamedTemporaryFile(mode="w", suffix=".diff", delete=False) as f:
         f.write(header)

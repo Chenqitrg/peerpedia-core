@@ -522,3 +522,16 @@ def checkout_files(repo_path: Path, commit_hash: str) -> None:
     """
     repo = git.Repo(repo_path)
     repo.git.checkout(commit_hash, "--", ".")
+
+
+def read_article_source(repo_path: Path) -> tuple[str, str] | None:
+    """Read the article source file from the git worktree.
+
+    Returns ``(content, format)`` where format is ``"markdown"`` or
+    ``"typst"``, or None if no article file is found.
+    """
+    for ext, fmt in ((".md", "markdown"), (".typ", "typst")):
+        f = repo_path / f"article{ext}"
+        if f.is_file():
+            return f.read_text(), fmt
+    return None

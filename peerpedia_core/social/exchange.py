@@ -15,11 +15,10 @@ from typing import Callable
 
 from peerpedia_core.storage.db import Session
 
-from peerpedia_core.commands import merge_article_meta, merge_bookmarks, merge_follows, merge_users
+from peerpedia_core.commands import merge_article_meta, merge_follows, merge_users
 from peerpedia_core.exceptions import ProtocolError, TransportError
 from peerpedia_core.transport import (
     fetch_user_articles,
-    fetch_bookmarks,
     fetch_followers,
     fetch_following,
 )
@@ -77,13 +76,3 @@ def discover_articles(
         server, user_id, "articles",
     )
     return merge_article_meta(db, data)
-
-
-def discover_bookmarks(db: Session, server: str, user_id: str) -> int:
-    """Fetch and merge the bookmarks of *user_id* from *server*.
-
-    Creates local Bookmark records for each bookmark the remote user has.
-    Returns count of new bookmarks added.  Raises ConnectionError if the
-    server is unreachable.  Raises ProtocolError on malformed responses.
-    """
-    return merge_bookmarks(db, user_id, _fetch_or_raise(fetch_bookmarks, server, user_id, "bookmarks"))

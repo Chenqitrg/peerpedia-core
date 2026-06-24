@@ -1,0 +1,29 @@
+# SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
+# SPDX-License-Identifier: CC-BY-NC-SA-4.0
+
+"""Request audit logging middleware."""
+
+import logging
+import time
+
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+
+logger = logging.getLogger(__name__)
+
+
+class AuditLogMiddleware(BaseHTTPMiddleware):
+    """Log every request with method, path, status, and duration."""
+
+    async def dispatch(self, request: Request, call_next):
+        start = time.monotonic()
+        response = await call_next(request)
+        elapsed_ms = (time.monotonic() - start) * 1000
+        logger.info(
+            "%s %s → %d (%.1fms)",
+            request.method,
+            request.url.path,
+            response.status_code,
+            elapsed_ms,
+        )
+        return response

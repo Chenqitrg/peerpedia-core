@@ -59,10 +59,11 @@ from peerpedia_core.bundle.git_bundle import (
     find_common_ancestor,
     get_head,
     ingest_bundle,
-    init_repo,
 )
 
+from peerpedia_core.bundle.server import ingest_article
 from peerpedia_core.config.paths import ARTICLES_DIR as DEFAULT_ARTICLES_DIR
+from peerpedia_core.transport import pull_article_repo
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -176,14 +177,14 @@ def pull_incremental(
 def pull_new_article(db: Session, server: str, article_id: str) -> str | None:
     """Pull an article that doesn't exist locally.
 
-    TODO(protocol): currently uses ``fetch_incremental_bundle(since_hash=None)``
-    (git bundle) — but ``push_article_repo`` sends a tar.gz.  The first-time
-    pull should receive a tar.gz via ``pull_article_repo`` and unpack it,
-    mirroring the push side.  See also ``transport/http_client.py:pull_article_repo``.
+    Downloads the full repo as base64 tar.gz via ``pull_article_repo`` and
+    unpacks it — the mirror of ``upload_article`` → ``push_article_repo``.
     """
-    repo_path = DEFAULT_ARTICLES_DIR / article_id
-    init_repo(repo_path)
-    return pull_incremental(db, server, article_id, since_hash=None)
+    repo_b64 = pull_article_repo(server, article_id)
+    if not repo_b64:
+        return None
+    payload = {"id": article_id, "repo_bundle": repo_b64}
+    return ingest_article(DEFAULT_ARTICLES_DIR / article_id, payload)
 
 
 def push_incremental(

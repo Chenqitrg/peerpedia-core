@@ -138,4 +138,20 @@ def ingest_article(repo_path: Path, payload: dict) -> str:
     return get_head(repo_path)
 
 
+def pack_article_repo(repo_path: Path) -> str:
+    """Pack an article's full git repo into base64-encoded tar.gz.
+
+    The reverse of ``ingest_article`` — used by ``GET /repo`` to serve
+    a full clone to a peer that doesn't have this article yet.
+    """
+    import base64 as _b64
+    import io as _io
+    import tarfile as _tarfile
+
+    buf = _io.BytesIO()
+    with _tarfile.open(fileobj=buf, mode="w:gz") as tar:
+        tar.add(str(repo_path), arcname=repo_path.name)
+    return _b64.b64encode(buf.getvalue()).decode("ascii")
+
+
 

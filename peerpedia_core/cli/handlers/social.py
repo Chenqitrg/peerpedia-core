@@ -19,7 +19,7 @@ from peerpedia_core.commands import (
     get_followers, get_following,
 )
 from peerpedia_core.social import discover_followers, discover_following
-from peerpedia_core.transport import push_bookmark, push_follow, push_unfollow
+from peerpedia_core.transport import push_follow, push_unfollow
 
 def _pull_social(db, user_id: str) -> None:
     """Pull social graph for *user_id* from the peer server.  Best-effort.
@@ -55,8 +55,6 @@ def _push_social(action: str, **kwargs) -> None:
             push_follow(server, kwargs["follower_id"], kwargs["followed_id"])
         elif action == "unfollow":
             push_unfollow(server, kwargs["follower_id"], kwargs["followed_id"])
-        elif action == "bookmark":
-            push_bookmark(server, kwargs["user_id"], kwargs["article_id"])
     except Exception as e:
         console.print(f"[dim]⚠ Social sync ({action}) to {server} failed: {e}[/]")
 

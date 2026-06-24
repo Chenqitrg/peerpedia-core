@@ -5,7 +5,8 @@ r"""Merge orchestration — accept merge proposals and reconcile state.
 
 TODO(merge-notify): merge proposals should trigger a notification to the
 target article's maintainers.  Currently proposal creators must manually
-tell the target maintainer to run ``merge accept``.
+tell the target maintainer to run ``merge accept``.  Implement by writing
+an event to a notifications table; peers poll the event stream.
 
 Call graph::
 

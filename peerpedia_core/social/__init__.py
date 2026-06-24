@@ -9,7 +9,6 @@ Server-side (server.py): serve social data to peers (called by HTTP routes).
 
 from peerpedia_core.social.exchange import (
     discover_articles,
-    discover_bookmarks,
     discover_followers,
     discover_following,
 )
@@ -17,6 +16,5 @@ from peerpedia_core.social.exchange import (
 __all__ = [
     "discover_following",
     "discover_followers",
-    "discover_bookmarks",
     "discover_articles",
 ]

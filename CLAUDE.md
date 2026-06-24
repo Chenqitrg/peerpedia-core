@@ -5,7 +5,7 @@ You can easily lose files if you do not commit important ones before switching b
 If you lost files, I will treat it as delibrate and you do it **intentionally**.
 
 ## Do not write fallback functions or parameters
-Fail fast. 
+Fail FAST and LOUD. 
 If you let the fallback happen, you are **lying** and trying to hide mistakes.
 If a parameter should not be none, throw error when it is.
 
@@ -27,9 +27,9 @@ Tests must encode WHY behavior matters, not just WHAT it does.
 A test that can't fail when business logic changes is wrong.
 
 ## Double check my meaning
-If you are not sure about my meaning, ask.
-Do not pretend you have understood it.
-You are idiot if you do not ask me and do it brutally.
+If you are not sure about my meaning, ASK.
+Do NOT pretend you have understood it.
+You are IDIOT if you do not ask me and do it brutally.
 
 
 ## Architecture

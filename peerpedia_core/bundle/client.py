@@ -60,8 +60,8 @@ from peerpedia_core.bundle.git_bundle import (
     get_head,
     ingest_bundle,
 )
-
 from peerpedia_core.bundle.server import ingest_article
+
 from peerpedia_core.config.paths import ARTICLES_DIR as DEFAULT_ARTICLES_DIR
 from peerpedia_core.transport import pull_article_repo
 from peerpedia_core.transport.health import check_clock_skew

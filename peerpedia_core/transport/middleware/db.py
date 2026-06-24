@@ -4,41 +4,56 @@
 """DB session middleware — creates a SQLite session per request.
 
 Runs BEFORE ``AuthMiddleware`` so auth can look up the user's public key.
-Skips session creation for git-only routes (head, bundle, ancestor, repo)
-to avoid wasting connections on operations that only touch the filesystem.
-
-TODO(infra): URL prefix/suffix matching is fragile.  Use explicit route
-metadata to declare DB dependency per-route instead.
-""""""DB session middleware — creates a SQLite session per request."""
+Default: inject a DB session for every request.  Only git-only routes
+(head, bundle, ancestor, repo) are excluded — they only touch the
+filesystem and don't need a DB connection.
+"""
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
+from starlette.routing import Route
 
+from peerpedia_core.commands import db_session
 from peerpedia_core.config.paths import DB_URL
-from peerpedia_core.storage.db import db_session
+
+
+class DbRoute(Route):
+    """Starlette ``Route`` with explicit DB-dependency declaration.
+
+    ``needs_db`` (default ``True``) — set ``False`` for git-only routes
+    that don't need a database session (e.g. head, bundle, repo).
+    """
+
+    def __init__(self, path: str, endpoint, *, needs_db: bool = True, **kwargs) -> None:
+        super().__init__(path, endpoint, **kwargs)
+        self.needs_db = needs_db
 
 
 class DBSessionMiddleware(BaseHTTPMiddleware):
-    """Create a DB session per request for routes that need it.
+    """Inject a DB session for every request except git-only routes.
 
-    Skips session creation for routes that only touch git or are static:
-    ``/health``, article head/bundle/ancestor, and first-time article push.
+    Git-only routes (head, bundle, ancestor, repo) are authenticated via
+    Ed25519 commit signatures on the git objects themselves and never
+    touch the database.
 
-    TODO(infra): URL prefix/suffix matching is fragile — a new route that
-    needs DB but doesn't match the pattern silently gets no session.
-    Use route-level middleware or explicit dependency declaration.
+    Default-inject is the safe default — new routes get a DB session
+    automatically; only routes that explicitly don't need one are excluded.
     """
 
-    _DB_ROUTES = frozenset({"/api/v1/users", "/api/v1/search", "/api/v1/articles"})
-    _DB_SUFFIXES = ("/sync",)
+    # Paths that do NOT need a DB session (git-only operations).
+    _NO_DB_PREFIXES = ("/health",)
+    _NO_DB_SUFFIXES = ("/head", "/bundle", "/repo")
+    _NO_DB_CONTAINS = ("/ancestor/",)
 
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
-        needs_db = (
-            path.startswith(tuple(self._DB_ROUTES))
-            or path.endswith(self._DB_SUFFIXES)
+
+        skip_db = (
+            path.startswith(self._NO_DB_PREFIXES)
+            or path.endswith(self._NO_DB_SUFFIXES)
+            or any(fragment in path for fragment in self._NO_DB_CONTAINS)
         )
-        if not needs_db:
+        if skip_db:
             return await call_next(request)
 
         with db_session(DB_URL) as db:

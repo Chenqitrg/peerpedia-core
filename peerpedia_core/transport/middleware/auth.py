@@ -40,15 +40,20 @@ class AuthMiddleware(BaseHTTPMiddleware):
     for the public key lookup.
     """
 
+    # Paths that are public suffixes (e.g. /api/v1/articles/{id}/head).
+    # endswith prevents substring false-positives like "/repo" matching "/report".
     _PUBLIC_PREFIXES = ("/health",)
-    _PUBLIC_PATHS = ("/head", "/bundle", "/sync", "/ancestor/", "/repo")
+    _PUBLIC_SUFFIXES = ("/head", "/bundle", "/sync", "/repo")
+    _PUBLIC_CONTAINS = ("/ancestor/",)  # /api/v1/articles/{id}/ancestor/{hash}
 
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
 
         if path.startswith(self._PUBLIC_PREFIXES):
             return await call_next(request)
-        for fragment in self._PUBLIC_PATHS:
+        if path.endswith(self._PUBLIC_SUFFIXES):
+            return await call_next(request)
+        for fragment in self._PUBLIC_CONTAINS:
             if fragment in path:
                 return await call_next(request)
 

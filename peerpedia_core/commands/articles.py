@@ -123,6 +123,7 @@ from peerpedia_core.crypto import write_key_to_tempfile
 from peerpedia_core.storage.locks import get_article_lock
 from peerpedia_core.commands.reviews import write_review_to_git
 from peerpedia_core.commands.workflow import recompute_article_score, recompute_author_reputation
+from peerpedia_core.commands.integrity import assert_article_integrity
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -504,6 +505,9 @@ def publish_article(
     mids = get_maintainer_ids(db, article_id)
     assert_can_publish_article(a, mids, user)
 
+    # Full integrity check — verify state consistency before status transition.
+    assert_article_integrity(db, article_id, level="full")
+
     # G10: publish only from draft
     old_status = a.status
     if old_status != "draft":
@@ -572,8 +576,15 @@ def publish_article(
 
 
 def get_article(db: Session, article_id: str):
-    """Return an article by ID, or None."""
-    return _get_article(db, article_id)
+    """Return an article by ID, or None.
+
+    Runs a lightweight integrity check (latest commit signature) before
+    returning the article.
+    """
+    article = _get_article(db, article_id)
+    if article is not None:
+        assert_article_integrity(db, article_id, level="light")
+    return article
 
 
 def list_articles(

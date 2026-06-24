@@ -103,6 +103,14 @@ from peerpedia_core.commands.workflow import (
     recompute_article_score,
     recompute_author_reputation,
 )
+from peerpedia_core.commands.views import (
+    get_article_view,
+    get_follower_views,
+    get_following_views,
+    get_user_view,
+    list_article_views,
+    list_user_article_views,
+)
 from peerpedia_core.commands.discover import (
     merge_article_meta,
     merge_bookmarks,
@@ -110,6 +118,8 @@ from peerpedia_core.commands.discover import (
     merge_script_maintainers,
     merge_users,
 )
+from peerpedia_core.config.paths import ARTICLES_DIR
+from peerpedia_core.storage.db import db_repl_setup as _db_repl_setup
 from peerpedia_core.storage.db.session_utils import db_session_scope as _db_session_scope
 from peerpedia_core.storage.db.crud_article import insert_article
 
@@ -120,6 +130,30 @@ def db_session(database_url: str):
     CLI uses this to get a session; it never imports ``storage/`` directly.
     """
     return _db_session_scope(database_url)
+
+
+def db_repl_setup(database_url: str):
+    """Initialize the database engine and apply migrations.
+
+    Server startup calls this once per process lifetime.
+    """
+    return _db_repl_setup(database_url)
+
+
+def health_check(database_url: str) -> list[str]:
+    """Check that runtime dependencies (DB, articles directory) are reachable.
+
+    Returns a list of problem strings.  Empty list means healthy.
+    """
+    problems: list[str] = []
+    if not ARTICLES_DIR.is_dir():
+        problems.append("articles_dir_missing")
+    try:
+        with db_session(database_url):
+            pass
+    except Exception as e:
+        problems.append(f"db_unreachable: {e}")
+    return problems
 
 
 
@@ -140,7 +174,11 @@ __all__ = [
     "fork_article",
     "insert_article",
     "get_article",
+    "get_article_view",
     "get_author_ids",
+    "get_follower_views",
+    "get_following_views",
+    "get_user_view",
     "get_followers",
     "get_following",
     "get_bookmarks_for_user",
@@ -150,6 +188,8 @@ __all__ = [
     "get_user_by_name",
     "sync_reviews_from_worktree",
     "list_articles",
+    "list_article_views",
+    "list_user_article_views",
     "list_maintainers",
     "merge_article_meta",
     "merge_bookmarks",

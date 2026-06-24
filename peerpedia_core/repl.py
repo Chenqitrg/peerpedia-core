@@ -162,7 +162,17 @@ Flags: [muted]--json --user ...  (same as CLI)[/]
 def _meta_user(name):
     global _repl_user
     db = _ensure_db()
-    u = get_user(db, name) or get_user_by_name(db, name)
+    u = get_user(db, name)
+    if u is None:
+        users = get_user_by_name(db, name)
+        if len(users) == 1:
+            u = users[0]
+        elif len(users) > 1:
+            console.print(f"[warning]Multiple users named '{name}':[/]")
+            for i, user in enumerate(users, 1):
+                console.print(f"  {i}. {user.id} ({user.affiliation or 'no affiliation'})")
+            console.print("Use [accent]/user <id>[/] to select a specific user.")
+            return
     if u:
         _repl_user = name
         console.print(f"[success]✓[/] User set to [accent]{name}[/]")

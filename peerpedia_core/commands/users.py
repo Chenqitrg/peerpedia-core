@@ -35,8 +35,8 @@ def get_user(db: Session, user_ref: str):
     return _get(db, user_ref)
 
 
-def get_user_by_name(db: Session, name: str):
-    """Get a user by exact name match. Returns None if not found."""
+def get_user_by_name(db: Session, name: str) -> list:
+    """Get users by exact name match. Returns empty list if none found."""
     return _get_by_name(db, name)
 
 

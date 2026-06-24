@@ -163,9 +163,12 @@ def _resolve_user(db, user_ref: str) -> str:
     UUID or UUID prefix → pass through directly.
     """
     if user_ref.startswith("@"):
-        u = get_user_by_name(db, user_ref[1:])
-        if u:
-            return u.id
+        users = get_user_by_name(db, user_ref[1:])
+        if len(users) == 1:
+            return users[0].id
+        if len(users) > 1:
+            _die(f"Multiple users named '@{user_ref[1:]}'. "
+                 f"Use user ID instead: {', '.join(u.id for u in users)}")
         _die(f"User '@{user_ref[1:]}' not found.\n"
              f"  Register: peerpedia account register --name {user_ref[1:]}")
     return user_ref

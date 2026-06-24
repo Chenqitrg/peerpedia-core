@@ -113,8 +113,8 @@ def get_user(session: Session, user_id: str) -> User | None:
     return session.get(User, user_id)
 
 
-def get_user_by_name(session: Session, name: str) -> User | None:
-    return session.query(User).filter(User.name == name).first()
+def get_user_by_name(session: Session, name: str) -> list[User]:
+    return session.query(User).filter(User.name == name).all()
 
 
 def list_users(session: Session) -> list[User]:

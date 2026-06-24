@@ -235,3 +235,45 @@ def find_common_ancestor(
     if boundary is None:
         return None
     return commits[boundary].hexsha
+
+
+# ── Full-repo pack / unpack (tar.gz) ──────────────────────────────────────
+
+
+def ingest_article_repo(repo_path: Path, payload: dict) -> str:
+    """Unpack a full article repo from a base64-encoded tar.gz payload.
+
+    *payload* must contain ``"repo_bundle"``: a base64-encoded gzipped
+    tar archive of the full git repo.
+
+    Returns the HEAD hash of the newly ingested article.
+
+    Raises ``FileExistsError`` if *repo_path* already contains a ``.git``
+    directory.
+    """
+    import base64 as _b64
+    import io as _io
+    import tarfile as _tarfile
+
+    if (repo_path / ".git").is_dir():
+        raise FileExistsError(f"Article already exists locally: {repo_path.name}")
+
+    bundle_bytes = _b64.b64decode(payload["repo_bundle"])
+    with _tarfile.open(fileobj=_io.BytesIO(bundle_bytes), mode="r:gz") as tar:
+        tar.extractall(path=repo_path.parent)
+    return get_head(repo_path)
+
+
+def pack_article_repo(repo_path: Path) -> str:
+    """Pack an article's full git repo into a base64-encoded tar.gz string.
+
+    The reverse of ``ingest_article_repo``.
+    """
+    import base64 as _b64
+    import io as _io
+    import tarfile as _tarfile
+
+    buf = _io.BytesIO()
+    with _tarfile.open(fileobj=buf, mode="w:gz") as tar:
+        tar.add(str(repo_path), arcname=repo_path.name)
+    return _b64.b64encode(buf.getvalue()).decode("ascii")

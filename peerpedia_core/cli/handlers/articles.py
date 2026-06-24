@@ -15,7 +15,7 @@ from peerpedia_core.cli.bundle_utils import _sync_server, _try_sync
 from peerpedia_core.social import discover_articles
 from peerpedia_core.commands import (
     assert_article_integrity, create_article_with_content,
-    get_article, get_author_ids, list_articles, publish_article,
+    get_article, get_article_view, list_article_views, list_articles, publish_article,
     publish_ready_articles, delete_article, update_article_content, get_user,
 )
 
@@ -73,7 +73,7 @@ def _cmd_article_show(db, args):
     if not article:
         _die(f"Article [accent]{args.id}[/] not found")
     if args.json:
-        _json_out(article.to_dict())
+        _json_out(get_article_view(db, args.id))
         return
 
     show_mode = getattr(args, "show", "meta")
@@ -132,10 +132,10 @@ def _cmd_article_list(db, args):
         limit=20,
     )
     if args.json:
-        _json_out([
-            {**a.to_dict(), "authors": get_author_ids(db, a.id)}
-            for a in articles
-        ])
+        _json_out(list_article_views(
+            db, search_query=args.search or None, author_id=author_id,
+            viewer_id=viewer_id, bookmarked_by=bookmarked_by, limit=20,
+        ))
         return
     if not articles:
         console.print("[muted]No articles.[/]")

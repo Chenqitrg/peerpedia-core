@@ -75,8 +75,12 @@ def _cmd_login(db, args):
     """
 
     user = get_user_by_name(db, args.name)
-    if user is None:
+    if len(user) == 0:
         _die(f"User '{args.name}' not found.")
+    if len(user) > 1:
+        _die(f"Multiple users named '{args.name}'. "
+             f"Use user ID to log in: {', '.join(u.id for u in user)}")
+    user = user[0]
 
     if user.salt is None:
         _die(f"User '{args.name}' was registered before key derivation was supported. "

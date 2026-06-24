@@ -25,17 +25,20 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
 from peerpedia_core.bundle.server import (
-    apply_sync,
-    check_ancestor,
-    get_bundle,
-    get_head,
-    ingest_article,
-    pack_article_repo,
+    check_article_ancestor,
+    get_article_bundle,
+    get_article_commit_history,
+    get_article_head,
+    ingest_first_article,
+    pack_article_repo_bundle,
+    read_article_source_content,
 )
-from peerpedia_core.config.paths import ARTICLES_DIR
+from peerpedia_core.commands import (
+    apply_sync_bundle,
+    get_article_view,
+    list_article_views,
+)
 from peerpedia_core.exceptions import BadRequestError, NotFoundError
-from peerpedia_core.commands import get_article, get_author_ids, list_articles as search_articles
-from peerpedia_core.storage.git_backend import get_commit_history, read_article_source
 from peerpedia_core.transport.shared import _validate_id
 
 MAX_BUNDLE_BYTES = 100 * 1024 * 1024  # 100 MB
@@ -47,7 +50,7 @@ MAX_BUNDLE_BYTES = 100 * 1024 * 1024  # 100 MB
 async def _head(request: Request) -> JSONResponse:
     article_id = request.path_params["article_id"]
     _validate_id(article_id, "article_id")
-    result = get_head(ARTICLES_DIR / article_id)
+    result = get_article_head(article_id)
     if result is None:
         raise NotFoundError(f"Article '{article_id}' not found")
     return JSONResponse({"hash": result})
@@ -57,7 +60,7 @@ async def _bundle(request: Request) -> Response:
     article_id = request.path_params["article_id"]
     _validate_id(article_id, "article_id")
     since_hash = request.query_params.get("since")
-    result = get_bundle(ARTICLES_DIR / article_id, since_hash)
+    result = get_article_bundle(article_id, since_hash)
     if result is None:
         raise NotFoundError(f"Bundle not available for '{article_id}'")
     return Response(content=result, media_type="application/octet-stream")
@@ -75,7 +78,7 @@ async def _sync(request: Request) -> JSONResponse:
         )
     bundle_bytes = await request.body()
     db = request.state.db
-    new_head = apply_sync(db, article_id, bundle_bytes)
+    new_head = apply_sync_bundle(db, article_id, bundle_bytes)
     return JSONResponse({"head": new_head})
 
 
@@ -83,7 +86,7 @@ async def _ancestor(request: Request) -> JSONResponse:
     article_id = request.path_params["article_id"]
     _validate_id(article_id, "article_id")
     h = request.path_params["hash"]
-    result = check_ancestor(ARTICLES_DIR / article_id, h)
+    result = check_article_ancestor(article_id, h)
     return JSONResponse({"ancestor": result})
 
 
@@ -97,7 +100,7 @@ async def _push_article_repo(request: Request) -> JSONResponse:
         raise BadRequestError("Missing required field: 'repo_bundle'")
     if not payload["repo_bundle"]:
         raise BadRequestError("Field 'repo_bundle' must not be empty")
-    new_head = ingest_article(ARTICLES_DIR / article_id, payload)
+    new_head = ingest_first_article(article_id, payload)
     return JSONResponse({"head": new_head}, status_code=201)
 
 
@@ -109,23 +112,20 @@ async def _article(request: Request) -> JSONResponse:
     db = getattr(request.state, "db", None)
     if db is None:
         raise NotFoundError(f"Article '{article_id}' not found")
-    a = get_article(db, article_id)
-    if a is None:
+    data = get_article_view(db, article_id)
+    if data is None:
         raise NotFoundError(f"Article '{article_id}' not found")
-    return JSONResponse({**a.to_dict(), "authors": get_author_ids(db, a.id)})
+    return JSONResponse(data)
 
 
 async def _history(request: Request) -> JSONResponse:
     """GET /api/v1/articles/{id}/history?max= → commit history."""
     article_id = request.path_params["article_id"]
     _validate_id(article_id, "article_id")
-    repo_path = ARTICLES_DIR / article_id
-    if not (repo_path / ".git").is_dir():
-        raise NotFoundError(f"Article '{article_id}' not found")
     max_count = min(int(request.query_params.get("max", 50)), 200)
     since = request.query_params.get("since")
     try:
-        commits = get_commit_history(repo_path, max_count=max_count, since_hash=since)
+        commits = get_article_commit_history(article_id, max_count=max_count, since_hash=since)
     except ValueError:
         commits = []
     return JSONResponse(commits)
@@ -138,17 +138,16 @@ async def _search(request: Request) -> JSONResponse:
     status = request.query_params.get("status")
     limit = min(int(request.query_params.get("limit", 20)), 100)
     offset = int(request.query_params.get("offset", 0))
-    articles = search_articles(
-        db, search_query=q, status=status, limit=limit, offset=offset
-    )
-    return JSONResponse([a.to_dict() for a in articles])
+    return JSONResponse(list_article_views(
+        db, search_query=q, status=status, limit=limit, offset=offset,
+    ))
 
 
 async def _source(request: Request) -> JSONResponse:
     """GET /api/v1/articles/{id}/source → article markdown/typst content."""
     article_id = request.path_params["article_id"]
     _validate_id(article_id, "article_id")
-    result = read_article_source(ARTICLES_DIR / article_id)
+    result = read_article_source_content(article_id)
     if result is None:
         raise NotFoundError(f"Article source not found for '{article_id}'")
     content, fmt = result
@@ -159,10 +158,7 @@ async def _repo(request: Request) -> JSONResponse:
     """GET /api/v1/articles/{id}/repo → base64 tar.gz of full git repo."""
     article_id = request.path_params["article_id"]
     _validate_id(article_id, "article_id")
-    repo_path = ARTICLES_DIR / article_id
-    if not (repo_path / ".git").is_dir():
-        raise NotFoundError(f"Article '{article_id}' not found")
-    return JSONResponse({"repo_bundle": pack_article_repo(repo_path)})
+    return JSONResponse({"repo_bundle": pack_article_repo_bundle(article_id)})
 
 
 # ── Route table ──────────────────────────────────────────────────────────

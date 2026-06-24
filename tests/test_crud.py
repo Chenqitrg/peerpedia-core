@@ -339,6 +339,32 @@ class TestUserCRUD:
         assert get_user(session, u.id).reputation == rep
         session.close()
 
+    def test_get_user_by_name_returns_list(self, engine):
+        """get_user_by_name returns list[User]; empty list when no match."""
+        from peerpedia_core.storage.db.crud_user import create_user, get_user_by_name
+
+        session = get_session(engine)
+        create_user(session, name="alice", public_key="0000000000000000000000000000000000000000000000000000000000000000")
+        result = get_user_by_name(session, "alice")
+        assert isinstance(result, list)
+        assert len(result) == 1
+        assert result[0].name == "alice"
+        assert get_user_by_name(session, "nonexistent") == []
+        session.close()
+
+    def test_duplicate_names_allowed(self, engine):
+        """Two users with the same name can coexist (P2P compatibility)."""
+        from peerpedia_core.storage.db.crud_user import create_user, get_user_by_name
+
+        session = get_session(engine)
+        u1 = create_user(session, name="同名", public_key="aaaa00000000000000000000000000000000000000000000000000000000000000")
+        u2 = create_user(session, name="同名", public_key="bbbb00000000000000000000000000000000000000000000000000000000000000")
+        assert u1.id != u2.id
+        result = get_user_by_name(session, "同名")
+        assert len(result) == 2
+        assert {u.id for u in result} == {u1.id, u2.id}
+        session.close()
+
 
 # ── Follow CRUD ──────────────────────────────────────────────────────────
 

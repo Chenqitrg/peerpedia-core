@@ -17,7 +17,7 @@ from peerpedia_core.commands import (
     fork_article, create_merge_proposal, accept_merge,
     add_bookmark, remove_bookmark,
     follow_user, unfollow_user,
-    get_followers, get_following,
+    get_follower_views, get_followers, get_following, get_following_views,
     get_article, merge_article_meta,
 )
 from peerpedia_core.transport import fetch_article_meta
@@ -205,16 +205,14 @@ def _cmd_following(db, args):
 
     args: --user, --server, --local, --json
     """
-    if args.local:
-        users = get_following(db, args.user)
-    else:
+    if not args.local:
         server = _sync_server(args)
         discover_following(db, server, args.user)
         db.commit()
-        users = get_following(db, args.user)
     if args.json:
-        _json_out([u.to_dict() for u in users])
+        _json_out(get_following_views(db, args.user))
     else:
+        users = get_following(db, args.user)
         _ok(f"Following {len(users)} user(s)")
 
 
@@ -224,14 +222,12 @@ def _cmd_followers(db, args):
 
     args: --user, --server, --local, --json
     """
-    if args.local:
-        users = get_followers(db, args.user)
-    else:
+    if not args.local:
         server = _sync_server(args)
         discover_followers(db, server, args.user)
         db.commit()
-        users = get_followers(db, args.user)
     if args.json:
-        _json_out([u.to_dict() for u in users])
+        _json_out(get_follower_views(db, args.user))
     else:
+        users = get_followers(db, args.user)
         _ok(f"Followers {len(users)} user(s)")

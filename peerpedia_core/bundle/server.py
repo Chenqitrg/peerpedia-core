@@ -46,20 +46,20 @@ Reviewer's checklist
 - Are bundle bytes verified before being applied?  (ingest_bundle does this.)
 """
 
-import base64
-import io
-import tarfile
 from pathlib import Path
 
 from peerpedia_core.exceptions import ConflictError
 from peerpedia_core.storage.db import Session
+from peerpedia_core.storage.git_backend import get_commit_history, read_article_source
 
 from peerpedia_core.commands import apply_sync_bundle
 from peerpedia_core.bundle.git_bundle import (
     create_bundle,
     get_head as _git_get_head,
+    ingest_article_repo,
     ingest_bundle,
     is_ancestor,
+    pack_article_repo,
 )
 
 from peerpedia_core.config.paths import ARTICLES_DIR as DEFAULT_ARTICLES_DIR
@@ -114,44 +114,56 @@ def check_ancestor(repo_path: Path, hash: str) -> bool:
 
 
 def ingest_article(repo_path: Path, payload: dict) -> str:
-    """Receive and unpack a full article repo upload.
-
-    *payload* must contain:
-      - ``id``: article ID (directory name)
-      - ``repo_bundle``: base64-encoded tar.gz of the full git repo
-
-    Called by the HTTP layer for ``POST /articles`` (first-ever push)
-    to bootstrap a new article locally from a peer's full upload.
-
-    Returns the HEAD hash of the newly ingested article.
-
-    Raises ConflictError if the article already exists locally.
-    """
-    if (repo_path / ".git").is_dir():
-        raise ConflictError(f"Article already exists locally: {repo_path.name}")
-
-    # Decode and extract the tar.gz
-    bundle_bytes = base64.b64decode(payload["repo_bundle"])
-    with tarfile.open(fileobj=io.BytesIO(bundle_bytes), mode="r:gz") as tar:
-        tar.extractall(path=DEFAULT_ARTICLES_DIR)
-
-    return get_head(repo_path)
+    """Receive and unpack a full article repo upload (delegates to git_bundle)."""
+    try:
+        return ingest_article_repo(repo_path, payload)
+    except FileExistsError:
+        raise ConflictError(f"Article already exists locally: {repo_path.name}") from None
 
 
-def pack_article_repo(repo_path: Path) -> str:
-    """Pack an article's full git repo into base64-encoded tar.gz.
-
-    The reverse of ``ingest_article`` — used by ``GET /repo`` to serve
-    a full clone to a peer that doesn't have this article yet.
-    """
-    import base64 as _b64
-    import io as _io
-    import tarfile as _tarfile
-
-    buf = _io.BytesIO()
-    with _tarfile.open(fileobj=buf, mode="w:gz") as tar:
-        tar.add(str(repo_path), arcname=repo_path.name)
-    return _b64.b64encode(buf.getvalue()).decode("ascii")
+# ── Article-ID-based wrappers ────────────────────────────────────────────
+# Route handlers call these with article_id (str) instead of repo_path (Path).
 
 
+def get_article_head(article_id: str) -> str | None:
+    """Return the HEAD commit hash for *article_id*, or None."""
+    return get_head(DEFAULT_ARTICLES_DIR / article_id)
 
+
+def get_article_bundle(article_id: str, since_hash: str | None) -> bytes | None:
+    """Return an incremental git bundle for *article_id*."""
+    return get_bundle(DEFAULT_ARTICLES_DIR / article_id, since_hash)
+
+
+def check_article_ancestor(article_id: str, commit_hash: str) -> bool:
+    """Return True if *commit_hash* is an ancestor of *article_id*'s HEAD."""
+    return check_ancestor(DEFAULT_ARTICLES_DIR / article_id, commit_hash)
+
+
+def get_article_commit_history(
+    article_id: str,
+    *,
+    max_count: int | None = None,
+    since_hash: str | None = None,
+) -> list[dict]:
+    """Return commit history for *article_id* from git."""
+    return list(get_commit_history(
+        DEFAULT_ARTICLES_DIR / article_id,
+        max_count=max_count,
+        since_hash=since_hash,
+    ))
+
+
+def read_article_source_content(article_id: str) -> tuple[str, str] | None:
+    """Return (content, format) for *article_id*'s source file, or None."""
+    return read_article_source(DEFAULT_ARTICLES_DIR / article_id)
+
+
+def ingest_first_article(article_id: str, payload: dict) -> str:
+    """Ingest a first-time article upload (base64-encoded tar.gz)."""
+    return ingest_article(DEFAULT_ARTICLES_DIR / article_id, payload)
+
+
+def pack_article_repo_bundle(article_id: str) -> str:
+    """Pack the full git repo for *article_id* as a base64-encoded tar.gz."""
+    return pack_article_repo(DEFAULT_ARTICLES_DIR / article_id)

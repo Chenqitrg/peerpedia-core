@@ -79,7 +79,8 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
-from peerpedia_core.config.paths import ARTICLES_DIR, DB_URL
+from peerpedia_core.commands import db_repl_setup, health_check
+from peerpedia_core.config.paths import DB_URL
 from peerpedia_core.exceptions import (
     BadRequestError,
     ConflictError,
@@ -90,7 +91,6 @@ from peerpedia_core.exceptions import (
     SignatureVerificationError,
     TransportError,
 )
-from peerpedia_core.storage.db import db_repl_setup, db_session
 from peerpedia_core.transport.middleware import AuthMiddleware, DBSessionMiddleware
 from peerpedia_core.transport.middleware.logging import AuditLogMiddleware
 from peerpedia_core.transport.middleware.ratelimit import RateLimitMiddleware
@@ -107,15 +107,7 @@ DEBUG = bool(os.environ.get("PEERPEDIA_DEBUG"))
 
 def _health(request: Request) -> JSONResponse:
     """GET /health → 200 if dependencies are reachable, 503 otherwise."""
-    problems: list[str] = []
-    if not ARTICLES_DIR.is_dir():
-        problems.append("articles_dir_missing")
-    try:
-        with db_session(DB_URL) as _:
-            pass
-    except Exception as e:
-        problems.append(f"db_unreachable: {e}")
-
+    problems = health_check(DB_URL)
     if problems:
         return JSONResponse(
             {"status": "degraded", "problems": problems}, status_code=503

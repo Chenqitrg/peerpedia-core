@@ -215,6 +215,9 @@ def apply_sync_bundle(
     # missing is the discovery side: given a seed peer, walk the graph
     # (who follows whom, who bookmarks what) to surface new content.
 
+    # Full integrity check — DB cross-validation + auto-repair after sync.
+    assert_article_integrity(db, article_id, level="full")
+
     recompute_article_score(db, article_id)
 
     # Trigger auto-publish for any articles that may now be ready (G4)
@@ -270,52 +273,10 @@ def _verify_new_commits(db: Session, repo_path: Path, *, since_hash: str) -> Non
             )
 
 
-def _extract_pubkey_from_message(message: str) -> str | None:
-    """Extract ``Pubkey: <hex>`` from a commit message. Returns hex or None."""
-    for line in message.splitlines():
-        if line.startswith("Pubkey: "):
-            candidate = line.split("Pubkey: ", 1)[1].strip()
-            if candidate:
-                return candidate
-    return None
-
-
-def _extract_user_id_from_email(email: str) -> str:
-    """Extract user_id from an email like ``<id>@peerpedia``."""
-    return email.split("@")[0]
-
-
-def assert_article_integrity(db: Session, article_id: str) -> None:
-    """Verify local integrity — all human commits in the repo are signed.
-
-    Runs on article access (show, edit, publish).  If someone bypasses the
-    CLI and edits ``.git/objects/`` or ``peerpedia.db`` directly, this
-    detects the tampering before it propagates.
-
-    Raises ``SignatureVerificationError`` if unsigned commits are found.
-    """
-    rp = DEFAULT_ARTICLES_DIR / article_id
-    if not (rp / ".git").is_dir():
-        return  # No repo yet — nothing to verify
-
-    article = get_article(db, article_id)
-    if article is None:
-        return
-
-    for commit in get_commit_history(rp):
-        author_email = commit["author_email"]
-        if author_email == _PLATFORM_EMAIL:
-            continue
-
-        commit_hash = commit["hash"]
-        pubkey_hex = _extract_pubkey_from_message(commit["message"])
-        if not pubkey_hex:
-            raise SignatureVerificationError(
-                f"Local integrity failure: commit {commit_hash[:8]} "
-                f"by {author_email} has no Pubkey trailer — "
-                "the git repo may have been tampered with. "
-                "Run 'peerpedia sync pull' to repair from a trusted peer."
-            )
-
-        ssh_line = pubkey_hex_to_ssh_line(pubkey_hex)
-        verify_commit_signature(rp, commit_hash, ssh_line, author_email)
+# Re-export integrity helpers and functions used by this module.
+from peerpedia_core.commands.integrity import (  # noqa: E402
+    _extract_human_authors_from_git,
+    _extract_pubkey_from_message,
+    _extract_user_id_from_email,
+    assert_article_integrity,
+)

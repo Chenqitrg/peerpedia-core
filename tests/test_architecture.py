@@ -89,23 +89,43 @@ def test_no_sqlalchemy_outside_storage_db():
 
 
 def test_no_internal_peerpedia_imports():
-    """Function bodies must not contain ``from peerpedia_core.* import``."""
-    # Lazy imports are acceptable for optional heavy dependencies
-    # (e.g., starlette/uvicorn in server handlers) to avoid slowing
-    # down every CLI command.
-    _LAZY_IMPORT_OK = {
-        "peerpedia_core/cli/handlers/server.py",  # uvicorn + create_app
+    """Function bodies must not contain ``from peerpedia_core.* import``.
+
+    Lazy imports inside functions are a code smell: they let AI/developers
+    bypass layer boundaries with zero friction.  Every lazy import must be
+    explicitly justified in the whitelist below.
+
+    To add a new entry: specify the exact (file, module) pair and a reason
+    why the import CANNOT be at module level (circular dependency, heavy
+    optional dependency that hurts CLI startup, etc.).
+    """
+    # (file_rel, module) → why the lazy import is necessary
+    _LAZY_IMPORT_OK: dict[tuple[str, str], str] = {
+        # ── Heavy optional deps (avoid loading on every CLI invocation) ──
+        ("peerpedia_core/cli/handlers/server.py",
+         "peerpedia_core.transport.http_server"):
+            "heavy: imports Starlette/uvicorn — only needed for `server start`",
+        # ── Circular dependency breaks ──────────────────────────────────
+        ("peerpedia_core/commands/integrity.py",
+         "peerpedia_core.commands.articles"):
+            "circular: articles.py → integrity.py → articles.py (rebuild_article_authors)",
     }
+
     for f in _all_modules():
         rel = _rel(f)
-        if rel in _LAZY_IMPORT_OK:
-            continue
-        for module, name, is_internal in _imports(f):
-            if is_internal and module.startswith(_PEERPEDIA):
-                raise AssertionError(
-                    f"{rel}: internal import from {module} — "
-                    "move to module level or move the function"
-                )
+        for module, _name, is_internal in _imports(f):
+            if not is_internal:
+                continue
+            if not module.startswith(_PEERPEDIA):
+                continue
+            key = (rel, module)
+            if key in _LAZY_IMPORT_OK:
+                continue
+            raise AssertionError(
+                f"{rel}: lazy import from {module} inside a function — "
+                "move to module level, or add to _LAZY_IMPORT_OK in "
+                "test_architecture.py with a concrete reason (circular / heavy dep)"
+            )
 
 
 def test_no_httpx_outside_transport():
@@ -528,4 +548,138 @@ def test_only_commands_imports_crud():
                 raise AssertionError(
                     f"{rel}: imports {m} — "
                     "use commands/ facade instead of importing CRUD directly"
+                )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# K. Transport layer — no direct storage imports
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Transport routes and middleware must go through commands/, not import
+# storage/ directly.  This keeps the "delete HTTP, local still works" property.
+_TRANSPORT_STORAGE_ALLOWED = {
+    "peerpedia_core/transport/http_server.py",  # GitCommandError for error mapping
+}
+
+
+def test_transport_no_storage_imports():
+    """transport/ must not import from peerpedia_core.storage.*.
+
+    The transport layer exists to be replaceable — it must go through
+    commands/ (or bundle/ for bundle protocol functions).  Direct storage
+    imports couple transport to the database/filesystem, breaking the
+    "delete transport, local CLI works" property.
+    """
+    for f in _all_modules():
+        rel = _rel(f)
+        if not rel.startswith("peerpedia_core/transport/"):
+            continue
+        if rel in _TRANSPORT_STORAGE_ALLOWED:
+            continue
+        for m, _name, _internal in _imports(f):
+            if m.startswith("peerpedia_core.storage"):
+                raise AssertionError(
+                    f"{rel}: imports {m} — "
+                    "transport must not import storage/ directly; "
+                    "go through commands/ facade"
+                )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# L. Deleted module — social/server.py must not be imported
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def test_no_import_social_server():
+    """No module may import from ``peerpedia_core.social.server``.
+
+    This file was deleted — it was a pure pass-through that added no value
+    beyond what commands/ already exposes.  Transport routes should import
+    the view functions from commands/ directly.
+    """
+    for f in _all_modules():
+        rel = _rel(f)
+        for m, _name, _internal in _imports(f):
+            if m == "peerpedia_core.social.server":
+                raise AssertionError(
+                    f"{rel}: imports {m} — "
+                    "social/server.py was deleted; import from commands/ instead"
+                )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# M. bundle/server.py — no tarfile / base64 / io imports
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_BUNDLE_SERVER_FORBIDDEN_STDLIB = frozenset({"tarfile", "base64", "io"})
+
+
+def test_bundle_server_no_tarfile_imports():
+    """bundle/server.py must not import tarfile, base64, or io.
+
+    These belong in bundle/git_bundle.py — the protocol layer.
+    bundle/server.py is a thin wrapper that delegates to git_bundle
+    and converts exceptions.  If someone adds tar.gz packing/unpacking
+    back to server.py, the layering is wrong.
+    """
+    f = ROOT / "bundle/server.py"
+    if not f.exists():
+        # server.py was deleted; no check needed
+        return
+    tree = ast.parse(f.read_text())
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                base = alias.name.split(".")[0]
+                if base in _BUNDLE_SERVER_FORBIDDEN_STDLIB:
+                    raise AssertionError(
+                        f"bundle/server.py: imports {alias.name} — "
+                        "tar.gz logic belongs in bundle/git_bundle.py"
+                    )
+        elif isinstance(node, ast.ImportFrom):
+            if node.module is None:
+                continue
+            base = node.module.split(".")[0]
+            if base in _BUNDLE_SERVER_FORBIDDEN_STDLIB:
+                raise AssertionError(
+                    f"bundle/server.py: imports {node.module} — "
+                    "tar.gz logic belongs in bundle/git_bundle.py"
+                )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# N. View layer — no .to_dict() in transport/ or cli/handlers/
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_TO_DICT_ALLOWED = frozenset({
+    "peerpedia_core/commands/views.py",
+    "peerpedia_core/storage/db/models.py",
+    "peerpedia_core/commands/bundle.py",   # compose response dicts for sync
+})
+
+
+def test_no_to_dict_in_transport_or_cli():
+    """transport/ and cli/handlers/ must not call ``.to_dict()`` on models.
+
+    ``commands/views.py`` is the canonical serialization layer.  If any
+    transport route handler or CLI command calls ``.to_dict()`` directly,
+    it means the view layer was bypassed — and the same serialization
+    logic will be duplicated in every caller.
+    """
+    for f in _all_modules():
+        rel = _rel(f)
+        if rel in _TO_DICT_ALLOWED:
+            continue
+        if not (rel.startswith("peerpedia_core/transport/") or
+                rel.startswith("peerpedia_core/cli/handlers/")):
+            continue
+        tree = ast.parse(f.read_text())
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Attribute) and node.attr == "to_dict":
+                # Determine the source line for a precise error message.
+                lineno = node.lineno if hasattr(node, "lineno") else 0
+                raise AssertionError(
+                    f"{rel}:{lineno}: calls .to_dict() — "
+                    "use commands/views.py (get_article_view, "
+                    "get_following_views, etc.) instead"
                 )

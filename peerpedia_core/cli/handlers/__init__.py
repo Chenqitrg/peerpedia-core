@@ -28,7 +28,7 @@ from peerpedia_core.cli.handlers.maintainers import (
     _cmd_maintainer_revoke,
 )
 from peerpedia_core.cli.handlers.mother import _cmd_mother
-from peerpedia_core.cli.handlers.reviews import _cmd_review_list, _cmd_review_reply, _cmd_review_submit
+from peerpedia_core.cli.handlers.reviews import _cmd_review_invite, _cmd_review_list, _cmd_review_rate, _cmd_review_reply, _cmd_review_submit
 from peerpedia_core.cli.handlers.social import (
     _cmd_alias_list,
     _cmd_alias_remove,

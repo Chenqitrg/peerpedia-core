@@ -32,7 +32,7 @@ from peerpedia_core.cli.handlers import (
     _cmd_share_add, _cmd_share_list, _cmd_share_remove,
     _cmd_mother,
     _cmd_register,
-    _cmd_review_list, _cmd_review_reply, _cmd_review_submit,
+    _cmd_review_invite, _cmd_review_list, _cmd_review_rate, _cmd_review_reply, _cmd_review_submit,
     _cmd_server_start,
     _cmd_sync_pull, _cmd_sync_push, _cmd_sync_status,
     _cmd_whoami,
@@ -150,6 +150,16 @@ COMMAND_GROUPS = [
         ("reply", _cmd_review_reply, [
             (("article_id",), {"help": "Article ID (or prefix)"}),
             (("--to",), {"required": True, "help": "Reviewer (@name, UUID, or prefix) to reply to"}),
+        ]),
+        ("invite", _cmd_review_invite, [
+            (("article_id",), {"help": "Article ID (or prefix)"}),
+            (("--user",), {"required": True, "help": "User to invite (@name, UUID, or prefix)"}),
+        ]),
+        ("rate", _cmd_review_rate, [
+            (("article_id",), {"help": "Article ID (or prefix)"}),
+            (("--reviewer",), {"required": True, "help": "Reviewer to rate (@name, UUID, or prefix)"}),
+            (("--helpfulness",), {"required": True, "type": int, "choices": [1, 2, 3, 4, 5],
+             "help": "Helpfulness score 1-5"}),
         ]),
     ]),
     ("merge", "Propose, accept, or withdraw merge proposals", [

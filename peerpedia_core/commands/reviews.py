@@ -145,6 +145,60 @@ def submit_review(
     return {"review_id": r.id, "scores": r.scores, "commit_hash": commit_hash}
 
 
+def invite_reviewer(
+    db: Session,
+    article_id: str,
+    inviter_id: str,
+    invited_id: str,
+) -> dict:
+    """Invite a user to review an article during sedimentation.
+
+    Only a maintainer of the article can send invitations.  The invitation
+    is recorded as a pending Review row so publish_ready_articles can track it.
+    """
+    from datetime import datetime, timezone
+    article = get_article(db, article_id)
+    if article is None:
+        raise NotFoundError("Article not found")
+    if article.status != "sedimentation":
+        raise BadRequestError("Can only invite reviewers to articles in sedimentation")
+
+    mids = get_maintainer_ids(db, article_id)
+    if inviter_id not in mids:
+        raise NotAuthorizedError("Only article maintainers can invite reviewers")
+
+    invited_user = get_user(db, invited_id)
+    if invited_user is None:
+        raise NotFoundError("Invited user not found")
+
+    # Check for duplicate invitation
+    existing = _get(db, article_id)
+    for r in existing:
+        if r.reviewer_id == invited_id and r.invited_by is not None:
+            raise ConflictError("User has already been invited to review this article")
+
+    # Create a pending invitation row
+    inv = Review(
+        article_id=article_id,
+        commit_hash="pending",
+        reviewer_id=invited_id,
+        scope="sedimentation",
+        scores={},
+        invited_by=inviter_id,
+        invited_at=datetime.now(timezone.utc),
+    )
+    db.add(inv)
+    db.flush()
+
+    create_notification(
+        db, user_id=invited_id, event="review_invitation",
+        message=f"{inviter_id} invited you to review an article",
+        article_id=article_id, actor_id=inviter_id,
+    )
+
+    return {"invitation_id": inv.id, "article_id": article_id, "reviewer_id": invited_id}
+
+
 def submit_reply(
     db: Session,
     article_id: str,
@@ -342,3 +396,41 @@ def write_review_to_git(
 def get_reviews_for_article(db: Session, article_id: str) -> list:
     """Return all cached reviews for an article, newest first."""
     return _get(db, article_id)
+
+
+def rate_review_helpfulness(
+    db: Session,
+    article_id: str,
+    reviewer_id: str,
+    rater_id: str,
+    score: int,
+) -> dict:
+    """Rate a review's helpfulness (1-5).  Only article maintainers can rate.
+
+    Updates the Review record in DB and writes to git.
+    """
+    article = get_article(db, article_id)
+    if article is None:
+        raise NotFoundError("Article not found")
+
+    mids = get_maintainer_ids(db, article_id)
+    if rater_id not in mids:
+        raise NotAuthorizedError("Only article maintainers can rate reviews")
+
+    if score < 1 or score > 5:
+        raise BadRequestError("Helpfulness score must be between 1 and 5")
+
+    # Find the review and update it
+    all_reviews = _get(db, article_id)
+    target = None
+    for r in all_reviews:
+        if r.reviewer_id == reviewer_id:
+            target = r
+            break
+    if target is None:
+        raise NotFoundError(f"No review found for reviewer {reviewer_id}")
+
+    target.helpfulness_score = score
+    db.flush()
+
+    return {"review_id": target.id, "helpfulness_score": score}

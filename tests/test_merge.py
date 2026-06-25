@@ -257,7 +257,7 @@ class TestAcceptMerge:
         assert article.sink_duration_days == 3
 
     def test_merge_into_sedimentation_rejected(self, db, articles_dir):
-        """Merging into a sedimentation article is rejected — policy gate."""
+        """P0-3: Merging into a sedimentation article is now allowed."""
         _create_user(db, "alice", "Alice")
 
         _build_article_with_repo(db, articles_dir, "art-target-sed", ["alice"], status="sedimentation")
@@ -265,8 +265,8 @@ class TestAcceptMerge:
         mp = _db_create_mp(db, "art-fork-sed", "art-target-sed", "alice")
         db.flush()
 
-        with pytest.raises(NotAuthorizedError, match="Cannot accept merge"):
-            accept_merge(db, "art-target-sed", mp.id, "alice")
+        result = accept_merge(db, "art-target-sed", mp.id, "alice")
+        assert result is not None
 
 
 # ── create_merge_proposal ─────────────────────────────────────────────────────

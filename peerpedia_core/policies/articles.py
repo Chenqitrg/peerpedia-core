@@ -71,8 +71,9 @@ PUBLIC_READABLE_STATUSES = {"sedimentation", "published", "rejected"}
 FORKABLE_STATUSES = {"published", "rejected"}
 PUBLIC_DOWNLOADABLE_STATUSES = {"published", "rejected"}
 
-# Sedimentation articles are immutable.  Rejected is terminal (not writable).
-_WRITABLE_STATUSES = {"draft", "published"}
+# Sedimentation articles are editable by maintainers (with Closes: requirement).
+# Rejected is terminal (not writable).
+_WRITABLE_STATUSES = {"draft", "sedimentation", "published"}
 
 # Sync is allowed on rejected articles so the rejection propagates via P2P.
 _SYNCABLE_STATUSES = {"draft", "sedimentation", "published", "rejected"}
@@ -192,11 +193,11 @@ def assert_can_download_content(
 
 
 def assert_can_edit_article(article: Article, maintainer_ids: list[str], user: User) -> Article:
-    """Raise if *user* is not a maintainer, or article is in sedimentation.
+    """Raise if *user* is not a maintainer, or article status forbids editing.
 
-    Maintainers can edit articles in ``draft`` or ``published`` status.
-    Sedimentation articles are immutable — they cannot be edited during
-    the peer-review window.
+    Maintainers can edit articles in ``draft``, ``sedimentation``, or
+    ``published`` status.  Sedimentation edits require a ``Closes:``
+    trailer in the commit message (enforced by the caller).
     """
     _assert_maintainer(article, maintainer_ids, user, "edit")
     return article

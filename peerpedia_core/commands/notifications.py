@@ -40,6 +40,44 @@ def count_unread(db: Session, user_id: str) -> int:
     return _count_unread(db, user_id)
 
 
+def merge_notifications(
+    db: Session,
+    entries: list[dict],
+) -> int:
+    """Merge notifications from a P2P sync — dedup on (user_id, event, article_id, actor_id, created_at).
+
+    Returns count of new notifications inserted.
+    """
+    count = 0
+    for entry in entries:
+        existing = _get(db, entry.get("user_id"), limit=200)
+        dup = False
+        for n in existing:
+            if (
+                n.event == entry.get("event")
+                and n.article_id == entry.get("article_id")
+                and n.actor_id == entry.get("actor_id")
+                and str(n.created_at) == entry.get("created_at")
+            ):
+                # Update read status if newer
+                if entry.get("read", 0) and not n.read:
+                    n.read = 1
+                dup = True
+                break
+        if not dup:
+            create_notification(
+                db,
+                user_id=entry["user_id"],
+                event=entry["event"],
+                message=entry["message"],
+                article_id=entry.get("article_id"),
+                actor_id=entry.get("actor_id"),
+            )
+            count += 1
+    db.flush()
+    return count
+
+
 def create_notifications_batch(
     db: Session,
     entries: list[dict],

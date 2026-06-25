@@ -126,11 +126,9 @@ class Review(Base):
     reviewer_id = Column(String, ForeignKey("users.id"), nullable=False)
     scope = Column(String, nullable=False)  # "sedimentation" | "published" — matches article.status
     scores = Column(JSONDict, nullable=False)  # FiveDimScores as dict
-    # TODO(review-thread): add a `thread` column (JSONDict or similar) for
-    # reviewer-author discussion messages.  Currently reviews are one-way —
-    # the reviewer submits scores+comment, the author has no reply path.
-    # Thread messages should be written to the git repo under the reviewer's
-    # directory (reviews/{id}/threads/*.md) for audit trail.
+    invited_by = Column(String, nullable=True)  # user_id of inviter (P0-3.5)
+    invited_at = Column(DateTime, nullable=True)  # when invitation was sent
+    helpfulness_score = Column(Integer, nullable=True)  # 1-5, author rating (P0-6)
     created_at = Column(DateTime, nullable=False, default=_utcnow)
     updated_at = Column(DateTime, nullable=False, default=_utcnow, onupdate=_utcnow)
 
@@ -279,19 +277,32 @@ class Bookmark(Base):
 class Notification(Base):
     """Local notification — informs a user about events on their articles or profile.
 
-    Notifications are local-only (not synced via P2P).  They are created by
-    command functions at event emission points, and read by the user via CLI.
+    Created by command functions at event emission points, synced via P2P
+    so users on other devices see the same notifications.
     """
     __tablename__ = "notifications"
 
     id = Column(String, primary_key=True, default=_new_id)
     user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
-    event = Column(String, nullable=False)  # review_submitted|merge_proposed|new_follower|article_published
+    event = Column(String, nullable=False)  # review_submitted|merge_proposed|new_follower|article_published|review_invitation
     article_id = Column(String, ForeignKey("articles.id"), nullable=True)
     actor_id = Column(String, ForeignKey("users.id"), nullable=True)
     message = Column(String, nullable=False)
     read = Column(Integer, nullable=False, default=0)  # 0=unread, 1=read
     created_at = Column(DateTime, nullable=False, default=_utcnow)
+
+    def to_dict(self) -> dict:
+        """Serialize for P2P sync."""
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "event": self.event,
+            "article_id": self.article_id,
+            "actor_id": self.actor_id,
+            "message": self.message,
+            "read": self.read,
+            "created_at": str(self.created_at) if self.created_at else None,
+        }
 
 
 # ── MergeProposal ────────────────────────────────────────────────────────

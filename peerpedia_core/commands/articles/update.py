@@ -7,10 +7,11 @@ from __future__ import annotations
 
 from peerpedia_core.storage.db import Session
 from peerpedia_core.config.params import params
-from peerpedia_core.exceptions import NotFoundError
+from peerpedia_core.exceptions import BadRequestError, NotFoundError
 from peerpedia_core.frontmatter import make_article_frontmatter, strip_frontmatter
 from peerpedia_core.policies.articles import assert_can_edit_article, assert_not_folded
 from peerpedia_core.commands.integrity import assert_article_integrity
+from peerpedia_core.commands.trailers import parse_closes_trailer, validate_closes_target
 from peerpedia_core.storage.db.crud_article import (
     clear_publish_consents,
     get_article as _get_article,
@@ -48,6 +49,26 @@ def update_article_content(
     assert_not_folded(a, threshold=params.reputation.fold_score_threshold)
     assert_can_edit_article(a, mids, user)
     old_status = a.status
+
+    # Sedimentation edits must reference a review thread via Closes: trailer.
+    if old_status == "sedimentation":
+        if not message:
+            raise BadRequestError(
+                "Sedimentation edits require a Closes: review/{dir}/thread-{n} "
+                "trailer in the commit message"
+            )
+        parsed = parse_closes_trailer(message)
+        if parsed is None:
+            raise BadRequestError(
+                "Sedimentation edits must reference a review thread via "
+                "Closes: review/{reviewer-dir}/thread-{n} in the commit message"
+            )
+        reviewer_dir, thread_num = parsed
+        if not validate_closes_target(article_id, reviewer_dir, thread_num):
+            raise BadRequestError(
+                f"Closes target not found: review/{reviewer_dir}/thread-{thread_num:03d}"
+            )
+
     rp = DEFAULT_ARTICLES_DIR / article_id
     if not (rp / ".git").is_dir():
         raise NotFoundError("Article repo not found")
@@ -92,10 +113,14 @@ def update_article_content(
 
     rebuild_article_authors(db, article_id, since_hash=a.last_author_rebuild_hash)
 
-    if old_status == "published":
-        # G1: write a platform [status] marker so integrity repair can detect
-        # divergence if the process dies before set_sink_start.
+    if old_status in ("sedimentation", "published"):
+        # Reset sink: write status marker + set new timer.
+        extra = params.sink.edit_article_default_days
         commit_status_marker(rp, "sedimentation")
-        set_sink_start(db, article_id, params.sink.edit_article_default_days)
+        set_sink_start(db, article_id, extra)
+        # Track cumulative days for the hard cap.
+        if a.total_sink_days_accumulated + extra <= params.sink.max_total_sink_days:
+            a.total_sink_days_accumulated += extra
+            a.sink_extended_count += 1
 
     return {"id": a.id, "title": a.title, "status": a.status, "commit_hash": commit_hash}

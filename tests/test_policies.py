@@ -105,11 +105,12 @@ class TestWritePermissions:
         with pytest.raises(NotAuthorizedError, match="is not a maintainer"):
             assert_can_sync_article(a, [], u)
 
-    def test_cannot_edit_sedimentation_article(self):
+    def test_can_edit_sedimentation_article(self):
+        """P0-3: Sedimentation articles are now editable by maintainers."""
         u = _user(id="u-edit-sed")
         a = _article(id="a-edit-sed", status="sedimentation")
-        with pytest.raises(NotAuthorizedError, match="Cannot edit an article in sedimentation status"):
-            assert_can_edit_article(a, ["u-edit-sed"], u)
+        result = assert_can_edit_article(a, ["u-edit-sed"], u)
+        assert result == a
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

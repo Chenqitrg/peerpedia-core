@@ -84,7 +84,7 @@ from peerpedia_core.commands.maintainers import (
     revoke_publish_consent,
 )
 from peerpedia_core.commands.merge import accept_merge, create_merge_proposal, withdraw_merge_proposal
-from peerpedia_core.commands.reviews import get_reviews_for_article, submit_reply, submit_review
+from peerpedia_core.commands.reviews import get_reviews_for_article, invite_reviewer, rate_review_helpfulness, submit_reply, submit_review
 from peerpedia_core.commands.shares import (
     add_share, get_feed_shares, get_shares_for_user, remove_share,
 )
@@ -131,6 +131,7 @@ from peerpedia_core.commands.notifications import (
     create_notification,
     get_notifications,
     mark_read,
+    merge_notifications,
 )
 
 # TODO(citation-system): three independent subsystems, ordered by dependency:
@@ -158,9 +159,7 @@ from peerpedia_core.commands.notifications import (
 #   CRUD (crud_citation.py) is fully implemented and tested.  The missing
 #   pieces are all above it: bib parsing, @key resolution, probability
 #   accumulation.  Without those three, the Citation table is inert.
-# TODO(notification-system): local notifications implemented (model + CRUD +
-# CLI + 4 emission points).  Next: P2P push — sync read status and push
-# notifications to peers so users on other devices see them.
+# Notification system: model + CRUD + CLI + P2P sync (completed).
 
 from peerpedia_core.config.paths import ARTICLES_DIR
 from peerpedia_core.storage.db import db_repl_setup as _db_repl_setup

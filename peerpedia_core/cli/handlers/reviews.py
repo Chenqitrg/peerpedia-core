@@ -14,6 +14,7 @@ from peerpedia_core.cli.display import _stars, console
 from peerpedia_core.cli.bundle_utils import _try_sync
 from peerpedia_core.commands import (
     get_reviews_for_article, get_user, get_users_by_ids,
+    invite_reviewer, rate_review_helpfulness,
     submit_reply, submit_review,
 )
 
@@ -126,3 +127,32 @@ def _cmd_review_reply(db, args):
         _json_out(result)
     else:
         _ok("Reply posted to review thread")
+
+
+@_with_db
+def _cmd_review_invite(db, args):
+    """Invite a user to review an article."""
+    user_id = _get_session_user()
+    target = _resolve_user(db, args.user)
+    result = invite_reviewer(db, args.article_id, user_id, target.id)
+    db.commit()
+    _try_sync(db)
+    if args.json:
+        _json_out(result)
+    else:
+        _ok(f"Invited {target.name} to review [accent]{args.article_id[:8]}[/]")
+
+
+@_with_db
+def _cmd_review_rate(db, args):
+    """Rate a review's helpfulness."""
+    user_id = _get_session_user()
+    reviewer = _resolve_user(db, args.reviewer)
+    result = rate_review_helpfulness(
+        db, args.article_id, reviewer.id, user_id, args.helpfulness,
+    )
+    db.commit()
+    if args.json:
+        _json_out(result)
+    else:
+        _ok(f"Rated review by {reviewer.name}: {_stars(args.helpfulness)}")

@@ -15,6 +15,10 @@ def create_or_update_citation(
     forward: float = 0.0,
     backward: float = 0.0,
 ) -> Citation:
+    """Create or update a citation edge between two articles.
+
+    Raises ValueError if *from_id* and *to_id* are the same article.
+    """
     if from_id == to_id:
         raise ValueError("An article cannot cite itself")
     c = session.query(Citation).filter(Citation.from_article_id == from_id, Citation.to_article_id == to_id).first()
@@ -34,6 +38,7 @@ def create_or_update_citation(
 
 
 def get_citation(session: Session, from_id: str, to_id: str) -> Citation | None:
+    """Return the citation edge from *from_id* to *to_id*, or None."""
     return session.query(Citation).filter(Citation.from_article_id == from_id, Citation.to_article_id == to_id).first()
 
 

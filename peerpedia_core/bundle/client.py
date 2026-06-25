@@ -82,6 +82,7 @@ def sync_article(db: Session, server: str, article_id: str) -> dict:
       - Diverged:                                 pull (non-ff), merge, then push.
 
     Pull applies the git bundle and reconciles DB state (authors, score).
+    Raises ProtocolError on unexpected server response.
     Caller owns the transaction boundary — this function does NOT commit.
 
     Returns:

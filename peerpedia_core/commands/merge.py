@@ -65,7 +65,11 @@ from peerpedia_core.commands.articles import rebuild_article_authors
 
 
 def accept_merge(db: Session, article_id: str, proposal_id: str, user_id: str) -> dict:
-    """Accept a merge proposal: git merge fork into target, rebuild authors."""
+    """Accept a merge proposal: git merge fork into target, rebuild authors.
+
+    Raises NotFoundError if the user, proposal, article, or repo is not found.
+    Raises BadRequestError if the proposal does not belong to this article or is not open.
+    """
     user = get_user(db, user_id)
     if user is None:
         raise NotFoundError("User not found")

@@ -39,6 +39,9 @@ def rollback_article(
     fast-forward sync), this does ``checkout_files`` at *target_hash* and
     creates a new signed commit.  The result is a linear history that peers
     can fast-forward to without conflicts.
+
+    Raises NotFoundError if the user, article, or repo is not found.
+    Raises ValueError if signing key is missing.
     """
     assert_article_integrity(db, article_id, level="light")
 

@@ -22,6 +22,7 @@ def create_notification(
     article_id: str | None = None,
     actor_id: str | None = None,
 ):
+    """Create a notification for *user_id*.  Returns the Notification ORM object."""
     return _create(db, user_id=user_id, event=event, message=message,
                    article_id=article_id, actor_id=actor_id)
 
@@ -29,14 +30,17 @@ def create_notification(
 def get_notifications(
     db: Session, user_id: str, *, unread_only: bool = False, limit: int = 50,
 ):
+    """Return notifications for *user_id*, newest first."""
     return _get(db, user_id, unread_only=unread_only, limit=limit)
 
 
 def mark_read(db: Session, notification_id: str):
+    """Mark a single notification as read."""
     return _mark_read(db, notification_id)
 
 
 def count_unread(db: Session, user_id: str) -> int:
+    """Return the count of unread notifications for *user_id*."""
     return _count_unread(db, user_id)
 
 

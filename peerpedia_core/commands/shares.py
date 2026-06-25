@@ -21,16 +21,19 @@ def add_share(
     db: Session, sharer_id: str, article_id: str, *,
     recipient_id: str | None = None, comment: str | None = None,
 ) -> dict:
+    """Share or re-share an article.  Duplicates update the comment."""
     s = _add(db, sharer_id, article_id, recipient_id=recipient_id, comment=comment)
     return {"id": s.id, "article_id": s.article_id, "sharer_id": s.sharer_id,
             "recipient_id": s.recipient_id, "comment": s.comment}
 
 
 def remove_share(db: Session, sharer_id: str, article_id: str) -> None:
+    """Remove a share.  No-op if not shared."""
     _remove(db, sharer_id, article_id)
 
 
 def get_shares_for_user(db: Session, user_id: str) -> list[dict]:
+    """Return all shares by *user_id* as dicts with created_at ISO timestamps."""
     return [
         {"id": s.id, "article_id": s.article_id, "sharer_id": s.sharer_id,
          "comment": s.comment, "created_at": s.created_at.isoformat()}
@@ -39,6 +42,7 @@ def get_shares_for_user(db: Session, user_id: str) -> list[dict]:
 
 
 def get_feed_shares(db: Session, viewer_id: str) -> list[dict]:
+    """Return articles shared by users *viewer_id* follows, newest first."""
     articles = _feed(db, viewer_id)
     return [
         {"id": a.id, "title": a.title, "status": a.status} for a in articles

@@ -111,12 +111,16 @@ class UserSnapshot:
 
 @dataclass(frozen=True)
 class FollowSnapshot:
+    """A single follow edge at extraction time."""
+
     follower_id: str
     followed_id: str
 
 
 @dataclass(frozen=True)
 class ShareSnapshot:
+    """A single share at extraction time."""
+
     id: str
     sharer_id: str
     article_id: str
@@ -127,6 +131,8 @@ class ShareSnapshot:
 
 @dataclass(frozen=True)
 class MergeProposalSnapshot:
+    """A single merge proposal at extraction time."""
+
     id: str
     fork_article_id: str
     target_article_id: str

@@ -127,6 +127,9 @@ def commit_article(
 
     Set *allow_empty* to True when an empty commit is semantically
     meaningful (e.g., recording a status transition with no file changes).
+
+    Raises ValueError if the repo is clean and allow_empty is False, or
+    if signing requirements are not met.
     """
     import os
 

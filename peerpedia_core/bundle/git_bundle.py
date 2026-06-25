@@ -160,6 +160,7 @@ def is_ancestor(repo_path: Path, maybe_ancestor: str, *, repo: git.Repo | None =
 
     Pass *repo* to avoid opening ``.git/`` twice when called from a function
     that already has a ``Repo`` object.
+    Raises FileNotFoundError if the repo path does not contain a ``.git/`` directory.
     """
     if repo is None:
         if not (repo_path / ".git").is_dir():
@@ -198,6 +199,8 @@ def find_common_ancestor(
 
     Returns the common ancestor hash, or ``None`` if no common ancestor
     is found within *max_depth*.
+
+    Raises ValueError if the repo has no commits.
     """
 
     repo = git.Repo(repo_path)

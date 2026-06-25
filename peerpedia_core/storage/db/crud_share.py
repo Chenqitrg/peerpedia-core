@@ -30,6 +30,7 @@ def add_share(
 
 
 def remove_share(session: Session, sharer_id: str, article_id: str) -> None:
+    """Remove a share.  No-op if not shared."""
     s = session.query(Share).filter(
         Share.sharer_id == sharer_id, Share.article_id == article_id,
     ).first()
@@ -39,6 +40,7 @@ def remove_share(session: Session, sharer_id: str, article_id: str) -> None:
 
 
 def is_shared(session: Session, sharer_id: str, article_id: str) -> bool:
+    """Return True if *sharer_id* has shared *article_id*."""
     return session.query(Share).filter(
         Share.sharer_id == sharer_id, Share.article_id == article_id,
     ).first() is not None
@@ -47,6 +49,7 @@ def is_shared(session: Session, sharer_id: str, article_id: str) -> bool:
 def get_shares_for_user(
     session: Session, user_id: str, *, limit: int = 50, offset: int = 0,
 ) -> list[Share]:
+    """Return all shares by *user_id*, newest first."""
     return (
         session.query(Share)
         .filter(Share.sharer_id == user_id)

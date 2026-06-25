@@ -114,7 +114,8 @@ def check_ancestor(repo_path: Path, hash: str) -> bool:
 
 
 def ingest_article(repo_path: Path, payload: dict) -> str:
-    """Receive and unpack a full article repo upload (delegates to git_bundle)."""
+    """Receive and unpack a full article repo upload (delegates to git_bundle).
+    Raises ConflictError if the article already exists locally."""
     try:
         return ingest_article_repo(repo_path, payload)
     except FileExistsError:

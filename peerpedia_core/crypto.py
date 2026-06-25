@@ -66,6 +66,8 @@ def pubkey_hex_to_ssh_line(pubkey_hex: str) -> str:
 
     Returns ``"ssh-ed25519 <base64>"`` suitable for writing to an
     allowed_signers file for ``git verify-commit``.
+
+    Raises ValueError if the key is not 32 bytes.
     """
     raw = bytes.fromhex(pubkey_hex)
     if len(raw) != 32:

@@ -99,6 +99,8 @@ def sync_status_from_git(db: Session, article_id: str) -> None:
     authored by PeerPedia (system@peerpedia) are considered.  The commit
     message has the form ``[status] <valid_status>``.
     The latest matching commit wins.
+
+    Raises FileNotFoundError if the article or its git repo is not found.
     """
     article = get_article(db, article_id)
     if article is None:

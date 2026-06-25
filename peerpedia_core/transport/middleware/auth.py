@@ -52,6 +52,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
     _PUBLIC_CONTAINS = ("/ancestor/",)  # /api/v1/articles/{id}/ancestor/{hash}
 
     async def dispatch(self, request: Request, call_next):
+        """Verify Ed25519 auth header or allow public routes through."""
         path = request.url.path
 
         if path.startswith(self._PUBLIC_PREFIXES):

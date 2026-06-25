@@ -92,6 +92,8 @@ def submit_review(
     *comment* is required — reviews without substantive feedback are rejected.
     If *signing_key_bytes* and *pubkey_hex* are provided, the review commit
     is signed via SSH and the pubkey is embedded.
+
+    Raises NotFoundError if the reviewer or article is not found.
     """
     assert_valid_review(scores, comment)
 
@@ -155,6 +157,11 @@ def invite_reviewer(
 
     Only a maintainer of the article can send invitations.  The invitation
     is recorded as a pending Review row so publish_ready_articles can track it.
+
+    Raises NotFoundError if the article or invited user is not found.
+    Raises BadRequestError if the article is not in sedimentation.
+    Raises NotAuthorizedError if the inviter is not a maintainer.
+    Raises ConflictError if the user has already been invited.
     """
     from datetime import datetime, timezone
     article = get_article(db, article_id)
@@ -217,6 +224,8 @@ def submit_reply(
     from this).
 
     Notifies the reviewer via the notification system.
+
+    Raises NotFoundError if the user, article, or reviewer is not found.
     """
     user = get_user(db, user_id)
     if user is None:
@@ -371,7 +380,10 @@ def write_review_to_git(
     signing_key_bytes: bytes | None = None,
     pubkey_hex: str | None = None,
 ) -> str:
-    """Write review to git: scores.json + thread message.  Returns HEAD hash."""
+    """Write review to git: scores.json + thread message.  Returns HEAD hash.
+
+    Raises NotFoundError if the article repo does not exist.
+    """
     rp = DEFAULT_ARTICLES_DIR / article_id
     if not (rp / ".git").is_dir():
         raise NotFoundError(f"Article repo not found: {article_id}")
@@ -408,6 +420,10 @@ def rate_review_helpfulness(
     """Rate a review's helpfulness (1-5).  Only article maintainers can rate.
 
     Updates the Review record in DB and writes to git.
+
+    Raises NotFoundError if the article or review is not found.
+    Raises NotAuthorizedError if the rater is not a maintainer.
+    Raises BadRequestError if the score is outside 1-5 range.
     """
     article = get_article(db, article_id)
     if article is None:

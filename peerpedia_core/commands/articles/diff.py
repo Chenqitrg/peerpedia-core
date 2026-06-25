@@ -15,6 +15,8 @@ def resolve_commit_ref(repo_path: Path, ref: str) -> str:
 
     *ref* can be: full 40-char hash, short hash prefix, ``HEAD``,
     or ``~N`` (N commits back, e.g. ``~1`` for parent, ``~3`` for HEAD~3).
+
+    Raises ValueError if the ref cannot be resolved.
     """
 
     if ref.upper() == "HEAD":
@@ -46,7 +48,10 @@ def resolve_commit_ref(repo_path: Path, ref: str) -> str:
 
 
 def diff_article(article_id: str, hash1: str, hash2: str) -> dict:
-    """Diff two commits of an article. Returns the same dict as ``get_diff_between``."""
+    """Diff two commits of an article. Returns the same dict as ``get_diff_between``.
+
+    Raises FileNotFoundError if the article repo does not exist.
+    """
     rp = DEFAULT_ARTICLES_DIR / article_id
     if not (rp / ".git").is_dir():
         raise FileNotFoundError(f"Article repo not found: {article_id}")

@@ -16,6 +16,10 @@ def create_merge_proposal(
     target_id: str,
     proposer_id: str,
 ) -> MergeProposal:
+    """Create a merge request from *fork_id* into *target_id*.
+
+    Raises ValueError if fork and target are the same article.
+    """
     if fork_id == target_id:
         raise ValueError("Cannot create a merge proposal for an article with itself")
     mp = MergeProposal(
@@ -30,10 +34,12 @@ def create_merge_proposal(
 
 
 def get_merge_proposal(session: Session, proposal_id: str) -> MergeProposal | None:
+    """Return a merge proposal by ID, or None."""
     return session.get(MergeProposal, proposal_id)
 
 
 def get_merge_proposals_for_article(session: Session, article_id: str) -> list[MergeProposal]:
+    """Return all merge proposals targeting *article_id*, newest first."""
     return (
         session.query(MergeProposal)
         .filter(MergeProposal.target_article_id == article_id)
@@ -55,6 +61,7 @@ def _resolve(session: Session, proposal_id: str, new_status: str) -> MergePropos
 
 
 def accept_merge_proposal(session: Session, proposal_id: str) -> MergeProposal:
+    """Accept a merge proposal.  Raises ValueError if not found or already resolved."""
     return _resolve(session, proposal_id, "accepted")
 
 

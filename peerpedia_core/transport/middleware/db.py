@@ -46,6 +46,7 @@ class DBSessionMiddleware(BaseHTTPMiddleware):
     _NO_DB_CONTAINS = ("/ancestor/",)
 
     async def dispatch(self, request: Request, call_next):
+        """Inject a DB session for the request, skip for git-only routes."""
         path = request.url.path
 
         skip_db = (

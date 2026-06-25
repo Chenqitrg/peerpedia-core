@@ -68,6 +68,8 @@ def search_monotonic_boundary(
     Returns the index of the first True, or ``None``.
 
     Pure abstract algorithm — no git or network dependency.
+
+    Raises ValueError if *k* is less than 2.
     """
     if k < 2:
         raise ValueError(f"k must be >= 2 for exponential growth, got {k}")

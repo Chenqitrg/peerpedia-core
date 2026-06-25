@@ -198,7 +198,10 @@ def compile_article(source_path: Path, fmt: str | None = None) -> CompileResult:
 
 
 def detect_format(file_path: Path) -> str:
-    """Detect article format from file extension. Returns "markdown" or "typst"."""
+    """Detect article format from file extension. Returns "markdown" or "typst".
+
+    Raises ValueError if the file extension is not recognised.
+    """
     suffix = file_path.suffix.lower()
     if suffix in (".typ", ".typst"):
         return "typst"

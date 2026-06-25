@@ -54,6 +54,7 @@ def _show_welcome() -> None:
 
 
 def main():
+    """CLI entry point — parse args, dispatch to handler, or launch REPL."""
     # Startup scan — publish any articles whose sink time has elapsed
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     with db_session(DB_URL) as session:

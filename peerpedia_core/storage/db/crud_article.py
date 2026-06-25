@@ -144,6 +144,7 @@ def insert_article(
 
 
 def get_article(session: Session, article_id: str) -> Article | None:
+    """Return an article by ID, or None if not found."""
     return session.get(Article, article_id)
 
 

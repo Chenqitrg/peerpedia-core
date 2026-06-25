@@ -34,6 +34,9 @@ def create_article_with_content(
 
     Returns:
         {"id": <article_id>, "title": ..., "status": "draft", "commit_hash": ...}
+
+    Raises BadRequestError if the title is empty.
+    Raises NotFoundError if any author is not found.
     """
     if not title.strip():
         raise BadRequestError("Title is required")

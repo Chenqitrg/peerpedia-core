@@ -44,6 +44,9 @@ def add_maintainer_to_article(
     """Grant maintainer status to *user_id* for *article_id*.
 
     Only an existing maintainer (*caller_id*) can add a new maintainer.
+
+    Raises NotFoundError if the user to add is not found.
+    Raises ConflictError if the user is already a maintainer.
     """
     _assert_caller_is_maintainer(db, article_id, caller_id)
 
@@ -68,6 +71,9 @@ def remove_maintainer_from_article(
     An existing maintainer can remove another maintainer.  Self-removal is
     allowed as long as there is at least one other maintainer (orphan
     prevention).
+
+    Raises NotAuthorizedError if caller tries to self-remove as the last maintainer.
+    Raises NotFoundError if the target user is not a maintainer.
     """
     _assert_caller_is_maintainer(db, article_id, caller_id)
 
@@ -87,7 +93,10 @@ def remove_maintainer_from_article(
 
 
 def list_maintainers(db: Session, article_id: str) -> list[str]:
-    """Return maintainer IDs for an article, ordered by created_at."""
+    """Return maintainer IDs for an article, ordered by created_at.
+
+    Raises NotFoundError if the article is not found.
+    """
     article = get_article(db, article_id)
     if article is None:
         raise NotFoundError("Article not found")
@@ -116,7 +125,10 @@ def consent_to_publish(db: Session, article_id: str, user_id: str) -> dict:
 
 
 def revoke_publish_consent(db: Session, article_id: str, user_id: str) -> dict:
-    """Revoke a maintainer's consent to publish/merge."""
+    """Revoke a maintainer's consent to publish/merge.
+
+    Raises NotFoundError if the article is not found.
+    """
     _assert_caller_is_maintainer(db, article_id, user_id)
     article = get_article(db, article_id)
     if article is None:

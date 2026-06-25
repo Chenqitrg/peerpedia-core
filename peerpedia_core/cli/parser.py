@@ -326,6 +326,7 @@ TOP_LEVEL = [
 
 
 def build_parser() -> argparse.ArgumentParser:
+    """Build the top-level argparse parser with all subcommands registered."""
     import importlib.metadata
 
     try:

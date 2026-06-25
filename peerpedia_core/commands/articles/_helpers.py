@@ -20,6 +20,8 @@ def rebuild_article_authors(db: Session, article_id: str, since_hash: str | None
 
     Sets ``last_author_rebuild_hash`` to the current HEAD so the next
     rebuild only scans new commits (*since_hash*).
+
+    Raises NotFoundError if the article does not exist.
     """
     article = _get_article(db, article_id)
     if article is None:

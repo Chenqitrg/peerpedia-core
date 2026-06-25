@@ -352,6 +352,9 @@ def validate_self_review_scores(self_review: dict) -> None:
 
     Must be called before ``write_review_to_git`` so a bad request fails
     with zero side effects.
+
+    Raises BadRequestError if self_review is not a dict, is missing
+    dimensions, or has values outside 1-5.
     """
     if not isinstance(self_review, dict):
         raise BadRequestError("self_review must be a dict")
@@ -372,6 +375,8 @@ def assert_article_has_score(article) -> None:
     """Assert the article has a score after score recomputation.
 
     Must be called AFTER ``recompute_article_score``.
+
+    Raises BadRequestError if the article's score is None.
     """
     if article.score is None:
         raise BadRequestError("Article must have a score before publishing")

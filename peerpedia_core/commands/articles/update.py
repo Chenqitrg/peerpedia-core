@@ -35,6 +35,9 @@ def update_article_content(
 
     Returns:
         {"id": <article_id>, "title": ..., "status": ..., "commit_hash": ...}
+
+    Raises NotFoundError if the user, article, or article repo is not found.
+    Raises BadRequestError if a required Closes: trailer is missing or invalid.
     """
     assert_article_integrity(db, article_id, level="light")
 

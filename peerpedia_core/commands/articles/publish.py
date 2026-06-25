@@ -44,6 +44,10 @@ def publish_article(
     Only callable from ``draft`` status.  Writes the self-review to git,
     caches scores in DB, starts the sink timer, and recomputes the article
     score.
+
+    Raises NotFoundError if the user or article is not found.
+    Raises NotAuthorizedError if the article is not in draft status.
+    Raises BadRequestError if the author has too many articles in sedimentation.
     """
     user = get_user(db, user_id)
     if user is None:

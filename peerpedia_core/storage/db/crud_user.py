@@ -99,6 +99,7 @@ def create_user(
     *,
     affiliation: str = "",
 ) -> User:
+    """Create a new user with a random UUID and an anonymous display name."""
     u = User(
         id=str(uuid.uuid4()),
         name=name,

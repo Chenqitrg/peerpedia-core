@@ -37,6 +37,7 @@ def set_alias(session: Session, owner_id: str, target_id: str, alias: str) -> Al
 
 
 def remove_alias(session: Session, owner_id: str, target_id: str) -> None:
+    """Remove the alias for *target_id*.  No-op if none set."""
     a = session.query(Alias).filter(
         Alias.owner_id == owner_id, Alias.target_id == target_id,
     ).first()
@@ -46,6 +47,7 @@ def remove_alias(session: Session, owner_id: str, target_id: str) -> None:
 
 
 def get_alias_for(session: Session, owner_id: str, target_id: str) -> str | None:
+    """Return the alias *owner_id* set for *target_id*, or None."""
     a = session.query(Alias).filter(
         Alias.owner_id == owner_id, Alias.target_id == target_id,
     ).first()
@@ -53,6 +55,7 @@ def get_alias_for(session: Session, owner_id: str, target_id: str) -> str | None
 
 
 def list_aliases(session: Session, owner_id: str) -> list[Alias]:
+    """Return all aliases set by *owner_id*, sorted alphabetically."""
     return (
         session.query(Alias)
         .filter(Alias.owner_id == owner_id)

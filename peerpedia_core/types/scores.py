@@ -78,6 +78,7 @@ class FiveDimScores:
             setattr(self, f, _clamp(getattr(self, f)))
 
     def average(self) -> float:
+        """Return the arithmetic mean of all dimension scores."""
         values = [getattr(self, f) for f in self._fields]
         return sum(values) / len(values) if values else 0.0
 
@@ -90,6 +91,7 @@ class FiveDimScores:
         return sum(v * w for v, w in zip(values, weights)) / total_weight
 
     def to_result(self) -> dict:
+        """Return scores as a plain dict keyed by dimension abbreviation."""
         return {f: getattr(self, f) for f in self._fields}
 
 
@@ -115,8 +117,10 @@ class ReputationScores:
         return tuple(self.__dataclass_fields__.keys())
 
     def average(self) -> float:
+        """Return the arithmetic mean of all reputation dimensions."""
         values = [getattr(self, f) for f in self._fields]
         return sum(values) / len(values) if values else 0.0
 
     def to_result(self) -> dict:
+        """Return reputation scores as a plain dict keyed by dimension name."""
         return {f: getattr(self, f) for f in self._fields}

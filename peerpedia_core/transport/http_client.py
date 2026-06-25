@@ -10,6 +10,12 @@ file needs to be replaced.  No other module knows about HTTP.
 Uses a shared ``httpx.Client`` for connection pooling — a single sync cycle
 can make 14 HTTP calls; without keep-alive each pays TCP+TLS (~50ms RTT).
 With pooling, all requests on the same host reuse one connection.
+
+All public functions raise ``TransportError`` on network failure and
+``ProtocolError`` on unexpected server responses.  Functions that accept
+a ``private_key_bytes`` parameter also raise ``ValueError`` if it is
+missing.  Callers should catch ``TransportError`` for retryable errors
+and ``ProtocolError`` for non-retryable protocol mismatches.
 """
 
 import json
@@ -99,7 +105,8 @@ def fetch_head(server: str, article_id: str) -> str | None:
 
 
 def push_bundle(server: str, article_id: str, bundle_bytes: bytes) -> None:
-    """POST /sync with raw bundle bytes → None on success."""
+    """POST /sync with raw bundle bytes → None on success.
+    Raises ConflictError on history divergence."""
     try:
         resp = _get_client().post(
             f"{_api_url(server, article_id)}/sync",

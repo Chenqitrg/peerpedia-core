@@ -52,6 +52,8 @@ def upsert_review(
     Called AFTER review files are committed to git.  Scope is the
     article's current status.  Uses
     (article_id, reviewer_id, scope, commit_hash) as the unique key.
+
+    Raises ValueError if the article is not found.
     """
     from sqlalchemy.orm import load_only  # noqa: PLC0415
 

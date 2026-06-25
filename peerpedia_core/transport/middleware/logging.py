@@ -21,6 +21,7 @@ class AuditLogMiddleware(BaseHTTPMiddleware):
     """Log every request and attach a Server-Time header for clock sync."""
 
     async def dispatch(self, request: Request, call_next):
+        """Log method, path, status, and duration; attach Server-Time header."""
         start = time.monotonic()
         response = await call_next(request)
         elapsed_ms = (time.monotonic() - start) * 1000

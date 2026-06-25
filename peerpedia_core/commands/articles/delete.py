@@ -24,6 +24,8 @@ def delete_article(db: Session, article_id: str, *, user_id: str) -> None:
 
     Only callable from ``draft`` status by an author.  Sedimentation and
     published articles cannot be deleted.
+
+    Raises NotFoundError if the user or article is not found.
     """
     assert_article_integrity(db, article_id, level="light")
 

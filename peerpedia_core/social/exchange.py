@@ -23,24 +23,26 @@ from typing import Callable
 
 from peerpedia_core.storage.db import Session
 
-from peerpedia_core.commands import merge_article_meta, merge_follows, merge_shares, merge_users
+from peerpedia_core.commands import merge_article_meta, merge_follows, merge_notifications, merge_shares, merge_users
 from peerpedia_core.exceptions import ProtocolError, TransportError
 from peerpedia_core.transport import (
-    fetch_shares,
-    fetch_user_articles,
     fetch_followers,
     fetch_following,
+    fetch_notifications,
+    fetch_shares,
+    fetch_user_articles,
 )
 
 
-def _fetch_or_raise(fetch_fn: Callable, server: str, user_id: str, label: str) -> list[dict]:
-    """Call *fetch_fn* and return data.
+def _fetch_or_raise(fetch_fn: Callable, server: str, user_id: str, label: str,
+                    **auth_kwargs) -> list[dict]:
+    """Call *fetch_fn* and return data.  Passes *auth_kwargs* for Ed25519 signing.
 
     Raises ``ConnectionError`` on transport failure.  Raises
     ``ProtocolError`` if the server returned ``None`` (404 / not found).
     """
     try:
-        data = fetch_fn(server, user_id)
+        data = fetch_fn(server, user_id, **auth_kwargs)
     except TransportError as e:
         raise ConnectionError(
             f"Failed to fetch {label} from {server} for {user_id}: {e.detail}"
@@ -52,7 +54,19 @@ def _fetch_or_raise(fetch_fn: Callable, server: str, user_id: str, label: str) -
     return data
 
 
-def discover_following(db: Session, server: str, user_id: str) -> int:
+def _auth_args(signing_key_bytes, pubkey_hex):
+    """Build keyword arguments for signed fetch functions."""
+    kwargs: dict = {}
+    if signing_key_bytes:
+        kwargs["private_key_bytes"] = signing_key_bytes
+    if pubkey_hex:
+        kwargs["pubkey_hex"] = pubkey_hex
+    return kwargs
+
+
+def discover_following(db: Session, server: str, user_id: str, *,
+                       signing_key_bytes: bytes | None = None,
+                       pubkey_hex: str = "") -> int:
     """Fetch and merge the users that *user_id* follows on *server*.
 
     Returns count of new follows added.  Raises ConnectionError if the
@@ -62,45 +76,71 @@ def discover_following(db: Session, server: str, user_id: str) -> int:
     following list is treated as authoritative — local follows not in the
     remote list are soft-deleted.
     """
-    data = _fetch_or_raise(fetch_following, server, user_id, "following")
+    data = _fetch_or_raise(fetch_following, server, user_id, "following",
+                           **_auth_args(signing_key_bytes, pubkey_hex))
     merge_users(db, data)
     home_server = os.environ.get("PEERPEDIA_SERVER")
     authoritative = (home_server is not None and server == home_server)
     return merge_follows(db, user_id, data, authoritative=authoritative)
 
 
-def discover_followers(db: Session, server: str, user_id: str) -> int:
+def discover_followers(db: Session, server: str, user_id: str, *,
+                       signing_key_bytes: bytes | None = None,
+                       pubkey_hex: str = "") -> int:
     """Fetch and merge the followers of *user_id* on *server*.
 
     Returns count of new users added.  Raises ConnectionError if the
     server is unreachable.  Raises ProtocolError on malformed responses.
     """
-    return merge_users(db, _fetch_or_raise(fetch_followers, server, user_id, "followers"))
+    return merge_users(db, _fetch_or_raise(
+        fetch_followers, server, user_id, "followers",
+        **_auth_args(signing_key_bytes, pubkey_hex),
+    ))
 
 
 def discover_articles(
-    db: Session, server: str, user_id: str, limit: int = 20, offset: int = 0
+    db: Session, server: str, user_id: str, limit: int = 20, offset: int = 0, *,
+    signing_key_bytes: bytes | None = None,
+    pubkey_hex: str = "",
 ) -> int:
     """Fetch and merge article metadata for *user_id* from *server*.
 
     Returns count of new articles discovered.  Raises ConnectionError if
     the server is unreachable.  Raises ProtocolError on malformed responses.
-
-    TODO(P2P-sync): needs Ed25519-signed requests to pass server auth.
-    Currently the server returns 401 for unauthenticated discovery.
     """
     data = _fetch_or_raise(
-        partial(fetch_user_articles, limit=limit, offset=offset),
-        server, user_id, "articles",
+        fetch_user_articles, server, user_id, "articles",
+        limit=limit, offset=offset,
+        **_auth_args(signing_key_bytes, pubkey_hex),
     )
     return merge_article_meta(db, data)
 
 
-def discover_shares(db: Session, server: str, user_id: str) -> int:
+def discover_shares(db: Session, server: str, user_id: str, *,
+                    signing_key_bytes: bytes | None = None,
+                    pubkey_hex: str = "") -> int:
     """Fetch and merge shares from *user_id* on *server*.
 
     Returns count of new shares discovered.  Raises ConnectionError if
     the server is unreachable.  Raises ProtocolError on malformed responses.
     """
-    data = _fetch_or_raise(fetch_shares, server, user_id, "shares")
+    data = _fetch_or_raise(
+        fetch_shares, server, user_id, "shares",
+        **_auth_args(signing_key_bytes, pubkey_hex),
+    )
     return merge_shares(db, user_id, data)
+
+
+def discover_notifications(db: Session, server: str, user_id: str, *,
+                           signing_key_bytes: bytes | None = None,
+                           pubkey_hex: str = "") -> int:
+    """Fetch and merge notifications for *user_id* from *server*.
+
+    Returns count of new notifications discovered.  Raises ConnectionError
+    if the server is unreachable.  Raises ProtocolError on malformed responses.
+    """
+    data = _fetch_or_raise(
+        fetch_notifications, server, user_id, "notifications",
+        **_auth_args(signing_key_bytes, pubkey_hex),
+    )
+    return merge_notifications(db, user_id, data)

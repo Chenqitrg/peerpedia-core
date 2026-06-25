@@ -23,14 +23,16 @@ from peerpedia_core.commands import (
     follow_user,
     get_follower_views,
     get_following_views,
+    get_notifications_for_user,
     get_shares_for_user,
     get_top_users_by_followers,
+    get_user,
     list_user_article_views,
     remove_share,
     unfollow_user,
     update_user_public_key,
 )
-from peerpedia_core.exceptions import BadRequestError
+from peerpedia_core.exceptions import BadRequestError, NotFoundError
 from peerpedia_core.policies.articles import PUBLIC_READABLE_STATUSES
 from peerpedia_core.transport.shared import _ok_response, _parse_pagination, _require_field, _validate_id
 
@@ -139,6 +141,34 @@ async def _get_shares(request: Request) -> JSONResponse:
     return JSONResponse(get_shares_for_user(request.state.db, user_id))
 
 
+async def _get_notifications(request: Request) -> JSONResponse:
+    """GET /api/v1/users/{user_id}/notifications — list notifications for a user."""
+    user_id = request.path_params["user_id"]
+    _validate_id(user_id, "user_id")
+    return JSONResponse(get_notifications_for_user(request.state.db, user_id))
+
+
+async def _user_detail(request: Request) -> JSONResponse:
+    """GET /api/v1/users/{user_id} — user metadata for device bootstrap."""
+    user_id = request.path_params["user_id"]
+    _validate_id(user_id, "user_id")
+    user = get_user(request.state.db, user_id)
+    if user is None:
+        raise NotFoundError(
+            f"User '{user_id}' not found",
+            resource_type="user", resource_id=user_id,
+        )
+    return JSONResponse({
+        "id": user.id,
+        "name": user.name,
+        "public_key": user.public_key,
+        "salt": user.salt,
+        "affiliation": user.affiliation,
+        "reputation": user.reputation,
+        "created_at": str(user.created_at) if user.created_at else None,
+    })
+
+
 async def _school(request: Request) -> JSONResponse:
     """GET /api/v1/school — top users by follower count (public, no auth)."""
     limit, _ = _parse_pagination(request)
@@ -150,6 +180,7 @@ async def _school(request: Request) -> JSONResponse:
 
 ROUTES = [
     Route("/api/v1/school", _school, methods=["GET"]),
+    Route("/api/v1/users/{user_id}", _user_detail, methods=["GET"]),
     Route("/api/v1/users/{user_id}/following", _following, methods=["GET"]),
     Route("/api/v1/users/{user_id}/followers", _followers, methods=["GET"]),
     Route("/api/v1/users/{user_id}/articles", _articles, methods=["GET"]),
@@ -158,4 +189,5 @@ ROUTES = [
     Route("/api/v1/users/{user_id}/rotate-key", _rotate_key, methods=["POST"]),
     Route("/api/v1/users/{user_id}/share", _push_share, methods=["POST", "DELETE"]),
     Route("/api/v1/users/{user_id}/shares", _get_shares, methods=["GET"]),
+    Route("/api/v1/users/{user_id}/notifications", _get_notifications, methods=["GET"]),
 ]

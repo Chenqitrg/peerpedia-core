@@ -18,12 +18,11 @@ from peerpedia_core.commands.articles.diff import diff_article
 from peerpedia_core.storage.db import Session
 from peerpedia_core.storage.db.crud_article import (
     count_articles as _count,
+    get_all_article_ids as _get_all_ids,
     get_article as _get_article,
     get_author_ids as _get_author_ids,
     list_articles as _list,
 )
-from peerpedia_core.storage.db.crud_bookmark import is_bookmarked as _is_bookmarked
-from peerpedia_core.storage.db.crud_user import get_following as _get_following
 from peerpedia_core.commands.integrity import assert_article_integrity
 
 
@@ -49,24 +48,11 @@ def list_articles(
     limit: int | None = None,
     offset: int = 0,
 ) -> list:
-    """List articles with AND filters — all pushed to SQL via JOINs.
-
-    *viewer_id* (feed) looks up followed users first, then passes their
-    IDs as an ``author_ids`` SQL filter.
-    """
-    # Resolve author filter: explicit --user, or --feed (followed users).
-    ids: str | list[str] | None = author_id
-    if viewer_id:
-        followed = [u.id for u in _get_following(db, viewer_id)]
-        if not followed:
-            return []
-        if author_id and author_id not in followed:
-            return []
-        ids = followed
-
+    """List articles with AND filters — all pushed to SQL via JOINs/subqueries."""
     return _list(
         db, status=status, search_query=search_query,
-        author_ids=ids, bookmarked_by=bookmarked_by,
+        author_ids=author_id, viewer_id=viewer_id,
+        bookmarked_by=bookmarked_by,
         limit=limit, offset=offset,
     )
 
@@ -74,6 +60,11 @@ def list_articles(
 def count_articles(db: Session, **kwargs) -> int:
     """Count articles with optional filters."""
     return _count(db, **kwargs)
+
+
+def get_all_article_ids(db: Session) -> list[str]:
+    """Return every local article ID.  Lightweight — id column only."""
+    return _get_all_ids(db)
 
 
 def get_author_ids(db: Session, article_id: str) -> list[str]:

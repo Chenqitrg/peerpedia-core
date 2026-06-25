@@ -23,6 +23,7 @@ from peerpedia_core.cli.handlers import (
     _cmd_bootstrap,
     _cmd_compile,
     _cmd_fork,
+    _cmd_account_delete,
     _cmd_account_search,
     _cmd_login,
     _cmd_recover,
@@ -91,6 +92,8 @@ COMMAND_GROUPS = [
         ("login", _cmd_login, [
             (("--name",), {"required": True, "help": "Your display name"}),
             (("--password",), {"help": "Password (omit for interactive prompt; or set PEERPEDIA_PASSWORD env var)"}),
+            (("--peer",), {"help": "Peer server URL for remote bootstrap on a new device"}),
+            (("--user-id",), {"help": "User UUID for remote bootstrap (needed on new devices)"}),
         ], {"epilog": _load_help("account_login")}),
         ("recover", _cmd_recover, [
             (("--name",), {"help": "Your display name"}),
@@ -104,6 +107,8 @@ COMMAND_GROUPS = [
              "help": "JSON blob from 'account whoami --verbose --json'"}),
             (("--peer",), {"help": "Peer URL for data sync after bootstrap"}),
         ], {"epilog": _load_help("account_bootstrap")}),
+        ("delete", _cmd_account_delete, [
+        ], {"epilog": _load_help("account_delete")}),
         ("search", _cmd_account_search, [
             (("query",), {"help": "Search query (partial name, case-insensitive)"}),
         ], {"epilog": _load_help("account_search")}),

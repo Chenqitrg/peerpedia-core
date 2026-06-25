@@ -12,12 +12,13 @@ from __future__ import annotations
 import os
 
 from peerpedia_core.cli.display import console
-from peerpedia_core.cli.helpers import DEFAULT_ARTICLES_DIR, _die
+from peerpedia_core.cli.helpers import DEFAULT_ARTICLES_DIR, _die, _get_session_user
 from peerpedia_core.exceptions import ConflictError, ProtocolError, TransportError
 from peerpedia_core.bundle import count as pending_count, sync_article
 from peerpedia_core.config.paths import DATA_ROOT
 from peerpedia_core.transport import is_online
 from peerpedia_core.transport.health import check_clock_skew
+from peerpedia_core.social import discover_articles
 
 
 def _require_online_server(args) -> str:
@@ -45,10 +46,6 @@ def _try_sync(db, server: str | None = None) -> None:
     Best-effort: network and conflict errors are silent — local state
     is already persisted and manual push can retry later.  Warns on
     each invocation if the server is unreachable.
-
-    TODO(P2P-sync): this pushes local articles but never pulls remote ones.
-    After push, should also pull new articles from followed users and
-    check for updates to existing articles.
     """
     srv = server or os.environ.get("PEERPEDIA_SERVER")
     if not srv:
@@ -66,12 +63,20 @@ def _try_sync(db, server: str | None = None) -> None:
             result = sync_article(db, srv, article_dir.name)
             if result["synced"]:
                 db.commit()
+
+        # Discover new articles from followed users.
+        user_id = _get_session_user()
+        n = discover_articles(db, srv, user_id)
+        if n:
+            console.print(f"[dim]✓ Discovered {n} new article(s).[/]")
     except TransportError as e:
         console.print(f"[dim]⚠ Auto-sync failed (network): {e.detail}[/]")
     except ProtocolError as e:
         console.print(f"[dim]⚠ Auto-sync failed (protocol): {e.detail}[/]")
     except ConflictError:
         console.print("[dim]⚠ Auto-sync conflict — pull and retry.[/]")
+    except ConnectionError as e:
+        console.print(f"[dim]⚠ Auto-sync failed (connection): {e}[/]")
 
 
 def _resolve_server_url(args) -> str:

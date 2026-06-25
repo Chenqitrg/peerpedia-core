@@ -24,7 +24,7 @@ from peerpedia_core.commands import (
 )
 from peerpedia_core.config.paths import ARTICLES_DIR as DEFAULT_ARTICLES_DIR, DB_PATH, DB_URL, SESSION_FILE
 from peerpedia_core.crypto import load_private_key, _public_key_to_bytes
-from peerpedia_core.exceptions import PeerpediaError
+from peerpedia_core.exceptions import PeerpediaError, TransportError
 from peerpedia_core.storage.db.models import Article, User
 from peerpedia_core.types.scores import SCORE_DIMENSIONS
 
@@ -160,14 +160,39 @@ def _json_out(data: dict | list) -> None:
 # ── Shared logic — reused by multiple commands ──────────────────────────
 
 
-def _find_article_file(article_id: str) -> Path:
-    """Find the source file for an article. Raises if not found."""
+def _find_article_file(article_id: str, db=None) -> Path:
+    """Find the source file for an article.  Attempts lazy pull if missing.
+
+    When the article was discovered from a peer (stub DB record) but its
+    git content hasn't been fetched yet, this function attempts to pull it
+    on-demand from PEERPEDIA_SERVER.  If the server is unreachable or not
+    configured, the user sees the existing "No source file found" message.
+
+    Raises SystemExit (via _die) if no source file is found after all attempts.
+    """
     rp = DEFAULT_ARTICLES_DIR / article_id
     for ext in [".md", ".typ"]:
         f = rp / f"article{ext}"
         if f.exists():
             return f
-    _die(f"No source file found for article {article_id}")
+
+    # Lazy pull: file doesn't exist locally, try to fetch from peer server.
+    server = os.environ.get("PEERPEDIA_SERVER")
+    if server and db is not None:
+        from peerpedia_core.bundle import pull_new_article
+        try:
+            pull_new_article(db, server, article_id)
+        except TransportError:
+            pass  # best-effort: server unreachable, fall through to die
+        # Retry after pull
+        for ext in [".md", ".typ"]:
+            f = rp / f"article{ext}"
+            if f.exists():
+                return f
+
+    _die(f"No source file found for article {article_id}",
+         suggestion="The article may have been discovered from a peer but its "
+                    "content hasn't been downloaded yet.  Try 'sync pull' first.")
 
 
 def _resolve_and_display_article(db, article, *, author_ids: list[str] | None = None) -> None:
@@ -176,7 +201,7 @@ def _resolve_and_display_article(db, article, *, author_ids: list[str] | None = 
     If *author_ids* is passed, it is used directly (allows batch preloading
     in list handlers).  Otherwise ``get_author_ids`` queries the DB.
     """
-    raw = _find_article_file(article.id).read_text()
+    raw = _find_article_file(article.id, db=db).read_text()
     fm = parse_frontmatter(raw)
     _render_article(
         title=fm.get("title", article.title),

@@ -103,6 +103,26 @@ def _signed_post(
     raise ProtocolError(f"{label}: unexpected status {resp.status_code} from {server}")
 
 
+def _signed_get(
+    server: str, path: str, user_id: str, *,
+    private_key_bytes: bytes | None = None,
+    pubkey_hex: str = "",
+    label: str = "",
+    params: dict | None = None,
+) -> dict | list | None:
+    """GET from a peer with optional Ed25519 auth. Returns JSON on 200, None on 404."""
+    headers: dict[str, str] = {}
+    if private_key_bytes:
+        headers["Authorization"] = sign_auth_header(
+            "GET", path, user_id, private_key_bytes, pubkey_hex=pubkey_hex,
+        )
+    try:
+        resp = _get_client().get(f"{server}{path}", headers=headers, params=params)
+    except httpx.HTTPError as e:
+        raise TransportError(f"{label} failed for {user_id} at {server}: {e}") from e
+    return _json_or_none(resp, server, label)
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Article sync
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -249,30 +269,26 @@ def fetch_search(
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-def fetch_following(server: str, user_id: str) -> list[dict] | None:
+def fetch_following(server: str, user_id: str, *,
+                    private_key_bytes: bytes | None = None,
+                    pubkey_hex: str = "") -> list[dict] | None:
     """GET /users/{id}/following → list of user dicts, or None if not found."""
-    try:
-        resp = _get_client().get(f"{server}/api/v1/users/{user_id}/following")
-    except httpx.HTTPError as e:
-        raise TransportError(f"fetch_following failed for {user_id} at {server}: {e}") from e
-
-    data = _json_or_none(resp, server, "fetch_following")
-    if data is not None:
-        return data
-    return None
+    return _signed_get(
+        server, f"/api/v1/users/{user_id}/following", user_id,
+        private_key_bytes=private_key_bytes, pubkey_hex=pubkey_hex,
+        label="fetch_following",
+    )
 
 
-def fetch_followers(server: str, user_id: str) -> list[dict] | None:
+def fetch_followers(server: str, user_id: str, *,
+                    private_key_bytes: bytes | None = None,
+                    pubkey_hex: str = "") -> list[dict] | None:
     """GET /users/{id}/followers → list of user dicts, or None if not found."""
-    try:
-        resp = _get_client().get(f"{server}/api/v1/users/{user_id}/followers")
-    except httpx.HTTPError as e:
-        raise TransportError(f"fetch_followers failed for {user_id} at {server}: {e}") from e
-
-    data = _json_or_none(resp, server, "fetch_followers")
-    if data is not None:
-        return data
-    return None
+    return _signed_get(
+        server, f"/api/v1/users/{user_id}/followers", user_id,
+        private_key_bytes=private_key_bytes, pubkey_hex=pubkey_hex,
+        label="fetch_followers",
+    )
 
 
 def push_follow(server: str, follower_id: str, followed_id: str, *,
@@ -315,19 +331,16 @@ def fetch_article_meta(server: str, article_id: str) -> dict | None:
     return None
 
 
-def fetch_user_articles(server: str, user_id: str, limit: int = 20, offset: int = 0) -> list[dict] | None:
+def fetch_user_articles(server: str, user_id: str, limit: int = 20, offset: int = 0, *,
+                        private_key_bytes: bytes | None = None,
+                        pubkey_hex: str = "") -> list[dict] | None:
     """GET /users/{id}/articles?limit=&offset= → list of article dicts, or None if not found."""
-    try:
-        resp = _get_client().get(
-            f"{server}/api/v1/users/{user_id}/articles",
-            params={"limit": limit, "offset": offset},
-        )
-    except httpx.HTTPError as e:
-        raise TransportError(f"fetch_user_articles failed for {user_id} at {server}: {e}") from e
-    data = _json_or_none(resp, server, "fetch_user_articles")
-    if data is not None:
-        return data
-    return None
+    return _signed_get(
+        server, f"/api/v1/users/{user_id}/articles", user_id,
+        private_key_bytes=private_key_bytes, pubkey_hex=pubkey_hex,
+        label="fetch_user_articles",
+        params={"limit": limit, "offset": offset},
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -418,18 +431,26 @@ def push_share_remove(
     )
 
 
-def fetch_shares(server: str, user_id: str) -> list[dict] | None:
+def fetch_shares(server: str, user_id: str, *,
+                 private_key_bytes: bytes | None = None,
+                 pubkey_hex: str = "") -> list[dict] | None:
     """GET /api/v1/users/{user_id}/shares → list of share dicts, or None."""
-    try:
-        resp = _get_client().get(f"{server}/api/v1/users/{user_id}/shares")
-    except httpx.HTTPError as e:
-        raise TransportError(
-            f"fetch_shares failed for {user_id} at {server}: {e}"
-        ) from e
-    data = _json_or_none(resp, server, "fetch_shares")
-    if data is not None:
-        return data
-    return None
+    return _signed_get(
+        server, f"/api/v1/users/{user_id}/shares", user_id,
+        private_key_bytes=private_key_bytes, pubkey_hex=pubkey_hex,
+        label="fetch_shares",
+    )
+
+
+def fetch_notifications(server: str, user_id: str, *,
+                        private_key_bytes: bytes | None = None,
+                        pubkey_hex: str = "") -> list[dict] | None:
+    """GET /api/v1/users/{user_id}/notifications → list of notification dicts, or None."""
+    return _signed_get(
+        server, f"/api/v1/users/{user_id}/notifications", user_id,
+        private_key_bytes=private_key_bytes, pubkey_hex=pubkey_hex,
+        label="fetch_notifications",
+    )
 
 
 def fetch_peers(server: str) -> list[str]:
@@ -451,6 +472,15 @@ def fetch_peers(server: str) -> list[str]:
     raise ProtocolError(
         f"fetch_peers: unexpected status {resp.status_code} from {server}"
     )
+
+
+def fetch_user(server: str, user_id: str) -> dict | None:
+    """GET /api/v1/users/{user_id} → user metadata dict, or None if 404."""
+    try:
+        resp = _get_client().get(f"{server}/api/v1/users/{user_id}")
+    except httpx.HTTPError as e:
+        raise TransportError(f"fetch_user failed for {user_id} at {server}: {e}") from e
+    return _json_or_none(resp, server, "fetch_user")
 
 
 def fetch_school(server: str, limit: int = 20) -> list[dict]:

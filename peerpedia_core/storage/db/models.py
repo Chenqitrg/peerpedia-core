@@ -187,6 +187,11 @@ class User(Base):
     avatar_url = Column(String, nullable=True)
     reputation = Column(JSONDict, nullable=False, default=dict)  # ReputationScores as dict
     created_at = Column(DateTime, nullable=False, default=_utcnow)
+    # Rate-limiting: brute-force protection on login
+    failed_login_attempts = Column(Integer, nullable=False, default=0)
+    locked_until = Column(DateTime, nullable=True)
+    # Soft-delete: GDPR right-to-erasure. Follows Follow model pattern.
+    deleted_at = Column(DateTime, nullable=True)
 
     def to_dict(self) -> dict:
         """Expose user fields for peer exchange. Excludes salt (not synced — only needed locally) and reputation (local)."""

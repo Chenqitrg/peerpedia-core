@@ -45,8 +45,8 @@ from sqlalchemy.orm import Session
 
 from peerpedia_core.exceptions import NotFoundError
 from peerpedia_core.storage.db.models import (
-    Article, ArticleAuthor, Bookmark, Citation, MergeProposal, Review,
-    ScriptMaintainer,
+    Article, ArticleAuthor, Bookmark, Citation, Follow, MergeProposal,
+    Review, ScriptMaintainer,
 )
 
 # ── Author helpers (join table) ───────────────────────────────────────────
@@ -154,6 +154,7 @@ def list_articles(
     status: str | set[str] | None = None,
     search_query: str | None = None,
     author_ids: str | list[str] | None = None,
+    viewer_id: str | None = None,
     bookmarked_by: str | None = None,
     limit: int | None = None,
     offset: int = 0,
@@ -169,6 +170,7 @@ def list_articles(
         offset: Pagination offset.
     """
     q = session.query(Article)
+    joined = False
     if isinstance(status, set):
         if status:
             q = q.filter(Article.status.in_(list(status)))
@@ -178,18 +180,35 @@ def list_articles(
         q = q.filter(Article.title.ilike(f"%{search_query}%"))
     if author_ids:
         q = q.join(ArticleAuthor, ArticleAuthor.article_id == Article.id)
+        joined = True
         if isinstance(author_ids, list):
             q = q.filter(ArticleAuthor.author_id.in_(author_ids))
         else:
             q = q.filter(ArticleAuthor.author_id == author_ids)
+    elif viewer_id:
+        followed_sub = (
+            session.query(Follow.followed_id)
+            .filter(Follow.follower_id == viewer_id, Follow.deleted_at.is_(None))
+            .subquery()
+        )
+        q = q.join(ArticleAuthor, ArticleAuthor.article_id == Article.id)\
+             .filter(ArticleAuthor.author_id.in_(followed_sub))
+        joined = True
     if bookmarked_by:
         q = q.join(Bookmark, Bookmark.article_id == Article.id)\
              .filter(Bookmark.user_id == bookmarked_by)
+        joined = True
+    if joined:
+        q = q.distinct()
     q = q.order_by(Article.created_at.desc())
     if limit is not None:
         q = q.limit(limit).offset(offset)
     return q.all()
 
+
+def get_all_article_ids(session: Session) -> list[str]:
+    """Return every article ID.  Lightweight — only fetches the ``id`` column."""
+    return [row[0] for row in session.query(Article.id).all()]
 
 def count_articles(session: Session, status: str | set[str] | None = None, author_id: str | None = None) -> int:
     """Count articles matching optional status and author filters."""

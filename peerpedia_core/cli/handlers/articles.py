@@ -14,8 +14,12 @@ from peerpedia_core.cli.helpers import (
     _empty_state, _require_resolved_article,
 )
 from peerpedia_core.cli.display import console, display_diff
+import os as _os
+
 from peerpedia_core.cli.bundle_utils import _resolve_server_url, _try_sync
+from peerpedia_core.bundle.pending import add as _queue_push
 from peerpedia_core.social import discover_articles
+from peerpedia_core.transport import is_online
 from peerpedia_core.commands import (
     assert_article_integrity, create_article_with_content,
     diff_article, get_article, get_article_view, get_author_ids_batch,
@@ -56,11 +60,8 @@ def _cmd_article_create(db, args):
             signing_key_bytes=key_bytes, pubkey_hex=user.public_key,
         )
     db.commit()
-    # TODO(P2P-sync): auto-queue the new article for push to peer server.
-    # Currently articles are only synced when manually queued via
-    # ``pending.add('push', article_id)``.  After create/publish, the
-    # article should be queued automatically if PEERPEDIA_SERVER is set.
     _try_sync(db)
+    _queue_if_offline(result["id"])
     if args.json:
         _json_out(result)
     else:
@@ -84,7 +85,7 @@ def _cmd_article_show(db, args):
     show_mode = getattr(args, "show", "meta")
     _resolve_and_display_article(db, article)
     if show_mode == "full":
-        raw = _find_article_file(article.id).read_text()
+        raw = _find_article_file(article.id, db=db).read_text()
         console.print("\n[bold]── Content ──[/]")
         _page(raw)
 
@@ -130,6 +131,14 @@ def _cmd_article_list(db, args):
     else:
         status = PUBLIC_READABLE_STATUSES
 
+    if args.json:
+        _json_out(list_article_views(
+            db, status=status, search_query=args.search or None,
+            author_id=author_id, viewer_id=viewer_id,
+            bookmarked_by=bookmarked_by, limit=20,
+        ))
+        return
+
     articles = list_articles(
         db,
         status=status,
@@ -139,12 +148,6 @@ def _cmd_article_list(db, args):
         bookmarked_by=bookmarked_by,
         limit=20,
     )
-    if args.json:
-        _json_out(list_article_views(
-            db, search_query=args.search or None, author_id=author_id,
-            viewer_id=viewer_id, bookmarked_by=bookmarked_by, limit=20,
-        ))
-        return
     if not articles:
         _empty_state("No articles.")
         return
@@ -198,6 +201,7 @@ def _cmd_article_edit(db, args):
     )
     db.commit()
     _try_sync(db)
+    _queue_if_offline(article_id)
     if args.json:
         _json_out(result)
     else:
@@ -221,6 +225,7 @@ def _cmd_article_publish(db, args):
                              signing_key_bytes=key_bytes, pubkey_hex=user.public_key)
     db.commit()
     _try_sync(db)
+    _queue_if_offline(article_id)
     if args.json:
         _json_out(result)
     else:
@@ -288,4 +293,15 @@ def _cmd_article_diff(db, args):
         _json_out(result)
     else:
         display_diff(result["diff_text"], result["stats"])
-        
+
+
+def _queue_if_offline(article_id: str) -> None:
+    """Queue an article for push if the peer server is unreachable.
+
+    Called after state-changing commands (create, publish, edit) so that
+    changes are pushed eventually even when the server is temporarily down.
+    ``_cmd_sync_push`` drains this queue when the server comes back.
+    """
+    server = _os.environ.get("PEERPEDIA_SERVER")
+    if server and not is_online(server):
+        _queue_push("push", article_id)

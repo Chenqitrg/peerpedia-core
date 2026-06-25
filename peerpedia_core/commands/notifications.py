@@ -44,6 +44,23 @@ def count_unread_notifications(db: Session, user_id: str) -> int:
     return _count_unread_notifications(db, user_id)
 
 
+def get_notifications_for_user(db: Session, user_id: str) -> list[dict]:
+    """Return notifications for a user as dicts, newest first."""
+    notifs = _get(db, user_id)
+    return [
+        {
+            "id": n.id,
+            "event": n.event,
+            "message": n.message,
+            "article_id": n.article_id,
+            "actor_id": n.actor_id,
+            "read": bool(n.read),
+            "created_at": str(n.created_at) if n.created_at else None,
+        }
+        for n in notifs
+    ]
+
+
 def merge_notifications(
     db: Session,
     entries: list[dict],

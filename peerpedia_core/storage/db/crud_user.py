@@ -75,18 +75,21 @@ def get_user(session: Session, user_id: str) -> User | None:
 
 
 def get_user_by_name(session: Session, name: str) -> list[User]:
-    """Return all users with the given name (may be multiple — P2P allows duplicates)."""
-    return session.query(User).filter(User.name == name).all()
+    """Return all active users with the given name (may be multiple — P2P allows duplicates)."""
+    return session.query(User).filter(User.name == name, User.deleted_at.is_(None)).all()
 
 
-def list_users(session: Session) -> list[User]:
-    """Return all users, newest first."""
-    return session.query(User).order_by(User.created_at.desc()).all()
+def list_users(session: Session, limit: int | None = 100) -> list[User]:
+    """Return active users, newest first.  Capped at *limit* (default 100)."""
+    q = session.query(User).filter(User.deleted_at.is_(None)).order_by(User.created_at.desc())
+    if limit is not None:
+        q = q.limit(limit)
+    return q.all()
 
 
 def search_users(session: Session, query: str, limit: int | None = None, offset: int = 0) -> list[User]:
-    """Fuzzy search users by name (case-insensitive ILIKE)."""
-    q = session.query(User).filter(User.name.ilike(f"%{query}%"))
+    """Fuzzy search active users by name (case-insensitive ILIKE)."""
+    q = session.query(User).filter(User.name.ilike(f"%{query}%"), User.deleted_at.is_(None))
     q = q.order_by(User.created_at.desc())
     if limit is not None:
         q = q.limit(limit).offset(offset)
@@ -130,12 +133,73 @@ def update_user_salt(session: Session, user_id: str, salt_hex: str) -> None:
 
 
 def update_user_reputation(session: Session, user_id: str, reputation: dict) -> None:
-    """Persist a new ReputationScores dict for *user_id*.  Raises ValueError if not found."""
+    """Persist a new ReputationScores dict for *user_id*.  Raises NotFoundError if not found."""
     rows = session.query(User).filter(User.id == user_id).update(
         {"reputation": reputation}, synchronize_session="fetch"
     )
     if rows == 0:
         raise NotFoundError(f"User {user_id} not found", resource_type="user", resource_id=user_id)
+    session.expire_all()
+
+
+# ── Rate limiting ────────────────────────────────────────────────────────
+
+_MAX_FAILED_ATTEMPTS = 5
+_LOCKOUT_MINUTES = 15
+
+
+def increment_failed_login(session: Session, user_id: str) -> None:
+    """Increment the failed-login counter.  Locks the account if the
+    threshold is reached.
+
+    Raises NotFoundError if the user does not exist.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    user = session.get(User, user_id)
+    if user is None:
+        raise NotFoundError(f"User {user_id} not found", resource_type="user", resource_id=user_id)
+    user.failed_login_attempts += 1
+    if user.failed_login_attempts >= _MAX_FAILED_ATTEMPTS:
+        user.locked_until = datetime.now(timezone.utc) + timedelta(minutes=_LOCKOUT_MINUTES)
+    session.flush()
+
+
+def reset_failed_login(session: Session, user_id: str) -> None:
+    """Clear the failed-login counter and lock after a successful login.
+
+    Idempotent — safe to call even if the counter is already zero.
+
+    Raises NotFoundError if the user does not exist.
+    """
+    rows = session.query(User).filter(User.id == user_id).update(
+        {"failed_login_attempts": 0, "locked_until": None},
+        synchronize_session="fetch",
+    )
+    if rows == 0:
+        raise NotFoundError(f"User {user_id} not found", resource_type="user", resource_id=user_id)
+    session.expire_all()
+
+
+# ── Account lifecycle ────────────────────────────────────────────────────
+
+
+def soft_delete_user(session: Session, user_id: str) -> None:
+    """Soft-delete a user account (GDPR right-to-erasure).
+
+    Sets ``deleted_at`` to the current UTC timestamp.  Callers MUST clear
+    the session file and commit afterward.
+
+    Raises NotFoundError if the user does not exist.
+    """
+    from datetime import datetime, timezone
+
+    rows = session.query(User).filter(User.id == user_id, User.deleted_at.is_(None)).update(
+        {"deleted_at": datetime.now(timezone.utc)}, synchronize_session="fetch"
+    )
+    if rows == 0:
+        raise NotFoundError(f"User {user_id} not found or already deleted",
+                            resource_type="user", resource_id=user_id)
     session.expire_all()
 
 

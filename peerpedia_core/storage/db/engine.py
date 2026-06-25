@@ -106,6 +106,9 @@ def migrate_db(engine: Engine) -> None:
         "ALTER TABLE articles ADD COLUMN publish_consents TEXT",
         "ALTER TABLE articles ADD COLUMN witnessed_at DATETIME",
         "ALTER TABLE follows ADD COLUMN deleted_at DATETIME",
+        "ALTER TABLE users ADD COLUMN failed_login_attempts INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE users ADD COLUMN locked_until DATETIME",
+        "ALTER TABLE users ADD COLUMN deleted_at DATETIME",
         "CREATE TABLE IF NOT EXISTS aliases ("
         "  owner_id TEXT NOT NULL REFERENCES users(id),"
         "  target_id TEXT NOT NULL REFERENCES users(id),"

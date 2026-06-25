@@ -1,14 +1,10 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""Account commands -- register, login, recover, whoami, bootstrap.
+"""Account commands -- register, login, recover, whoami, bootstrap, delete.
 
-TODO(v1-account-delete): no delete/close-account command.  Users cannot
-leave the system.  GDPR compliance requires a way to soft-delete or
-permanently remove user data.  See docs/user-flow-audit.md §1.
-
-TODO(multi-device): ``account login`` on a new device now has the bootstrap
-flow: ``account bootstrap --from <json>`` then ``account recover``.
+``account login --peer <url> --user-id <uuid>`` bootstraps a new device by
+fetching user metadata from a peer, then verifies the password locally.
 """
 
 from __future__ import annotations
@@ -19,12 +15,15 @@ from peerpedia_core.cli.helpers import (
     _with_db, _read_session, _write_session, _ok, _die, _json_out,
     _empty_state,
 )
+from peerpedia_core.config.paths import SESSION_FILE
 from peerpedia_core.cli.display import display_user as _render_user, console
 from peerpedia_core.commands import (
-    create_user, create_user_stub, get_user, get_user_by_name, search_users,
-    update_user_salt,
+    create_user, create_user_stub, get_user, get_user_by_name,
+    increment_failed_login, reset_failed_login, search_users,
+    soft_delete_user, update_user_salt,
 )
 from peerpedia_core.crypto import derive_key_pair, new_salt
+from peerpedia_core.transport import fetch_user
 
 
 def _display_user(u) -> None:
@@ -92,15 +91,38 @@ def _cmd_register(db, args):
 def _cmd_login(db, args):
     """Log in as an existing user — verify password, load key into session.
 
-    args: --name, --password (optional), --json
+    With ``--peer`` and ``--user-id``, bootstraps a new device by fetching the
+    user record from a peer server first, then verifies the password locally.
+
+    args: --name, --password (optional), --json, --peer (optional), --user-id (optional)
     """
 
     user = get_user_by_name(db, args.name)
     if len(user) == 0:
-        _die(f"User '{args.name}' not found.",
-             suggestion="Check the spelling, or register first: "
-                        "peerpedia account register --name <your-name>",
-             see_also=["account register", "account search"])
+        # Try remote bootstrap if --peer or PEERPEDIA_SERVER is set
+        peer = getattr(args, "peer", None) or _os.environ.get("PEERPEDIA_SERVER")
+        user_id = getattr(args, "user_id", None)
+        if peer and user_id:
+            data = fetch_user(peer, user_id)
+            if data:
+                create_user_stub(
+                    db,
+                    user_id=data["id"], name=data["name"],
+                    public_key=data["public_key"], salt=data["salt"],
+                )
+                db.commit()
+                u = get_user(db, data["id"])
+                if u is None:
+                    _die(f"Failed to bootstrap user {data['id']} from {peer}")
+                user = [u]
+            else:
+                _die(f"User '{args.name}' not found on {peer}.",
+                     suggestion="Check the --user-id or try a different peer server.")
+        else:
+            _die(f"User '{args.name}' not found.",
+                 suggestion="Check the spelling, or register first: "
+                            "peerpedia account register --name <your-name>",
+                 see_also=["account register", "account search"])
     if len(user) > 1:
         _die(f"Multiple users named '{args.name}'.",
              suggestion=f"Use a user ID to specify which one: "
@@ -112,17 +134,28 @@ def _cmd_login(db, args):
         _die(f"User '{args.name}' was registered before key derivation was supported.",
              suggestion=f"Re-register: peerpedia account register --name {args.name}")
 
+    # Rate-limit: reject if account is locked
+    if user.locked_until is not None:
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
+        if user.locked_until > now:
+            remaining = int((user.locked_until - now).total_seconds())
+            minutes = max(1, remaining // 60)
+            _die(f"Account locked — too many failed attempts. Try again in {minutes} minute(s).",
+                 suggestion="Wait for the lockout to expire, or use account recover "
+                            "if you forgot your password.",
+                 see_also=["account recover"])
+
     password = _get_password(args)
     private_key_bytes, pubkey_bytes = derive_key_pair(password, user.salt)
-    # TODO(v1-rate-limit): no brute-force protection.  Add exponential
-    # backoff or a failed-attempt counter on the User record after N
-    # consecutive wrong passwords.
     if pubkey_bytes.hex() != user.public_key:
+        increment_failed_login(db, user.id)
         _die("Wrong password.",
              suggestion="If you forgot your password, run: peerpedia account recover "
                         "--name <your-name>. If this is a new device, bootstrap first.",
              see_also=["account recover", "account bootstrap"])
 
+    reset_failed_login(db, user.id)
     _write_session(user.id, user.name, private_key_bytes.hex())
 
     if args.json:
@@ -174,13 +207,27 @@ def _cmd_recover(db, args):
         _die(f"User '{user.name}' has no stored salt — key was not derived.",
              suggestion=f"Re-register: peerpedia account register --name {user.name}")
 
+    # Rate-limit: reject if account is locked
+    if user.locked_until is not None:
+        from datetime import datetime, timezone
+        now = datetime.now(timezone.utc)
+        if user.locked_until > now:
+            remaining = int((user.locked_until - now).total_seconds())
+            minutes = max(1, remaining // 60)
+            _die(f"Account locked — too many failed attempts. Try again in {minutes} minute(s).",
+                 suggestion="Wait for the lockout to expire before attempting recovery.",
+                 see_also=["account login"])
+
     password = _get_password(args)
     private_key_bytes, pubkey_bytes = derive_key_pair(password, user.salt)
     if pubkey_bytes.hex() != user.public_key:
+        increment_failed_login(db, user.id)
         _die("Wrong password.",
              suggestion="If you forgot your password, you'll need to re-register. "
                         "The salt+password derive your key — there is no reset.",
              see_also=["account register"])
+
+    reset_failed_login(db, user.id)
 
     _write_session(user.id, user.name, private_key_bytes.hex())
 
@@ -337,3 +384,43 @@ def _cmd_account_search(db, args):
         return
     for u in users:
         _display_user(u)
+
+
+@_with_db
+def _cmd_account_delete(db, args):
+    """Delete your account (soft-delete).  Requires password confirmation.
+
+    args: --json
+    """
+
+    session = _read_session()
+    if not session:
+        _die("Not logged in. Run 'peerpedia account login' first.")
+
+    user_id = session["user_id"]
+    user = get_user(db, user_id)
+    if user is None:
+        _die("User not found in local database.",
+             suggestion="Your session references a user that no longer exists.")
+
+    if user.salt is None:
+        _die("Cannot verify identity — no salt stored. Re-register to enable password verification.")
+
+    password = _get_password(args)
+    _, pubkey_bytes = derive_key_pair(password, user.salt)
+    if pubkey_bytes.hex() != user.public_key:
+        _die("Wrong password — account deletion cancelled.")
+
+    soft_delete_user(db, user_id)
+    db.commit()
+
+    # Clear session file
+    try:
+        SESSION_FILE.unlink(missing_ok=True)
+    except OSError:
+        pass  # file already gone — nothing to clean up
+
+    if args.json:
+        _json_out({"status": "deleted", "user_id": user_id})
+    else:
+        _ok(f"Account [accent]{user.name}[/] deleted. Goodbye.")

@@ -31,7 +31,7 @@ from peerpedia_core.storage.db.crud_share import add_share as _add_share, is_sha
 from peerpedia_core.storage.db.crud_user import (
     create_user_stub, follow_user, get_user, is_following,
 )
-from peerpedia_core.storage.db.models import Article, Follow, User
+from peerpedia_core.storage.db.models import Article, Follow, Notification, User
 
 logger = logging.getLogger(__name__)
 
@@ -250,4 +250,40 @@ def merge_shares(db: Session, user_id: str, entries: list[dict]) -> int:
             comment=e.get("comment"),
         )
         added += 1
+    return added
+
+
+def merge_notifications(db: Session, user_id: str, entries: list[dict]) -> int:
+    """Insert new notifications from peer data.
+
+    Dedup by (user_id, event, actor_id, article_id, message) — if a
+    notification with the same fields already exists, skip it.
+    Returns count of new notifications inserted.
+    """
+    _require_keys(entries, "event", "message", label="notifications")
+
+    added = 0
+    for entry in entries:
+        existing = db.query(Notification).filter(
+            Notification.user_id == user_id,
+            Notification.event == entry.get("event"),
+            Notification.actor_id == entry.get("actor_id"),
+            Notification.article_id == entry.get("article_id"),
+            Notification.message == entry.get("message"),
+        ).first()
+        if existing:
+            continue
+        n = Notification(
+            id=entry.get("id"),
+            user_id=user_id,
+            event=entry["event"],
+            message=entry["message"],
+            article_id=entry.get("article_id"),
+            actor_id=entry.get("actor_id"),
+            read=1 if entry.get("read") else 0,
+        )
+        db.add(n)
+        added += 1
+    if added:
+        db.flush()
     return added

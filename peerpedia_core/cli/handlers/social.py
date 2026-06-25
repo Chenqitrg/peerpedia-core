@@ -22,7 +22,7 @@ from peerpedia_core.commands import (
     get_follower_views, get_followers, get_following, get_following_views,
     create_user_stub, get_article, get_top_users_by_followers, get_user, merge_article_meta,
 )
-from peerpedia_core.social import discover_articles, discover_followers, discover_following, discover_shares
+from peerpedia_core.social import discover_articles, discover_followers, discover_following, discover_notifications, discover_shares
 from peerpedia_core.transport import (
     fetch_article_meta, fetch_school,
     push_follow, push_share, push_share_remove, push_unfollow,
@@ -49,11 +49,14 @@ def _pull_social(db, user_id: str) -> None:
     server = _get_server_or_warn("social pull")
     if not server:
         return
+    key = _get_session_key()
+    pubkey = _get_session_pubkey()
     try:
-        discover_following(db, server, user_id)
-        discover_followers(db, server, user_id)
-        discover_articles(db, server, user_id)
-        discover_shares(db, server, user_id)
+        discover_following(db, server, user_id, signing_key_bytes=key, pubkey_hex=pubkey)
+        discover_followers(db, server, user_id, signing_key_bytes=key, pubkey_hex=pubkey)
+        discover_articles(db, server, user_id, signing_key_bytes=key, pubkey_hex=pubkey)
+        discover_shares(db, server, user_id, signing_key_bytes=key, pubkey_hex=pubkey)
+        discover_notifications(db, server, user_id, signing_key_bytes=key, pubkey_hex=pubkey)
     except Exception as e:
         console.print(f"[warning]⚠ Social pull from {server} failed: {e}[/]")
 

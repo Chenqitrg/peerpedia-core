@@ -115,6 +115,9 @@ def test_no_internal_peerpedia_imports():
         ("peerpedia_core/cli/handlers/schema.py",
          "peerpedia_core.cli.parser"):
             "circular: parser imports from handlers (→ schema), schema needs COMMAND_GROUPS from parser",
+        ("peerpedia_core/cli/helpers.py",
+         "peerpedia_core.bundle"):
+            "heavy optional: lazy pull of article content from peer server; only needed when source file is missing",
     }
 
     for f in _all_modules():

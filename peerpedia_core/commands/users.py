@@ -16,13 +16,16 @@ from peerpedia_core.storage.db.crud_user import (
     create_user_stub as _create_stub,
     follow_user as _follow,
     get_user as _get,
+    increment_failed_login as _increment_failed,
     list_users as _list_users,
     get_followers as _get_followers,
     get_following as _get_following,
     get_top_users_by_followers as _get_top_users_by_followers,
     get_user as _get,
     get_user_by_name as _get_by_name,
+    reset_failed_login as _reset_failed,
     search_users as _search_users,
+    soft_delete_user as _soft_delete,
     is_following as _is_following,
     unfollow_user as _unfollow,
     update_user_public_key as _update_pubkey,
@@ -122,5 +125,20 @@ def search_users(db: Session, query: str, limit: int | None = None, offset: int 
 
 
 def list_users(db: Session) -> list:
-    """Return all users, newest first."""
+    """Return all active users, newest first."""
     return _list_users(db)
+
+
+def increment_failed_login(db: Session, user_id: str) -> None:
+    """Increment the failed-login counter. Locks the account at threshold."""
+    _increment_failed(db, user_id)
+
+
+def reset_failed_login(db: Session, user_id: str) -> None:
+    """Clear the failed-login counter after a successful login."""
+    _reset_failed(db, user_id)
+
+
+def soft_delete_user(db: Session, user_id: str) -> None:
+    """Soft-delete a user account (GDPR right-to-erasure)."""
+    _soft_delete(db, user_id)

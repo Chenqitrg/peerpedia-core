@@ -19,9 +19,9 @@ count() -> int              Number of pending ops
 remove(article_id)          Remove all ops for an article
 clear()                     Empty the queue
 
-Status: infrastructure exists but is NOT wired into the sync push flow yet.
-The CLI's sync push command iterates the queue and replays ops, but the
-queue population (adding ops when offline) is deferred.
+Status: wired — ``_queue_if_offline`` in cli/handlers/articles.py calls
+``pending.add("push", article_id)`` after create/publish/edit when the
+server is unreachable.  ``_cmd_sync_push`` drains the queue.
 
 Reviewer's checklist
 --------------------

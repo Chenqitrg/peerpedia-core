@@ -9,10 +9,10 @@ from peerpedia_core.cli.helpers import _with_db, _ok, _die, _json_out
 from peerpedia_core.cli.display import _print_panel, console
 from peerpedia_core.cli.bundle_utils import _require_online_server, _resolve_server_url
 from peerpedia_core.exceptions import ConflictError, ProtocolError, TransportError
-from peerpedia_core.transport import is_online
+from peerpedia_core.transport import is_online, fetch_search
 from peerpedia_core.bundle.pending import list_all, remove as pop_pending
-from peerpedia_core.bundle import count as pending_count, sync_article
-from peerpedia_core.commands import list_articles
+from peerpedia_core.bundle import count as pending_count, sync_article, pull_new_article
+from peerpedia_core.commands import get_all_article_ids, list_articles, merge_article_meta
 
 
 @_with_db
@@ -86,10 +86,16 @@ def _cmd_sync_pull(db, args):
     """Pull article updates from a peer server.
 
     args: --server, --json
-
-    TODO(P2P-sync): currently only updates articles that already exist
-    locally.  Add article *discovery* — fetch the server's article list
-    and pull new articles that the user doesn't have yet.
     """
     server = _require_online_server(args)
-    _sync_loop(db, server, [{"id": a.id} for a in list_articles(db)], "Pull")
+
+    # Discover new articles from the server.
+    server_articles = fetch_search(server)
+    if server_articles:
+        local_ids = set(get_all_article_ids(db))
+        for entry in server_articles:
+            if entry["id"] not in local_ids:
+                merge_article_meta(db, [entry])
+                pull_new_article(db, server, entry["id"])
+
+    _sync_loop(db, server, [{"id": aid} for aid in get_all_article_ids(db)], "Pull")

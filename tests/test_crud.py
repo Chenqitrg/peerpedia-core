@@ -764,3 +764,61 @@ class TestSaltRoundtrip:
         _, pub1 = derive_key_pair(PASSWORD, salt1)
         _, pub2 = derive_key_pair(PASSWORD, salt2)
         assert pub1 != pub2, "different salts → different pubkeys"
+
+
+class TestAnonymousNames:
+    def test_generate_anonymous_name(self):
+        from peerpedia_core.storage.db.crud_user import generate_anonymous_name
+        name = generate_anonymous_name()
+        assert isinstance(name, str)
+        assert len(name) >= 2  # at least 2 Chinese chars
+
+    def test_derive_anonymous_name_deterministic(self):
+        from peerpedia_core.storage.db.crud_user import derive_anonymous_name
+        n1 = derive_anonymous_name("seed-abc")
+        n2 = derive_anonymous_name("seed-abc")
+        assert n1 == n2
+
+    def test_derive_anonymous_name_different_seeds(self):
+        from peerpedia_core.storage.db.crud_user import derive_anonymous_name
+        n1 = derive_anonymous_name("seed-1")
+        n2 = derive_anonymous_name("seed-2")
+        assert n1 != n2
+
+
+class TestUserCrudErrorPaths:
+    def test_update_public_key_not_found(self, engine):
+        from peerpedia_core.storage.db.crud_user import update_user_public_key
+        from peerpedia_core.storage.db.engine import get_session
+
+        session = get_session(engine)
+        with pytest.raises(ValueError, match="not found"):
+            update_user_public_key(session, "nonexistent", "00" * 32)
+        session.rollback()
+        session.close()
+
+    def test_update_salt_not_found(self, engine):
+        from peerpedia_core.storage.db.crud_user import update_user_salt
+        from peerpedia_core.storage.db.engine import get_session
+
+        session = get_session(engine)
+        with pytest.raises(ValueError, match="not found"):
+            update_user_salt(session, "nonexistent", "00" * 16)
+        session.rollback()
+        session.close()
+
+    def test_follower_count_zero(self, engine):
+        from peerpedia_core.storage.db.crud_user import get_follower_count
+        from peerpedia_core.storage.db.engine import get_session
+
+        session = get_session(engine)
+        assert get_follower_count(session, "nonexistent") == 0
+        session.close()
+
+    def test_following_count_zero(self, engine):
+        from peerpedia_core.storage.db.crud_user import get_following_count
+        from peerpedia_core.storage.db.engine import get_session
+
+        session = get_session(engine)
+        assert get_following_count(session, "nonexistent") == 0
+        session.close()

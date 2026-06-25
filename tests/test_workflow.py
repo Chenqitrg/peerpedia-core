@@ -209,3 +209,39 @@ class TestPerCommitScoring:
         assert score is not None
         assert score["originality"] == 3.0
         session.close()
+
+
+class TestStateSerialization:
+    def test_to_primitive_scalars(self):
+        from peerpedia_core.workflow.state import _to_primitive
+        assert _to_primitive("hello") == "hello"
+        assert _to_primitive(42) == 42
+        assert _to_primitive(3.14) == 3.14
+        assert _to_primitive(True) is True
+        assert _to_primitive(None) is None
+
+    def test_to_primitive_tuple(self):
+        from peerpedia_core.workflow.state import _to_primitive
+        assert _to_primitive((1, "a", 3.0)) == [1, "a", 3.0]
+
+    def test_to_primitive_dict(self):
+        from peerpedia_core.workflow.state import _to_primitive
+        result = _to_primitive({"a": 1, "b": (2, 3)})
+        assert result == {"a": 1, "b": [2, 3]}
+
+    def test_to_primitive_dataclass(self):
+        from dataclasses import dataclass
+        from peerpedia_core.workflow.state import _to_primitive
+
+        @dataclass(frozen=True)
+        class Foo:
+            x: int
+            y: str
+
+        result = _to_primitive(Foo(1, "hi"))
+        assert result == {"x": 1, "y": "hi"}
+
+    def test_to_primitive_unknown_type_raises(self):
+        from peerpedia_core.workflow.state import _to_primitive
+        with pytest.raises(TypeError, match="Cannot serialize"):
+            _to_primitive(object())

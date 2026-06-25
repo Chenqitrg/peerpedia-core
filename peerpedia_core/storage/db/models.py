@@ -77,6 +77,7 @@ class Article(Base):
     categories = Column(JSONList, nullable=True)
     status = Column(String, nullable=False, default="draft", index=True)  # draft|sedimentation|published
     score = Column(JSONDict, nullable=True)  # FiveDimScores as dict
+    publish_consents = Column(JSONList, nullable=True)  # maintainer IDs who consented to publish/merge
     compiled_format = Column(String, nullable=True)  # "html" | "svg"
     compiled_output = Column(String, nullable=True)  # single-page result
     compiled_pages = Column(JSONList, nullable=True)  # list[str] for multi-page SVG
@@ -189,7 +190,7 @@ class User(Base):
     created_at = Column(DateTime, nullable=False, default=_utcnow)
 
     def to_dict(self) -> dict:
-        """Expose user fields for peer exchange. Excludes salt (secret) and reputation (local)."""
+        """Expose user fields for peer exchange. Excludes salt (not synced — only needed locally) and reputation (local)."""
         return {
             "id": self.id,
             "name": self.name,
@@ -268,6 +269,27 @@ class Bookmark(Base):
 
     user_id = Column(String, ForeignKey("users.id"), primary_key=True)
     article_id = Column(String, ForeignKey("articles.id"), primary_key=True)
+    created_at = Column(DateTime, nullable=False, default=_utcnow)
+
+
+# ── Notification ──────────────────────────────────────────────────────────
+
+
+class Notification(Base):
+    """Local notification — informs a user about events on their articles or profile.
+
+    Notifications are local-only (not synced via P2P).  They are created by
+    command functions at event emission points, and read by the user via CLI.
+    """
+    __tablename__ = "notifications"
+
+    id = Column(String, primary_key=True, default=_new_id)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    event = Column(String, nullable=False)  # review_submitted|merge_proposed|new_follower|article_published
+    article_id = Column(String, ForeignKey("articles.id"), nullable=True)
+    actor_id = Column(String, ForeignKey("users.id"), nullable=True)
+    message = Column(String, nullable=False)
+    read = Column(Integer, nullable=False, default=0)  # 0=unread, 1=read
     created_at = Column(DateTime, nullable=False, default=_utcnow)
 
 

@@ -6,12 +6,14 @@
 from __future__ import annotations
 
 import pytest
+from peerpedia_core.crypto import write_key_to_tempfile
 from peerpedia_core.exceptions import ConflictError, NotAuthorizedError, NotFoundError
 from peerpedia_core.commands import (
     create_article_with_content,
     fork_article,
     publish_article,
     rollback_article,
+    submit_reply,
     update_article_content,
 )
 from peerpedia_core.storage.db.crud_article import create_article, get_article
@@ -447,3 +449,278 @@ def test_update_published_article_writes_status_marker(
         and "[status] sedimentation" in c["message"]
     ]
     assert len(platform_commits) >= 1, "No platform [status] commit after published edit"
+
+
+# ── Author Reply Tests ──────────────────────────────────────────────────
+
+
+class TestSubmitReply:
+    def test_author_can_reply_to_reviewer(self, db, test_signing_key_bytes, test_pubkey_hex):
+        """Author replies to a review — thread file created, notification emitted."""
+        _create_user(db, "author-1", "Author")
+        _create_user(db, "reviewer-1", "Reviewer")
+
+        art = create_article(
+            db, id="art-reply", title="Reply Test", authors=["author-1"],
+            status="published",
+        )
+        add_maintainer(db, art.id, "author-1")
+        db.flush()
+
+        rp = DEFAULT_ARTICLES_DIR / "art-reply"
+        init_article_repo(rp)
+        (rp / "article.md").write_text("# Reply Test\n")
+
+        thread = rp / "reviews" / "reviewer-1" / "threads"
+        thread.mkdir(parents=True)
+        (thread / "001.md").write_text("### Reviewer (2024-01-01)\n\nGood work.\n")
+        key_path = write_key_to_tempfile(test_signing_key_bytes)
+        commit_article(rp, "initial", "test", "t@t",
+                       signing_key=key_path, pubkey_hex=test_pubkey_hex)
+        key_path.unlink(missing_ok=True)
+
+        result = submit_reply(
+            db, article_id="art-reply", user_id="author-1",
+            reviewer_ref="reviewer-1", content="Thank you for the review.",
+            signing_key_bytes=test_signing_key_bytes, pubkey_hex=test_pubkey_hex,
+        )
+        db.commit()
+
+        assert result["directory_id"] == "reviewer-1"
+        assert (thread / "002.md").exists()
+        assert "Thank you" in (thread / "002.md").read_text()
+
+        # Verify notification was emitted.
+        from peerpedia_core.storage.db.crud_notification import get_notifications
+        notifs = get_notifications(db, "reviewer-1", unread_only=True)
+        assert len(notifs) == 1
+        assert notifs[0].event == "review_reply"
+        assert notifs[0].actor_id == "author-1"
+
+    def test_non_maintainer_cannot_reply(self, db, test_signing_key_bytes, test_pubkey_hex):
+        """Non-maintainer (non-author) cannot reply to reviews."""
+        _create_user(db, "author-1", "Author")
+        _create_user(db, "reviewer-1", "Reviewer")
+        _create_user(db, "rando", "Random")
+
+        art = create_article(
+            db, id="art-noreply", title="No Reply", authors=["author-1"],
+            status="published",
+        )
+        add_maintainer(db, art.id, "author-1")
+        db.flush()
+
+        rp = DEFAULT_ARTICLES_DIR / "art-noreply"
+        init_article_repo(rp)
+        (rp / "article.md").write_text("# Test\n")
+        thread = rp / "reviews" / "reviewer-1" / "threads"
+        thread.mkdir(parents=True)
+        (thread / "001.md").write_text("### Reviewer\n\nReview.\n")
+        key_path = write_key_to_tempfile(test_signing_key_bytes)
+        commit_article(rp, "initial", "test", "t@t",
+                       signing_key=key_path, pubkey_hex=test_pubkey_hex)
+        key_path.unlink(missing_ok=True)
+
+        with pytest.raises(NotAuthorizedError, match="Only article authors"):
+            submit_reply(
+                db, article_id="art-noreply", user_id="rando",
+                reviewer_ref="reviewer-1", content="I shouldn't be here.",
+            )
+
+    def test_consecutive_replies_allowed(self, db, test_signing_key_bytes, test_pubkey_hex):
+        """Author can post multiple consecutive replies."""
+        _create_user(db, "author-2", "Author2")
+        _create_user(db, "reviewer-2", "Reviewer2")
+
+        art = create_article(
+            db, id="art-multi", title="Multi Reply", authors=["author-2"],
+            status="published",
+        )
+        add_maintainer(db, art.id, "author-2")
+        db.flush()
+
+        rp = DEFAULT_ARTICLES_DIR / "art-multi"
+        init_article_repo(rp)
+        (rp / "article.md").write_text("# Multi\n")
+        thread = rp / "reviews" / "reviewer-2" / "threads"
+        thread.mkdir(parents=True)
+        (thread / "001.md").write_text("### Reviewer\n\nReview.\n")
+        key_path = write_key_to_tempfile(test_signing_key_bytes)
+        commit_article(rp, "initial", "test", "t@t",
+                       signing_key=key_path, pubkey_hex=test_pubkey_hex)
+        key_path.unlink(missing_ok=True)
+
+        r1 = submit_reply(
+            db, article_id="art-multi", user_id="author-2",
+            reviewer_ref="reviewer-2", content="Reply 1",
+            signing_key_bytes=test_signing_key_bytes, pubkey_hex=test_pubkey_hex,
+        )
+        r2 = submit_reply(
+            db, article_id="art-multi", user_id="author-2",
+            reviewer_ref="reviewer-2", content="Reply 2",
+            signing_key_bytes=test_signing_key_bytes, pubkey_hex=test_pubkey_hex,
+        )
+        db.commit()
+
+        assert (thread / "002.md").exists()
+        assert (thread / "003.md").exists()
+        assert "Reply 1" in (thread / "002.md").read_text()
+        assert "Reply 2" in (thread / "003.md").read_text()
+
+
+# ── Policy: Maintainer Self-Removal + Consent ────────────────────────────
+
+
+class TestMaintainerSelfRemoval:
+    def test_self_removal_allowed_with_other_maintainer(self, db):
+        """A maintainer can remove themselves if another maintainer exists."""
+        _create_user(db, "alice", "Alice")
+        _create_user(db, "bob", "Bob")
+        create_article(db, id="art-self", title="Self", authors=["alice", "bob"])
+        add_maintainer(db, "art-self", "alice")
+        add_maintainer(db, "art-self", "bob")
+        db.flush()
+
+        from peerpedia_core.commands import remove_maintainer_from_article
+        result = remove_maintainer_from_article(db, "art-self", "alice", "alice")
+        assert result["action"] == "removed"
+
+    def test_last_maintainer_cannot_self_remove(self, db):
+        """The last maintainer cannot remove themselves (orphan prevention)."""
+        _create_user(db, "alice", "Alice")
+        create_article(db, id="art-last", title="Last", authors=["alice"])
+        add_maintainer(db, "art-last", "alice")
+        db.flush()
+
+        from peerpedia_core.commands import remove_maintainer_from_article
+        with pytest.raises(NotAuthorizedError, match="last maintainer"):
+            remove_maintainer_from_article(db, "art-last", "alice", "alice")
+
+
+class TestUnanimousConsent:
+    def test_single_maintainer_publish_no_consent_needed(self, db):
+        """Sole maintainer can publish without explicit consent."""
+        _create_user(db, "alice", "Alice")
+        create_article(db, id="art-solo", title="Solo", authors=["alice"])
+        add_maintainer(db, "art-solo", "alice")
+        db.flush()
+
+        from peerpedia_core.policies.articles import (
+            assert_can_publish_article, _assert_all_maintainers_consented,
+        )
+        from peerpedia_core.storage.db.models import User, Article
+
+        article = db.get(Article, "art-solo")
+        user = db.get(User, "alice")
+        # Single maintainer — no consent needed, should not raise.
+        assert_can_publish_article(article, ["alice"], user)
+
+    def test_multi_maintainer_needs_consent(self, db):
+        """Multiple maintainers: all must consent before publish."""
+        _create_user(db, "alice", "Alice")
+        _create_user(db, "bob", "Bob")
+        create_article(db, id="art-multi", title="Multi", authors=["alice", "bob"])
+        add_maintainer(db, "art-multi", "alice")
+        add_maintainer(db, "art-multi", "bob")
+        db.flush()
+
+        from peerpedia_core.policies.articles import assert_can_publish_article
+        from peerpedia_core.storage.db.models import User, Article
+
+        article = db.get(Article, "art-multi")
+        user = db.get(User, "alice")
+        with pytest.raises(NotAuthorizedError, match="Unanimous consent"):
+            assert_can_publish_article(article, ["alice", "bob"], user)
+
+    def test_consent_then_publish(self, db):
+        """After all maintainers consent, publish is allowed."""
+        _create_user(db, "alice", "Alice")
+        _create_user(db, "bob", "Bob")
+        create_article(db, id="art-ok", title="OK", authors=["alice", "bob"])
+        add_maintainer(db, "art-ok", "alice")
+        add_maintainer(db, "art-ok", "bob")
+        db.flush()
+
+        from peerpedia_core.commands import consent_to_publish
+        from peerpedia_core.policies.articles import assert_can_publish_article
+        from peerpedia_core.storage.db.models import User, Article
+
+        consent_to_publish(db, "art-ok", "alice")
+        consent_to_publish(db, "art-ok", "bob")
+        db.flush()
+
+        article = db.get(Article, "art-ok")
+        user = db.get(User, "alice")
+        # Both consented — should not raise.
+        assert_can_publish_article(article, ["alice", "bob"], user)
+
+    def test_consent_revoke_removes_consent(self, db):
+        """Revoking consent means publish is blocked again."""
+        _create_user(db, "alice", "Alice")
+        _create_user(db, "bob", "Bob")
+        create_article(db, id="art-revoke", title="Revoke", authors=["alice", "bob"])
+        add_maintainer(db, "art-revoke", "alice")
+        add_maintainer(db, "art-revoke", "bob")
+        db.flush()
+
+        from peerpedia_core.commands import consent_to_publish, revoke_publish_consent
+        from peerpedia_core.policies.articles import assert_can_publish_article
+        from peerpedia_core.storage.db.models import User, Article
+
+        consent_to_publish(db, "art-revoke", "alice")
+        consent_to_publish(db, "art-revoke", "bob")
+        revoke_publish_consent(db, "art-revoke", "bob")
+        db.flush()
+
+        article = db.get(Article, "art-revoke")
+        user = db.get(User, "alice")
+        with pytest.raises(NotAuthorizedError, match="Unanimous consent"):
+            assert_can_publish_article(article, ["alice", "bob"], user)
+
+
+class TestPolicyErrorPaths:
+    def test_cannot_review_draft_article(self, db):
+        _create_user(db, "alice", "Alice")
+        create_article(db, id="art-pd", title="Draft", authors=["alice"])
+        db.flush()
+
+        from peerpedia_core.policies.articles import assert_can_submit_review
+        from peerpedia_core.storage.db.models import Article
+        article = db.get(Article, "art-pd")
+        with pytest.raises(NotAuthorizedError, match="Cannot review a draft"):
+            assert_can_submit_review(article)
+
+    def test_cannot_reply_to_draft_article(self, db):
+        _create_user(db, "alice", "Alice")
+        create_article(db, id="art-pd2", title="D2", authors=["alice"])
+        add_maintainer(db, "art-pd2", "alice")
+        db.flush()
+
+        from peerpedia_core.policies.articles import assert_can_reply_to_review
+        from peerpedia_core.storage.db.models import User, Article
+        article = db.get(Article, "art-pd2")
+        user = db.get(User, "alice")
+        with pytest.raises(NotAuthorizedError, match="Cannot reply to reviews on a draft"):
+            assert_can_reply_to_review(article, ["alice"], user)
+
+    def test_self_review_must_be_dict(self):
+        from peerpedia_core.policies.articles import validate_self_review_scores
+        from peerpedia_core.exceptions import BadRequestError
+        with pytest.raises(BadRequestError, match="must be a dict"):
+            validate_self_review_scores("not-a-dict")
+
+    def test_self_review_invalid_dimension_value(self):
+        from peerpedia_core.policies.articles import validate_self_review_scores
+        from peerpedia_core.exceptions import BadRequestError
+        with pytest.raises(BadRequestError, match="must be a number between 1 and 5"):
+            validate_self_review_scores(
+                {"originality": 0, "rigor": 3, "completeness": 3, "pedagogy": 3, "impact": 3}
+            )
+
+    def test_require_self_review_raises_if_none(self):
+        from peerpedia_core.policies.articles import require_self_review_for_publish
+        from peerpedia_core.exceptions import BadRequestError
+        from peerpedia_core.storage.db.models import Article
+        a = Article(id="test", title="T", status="draft")
+        with pytest.raises(BadRequestError, match="self_review is required"):
+            require_self_review_for_publish(a, None)

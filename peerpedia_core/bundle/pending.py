@@ -43,65 +43,67 @@ from peerpedia_core.config.paths import PENDING_OPS_FILE as PENDING_FILE
 OpType = Literal["push", "delete"]
 PendingOp = dict  # {"id": str, "op_type": OpType, "created_at": float}
 
+_cache: list[PendingOp] | None = None
 
-def _read() -> list[PendingOp]:
-    """Read pending ops from disk. Returns empty list if file doesn't exist."""
+
+def _load() -> list[PendingOp]:
+    """Load pending ops from disk (once).  Returns empty list if file missing."""
+    global _cache
+    if _cache is not None:
+        return _cache
     if not PENDING_FILE.exists():
-        return []
+        _cache = []
+        return _cache
     try:
         data = json.loads(PENDING_FILE.read_text())
         if isinstance(data, list):
-            return data
-        raise ValueError(
-            f"Pending queue is not a JSON array: {PENDING_FILE}"
-        )
+            _cache = data
+            return _cache
+        raise ValueError(f"Pending queue is not a JSON array: {PENDING_FILE}")
     except json.JSONDecodeError as e:
-        raise ValueError(
-            f"Corrupted pending queue at {PENDING_FILE}: {e}"
-        ) from e
+        raise ValueError(f"Corrupted pending queue at {PENDING_FILE}: {e}") from e
     except OSError as e:
-        raise ValueError(
-            f"Cannot read pending queue at {PENDING_FILE}: {e}"
-        ) from e
-    return []
+        raise ValueError(f"Cannot read pending queue at {PENDING_FILE}: {e}") from e
 
 
-def _write(ops: list[PendingOp]) -> None:
-    """Write pending ops to disk."""
+def _flush() -> None:
+    """Write cache to disk."""
+    if _cache is None:
+        return
     PENDING_FILE.parent.mkdir(parents=True, exist_ok=True)
-    PENDING_FILE.write_text(json.dumps(ops, indent=2))
+    PENDING_FILE.write_text(json.dumps(_cache, indent=2))
 
 
 def add(op_type: OpType, article_id: str) -> None:
-    """Add an operation to the pending queue."""
-    # TODO(perf): every operation does a full _read() + _write() cycle — reads
-    # the entire file, parses JSON, modifies list, serializes, writes to disk.
-    # Fine for single-digit queue sizes; if the queue grows, cache in memory.
-    ops = _read()
-    # Don't duplicate — if same article_id + op_type already pending, skip
+    """Add an operation to the pending queue (cached, write-through)."""
+    ops = _load()
     for op in ops:
         if op.get("id") == article_id and op.get("op_type") == op_type:
             return
     ops.append({"id": article_id, "op_type": op_type, "created_at": time.time()})
-    _write(ops)
+    _flush()
 
 
 def list_all() -> list[PendingOp]:
-    """Return all pending operations."""
-    return _read()
+    """Return all pending operations (from cache)."""
+    return _load()
 
 
 def count() -> int:
     """Return number of pending operations."""
-    return len(_read())
+    return len(_load())
 
 
 def remove(article_id: str) -> None:
-    """Remove all pending ops for an article."""
-    ops = [op for op in _read() if op.get("id") != article_id]
-    _write(ops)
+    """Remove all pending ops for an article (cached, write-through)."""
+    global _cache
+    ops = _load()
+    _cache = [op for op in ops if op.get("id") != article_id]
+    _flush()
 
 
 def clear() -> None:
     """Remove all pending operations."""
-    _write([])
+    global _cache
+    _cache = []
+    _flush()

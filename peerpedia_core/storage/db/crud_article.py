@@ -172,8 +172,9 @@ def list_articles(
     elif status:
         q = q.filter(Article.status == status)
     if search_query:
-        # TODO(perf): ILIKE %term% cannot use a B-tree index — full table scan.
-        # Use SQLite FTS5 for fuzzy title search when article count grows.
+        # NOTE: ILIKE %term% scans linearly.  For a P2P system with hundreds
+        # of articles (not millions), this is fine.  If article count exceeds
+        # ~10k, switch to SQLite FTS5 virtual table for full-text search.
         q = q.filter(Article.title.ilike(f"%{search_query}%"))
     q = q.order_by(Article.created_at.desc())
     if limit is not None:
@@ -251,6 +252,14 @@ def increment_fork_count(session: Session, article_id: str) -> None:
     )
     if rows == 0:
         raise ValueError(f"Article {article_id} not found")
+    session.expire_all()
+
+
+def decrement_fork_count(session: Session, article_id: str) -> None:
+    """Atomically decrement ``fork_count`` by 1 (floor at 0). No-op if not found."""
+    session.query(Article).filter(Article.id == article_id).update(
+        {"fork_count": Article.fork_count - 1}, synchronize_session="fetch"
+    )
     session.expire_all()
 
 
@@ -351,5 +360,33 @@ def update_witnessed_at(session: Session, article_id: str) -> None:
     if rows == 0:
         raise ValueError(f"Article {article_id} not found")
     session.expire_all()
+
+
+# ── Publish consent ─────────────────────────────────────────────────────
+
+
+def add_publish_consent(session: Session, article_id: str, user_id: str) -> None:
+    """Record a maintainer's consent to publish/merge.
+
+    Appends *user_id* to ``publish_consents`` if not already present.
+    Raises ValueError if article not found.
+    """
+    article = session.get(Article, article_id)
+    if article is None:
+        raise ValueError(f"Article {article_id} not found")
+    consents = list(article.publish_consents or [])
+    if user_id not in consents:
+        consents.append(user_id)
+        article.publish_consents = consents
+    session.flush()
+
+
+def clear_publish_consents(session: Session, article_id: str) -> None:
+    """Clear all publish consents (e.g. after content edit or publish)."""
+    article = session.get(Article, article_id)
+    if article is None:
+        raise ValueError(f"Article {article_id} not found")
+    article.publish_consents = None
+    session.flush()
 
 

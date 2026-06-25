@@ -110,6 +110,31 @@ def create_user(
     return u
 
 
+def create_user_stub(
+    session: Session,
+    user_id: str,
+    name: str,
+    public_key: str,
+    salt: str,
+) -> User:
+    """Create a minimal user record with pre-determined id and salt.
+
+    Used for device bootstrap only — the caller must ensure the user_id
+    does not already exist.  Unlike ``create_user``, this accepts an
+    explicit id and salt so the user can re-derive their key on a new
+    device via ``account recover``.
+    """
+    u = User(
+        id=user_id,
+        name=name,
+        public_key=public_key,
+        salt=salt,
+    )
+    session.add(u)
+    session.flush()
+    return u
+
+
 def get_user(session: Session, user_id: str) -> User | None:
     """Return a user by ID, or None."""
     return session.get(User, user_id)

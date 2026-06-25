@@ -64,6 +64,7 @@ from peerpedia_core.commands.articles import (
     count_articles,
     create_article_with_content,
     delete_article,
+    diff_article,
     fork_article,
     get_article,
     get_author_ids,
@@ -77,18 +78,22 @@ from peerpedia_core.commands.bookmarks import add_bookmark, get_bookmarks_for_us
 from peerpedia_core.frontmatter import parse_frontmatter
 from peerpedia_core.commands.maintainers import (
     add_maintainer_to_article,
+    consent_to_publish,
     list_maintainers,
     remove_maintainer_from_article,
+    revoke_publish_consent,
 )
 from peerpedia_core.commands.merge import accept_merge, create_merge_proposal, withdraw_merge_proposal
-from peerpedia_core.commands.reviews import get_reviews_for_article, submit_review
+from peerpedia_core.commands.reviews import get_reviews_for_article, submit_reply, submit_review
 from peerpedia_core.commands.shares import (
     add_share, get_feed_shares, get_shares_for_user, remove_share,
 )
 from peerpedia_core.commands.bundle import apply_sync_bundle, assert_article_integrity, sync_reviews_from_worktree
 from peerpedia_core.commands.users import (
     create_user,
+    create_user_stub,
     follow_user,
+    list_users,
     get_followers,
     get_following,
     get_user,
@@ -121,6 +126,12 @@ from peerpedia_core.commands.discover import (
     merge_shares,
     merge_users,
 )
+from peerpedia_core.commands.notifications import (
+    count_unread,
+    create_notification,
+    get_notifications,
+    mark_read,
+)
 
 # TODO(citation-system): three independent subsystems, ordered by dependency:
 #
@@ -147,12 +158,9 @@ from peerpedia_core.commands.discover import (
 #   CRUD (crud_citation.py) is fully implemented and tested.  The missing
 #   pieces are all above it: bib parsing, @key resolution, probability
 #   accumulation.  Without those three, the Citation table is inert.
-# TODO(notification-system): there is no notification mechanism — no event
-# table, no polling endpoint, no push.  Users are unaware of: reviews on
-# their articles, merge proposals targeting their articles, new followers,
-# articles they follow being published, or sedimentation expiry.  A P2P
-# notification system is complex, but a local event table with a
-# ``peerpedia notifications`` CLI command is a feasible first step.
+# TODO(notification-system): local notifications implemented (model + CRUD +
+# CLI + 4 emission points).  Next: P2P push — sync read status and push
+# notifications to peers so users on other devices see them.
 
 from peerpedia_core.config.paths import ARTICLES_DIR
 from peerpedia_core.storage.db import db_repl_setup as _db_repl_setup

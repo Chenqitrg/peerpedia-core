@@ -78,6 +78,40 @@ def display_user(name: str, affiliation: str, expertise: list[str], reputation: 
     _print_panel("User", body)
 
 
+def display_diff(diff_text: str, stats: dict) -> None:
+    """Render a unified diff with GitHub-style colorization.
+
+    + lines: green, - lines: red, @@ hunk headers: bold cyan,
+    file/index lines: bold, context: dim.
+    """
+    totals = stats.get("total", {})
+    ins = totals.get("insertions", 0)
+    dels = totals.get("deletions", 0)
+    files = stats.get("files", [])
+
+    header = f"[bold]{', '.join(files)}[/]  " if files else ""
+    header += f"[success]+{ins}[/]  [error]-{dels}[/]"
+    console.print()
+    console.print(Panel(header, title="Diff", border_style="muted", title_align="left"))
+    console.print()
+
+    for line in diff_text.split("\n"):
+        if line.startswith("@@") and line.rstrip().endswith("@@"):
+            console.print(f"[bold cyan]{line}[/]")
+        elif line.startswith("+++") or line.startswith("---"):
+            console.print(f"[bold]{line}[/]")
+        elif line.startswith("diff --git") or line.startswith("index "):
+            console.print(f"[bold]{line}[/]")
+        elif line.startswith("+") and not line.startswith("+++"):
+            console.print(f"[green]{line}[/]")
+        elif line.startswith("-") and not line.startswith("---"):
+            console.print(f"[red]{line}[/]")
+        else:
+            console.print(f"[dim]{line}[/]", markup=False)
+
+    console.print()
+
+
 def _stars(score: dict | None, dims: list[str] | None = None) -> str:
     """Render 5-dim scores as stars, e.g. ★★★★☆ 4/5."""
     if not score:

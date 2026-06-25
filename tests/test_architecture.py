@@ -183,15 +183,21 @@ def test_storage_db_and_git_backend_never_import_each_other():
                     raise AssertionError(f"{rel}: imports storage.db — db and git_backend are separate")
 
 
-def test_policies_only_imports_models_and_exceptions():
+def test_policies_only_imports_allowed_modules():
+    """Policies may import models, exceptions, and types/scores (dimension constants)."""
+    _ALLOWED = {
+        "peerpedia_core.storage.db.models",
+        "peerpedia_core.exceptions",
+        "peerpedia_core.types.scores",
+    }
     for f in _all_modules():
         rel = _rel(f)
         if "policies/" not in rel:
             continue
         for m in _imports_peerpedia_modules(f):
-            if "storage.db.models" not in m and "exceptions" not in m:
+            if m not in _ALLOWED:
                 raise AssertionError(
-                    f"{rel}: imports {m} — policies may only import models + exceptions"
+                    f"{rel}: imports {m} — policies may only import models, exceptions, types/scores"
                 )
 
 

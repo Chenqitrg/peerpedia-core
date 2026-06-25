@@ -12,9 +12,7 @@ count) lives in the database so it can be queried and aggregated.
 
 Pure local git — does not depend on bundle or sync modules.
 
-TODO(article-diff): expose a diff function for comparing two commits.
-git_backend already has all the primitives — this is pure wiring.  The old
-system had GET /articles/{id}/diff/{h1}/{h2}.
+Pure local git — does not depend on bundle or sync modules.
 
 **Hard constraint**: this module depends on GitPython + stdlib +
 ``peerpedia_core.config.paths`` (for ``ARTICLES_DIR``) and
@@ -78,11 +76,9 @@ def init_article_repo(repo_path: Path) -> Path:
     into without untracked-file conflicts.
 
     TODO(branch-protection): article repos use a single-mainline model —
-    collaboration is via fork + merge proposal, not branches.  GitHub's
-    branch model exists for shared-repo teamwork; PeerPedia's model is
-    one-repo-per-author with fork-based contribution.  Instead of preventing
-    branch creation, the simpler fix is: sync protocol only reads/writes
-    ``refs/heads/main``, silently ignoring other branches.  No hook needed.
+    collaboration is via fork + merge proposal, not branches.  Sync protocol
+    operates on commit hashes (no branch refs).  ``merge_git_repos`` pins to
+    ``refs/heads/main`` on the fork remote.  No git hook needed.
     """
     repo_path.mkdir(parents=True, exist_ok=True)
     repo = git.Repo.init(repo_path)
@@ -404,8 +400,14 @@ def merge_git_repos(target: Path, fork: Path, author_name: str) -> str:
         target_repo.create_remote(remote_name, str(fork))
         target_repo.git.fetch(remote_name)
 
-        # Fork repos have exactly one branch — take the first remote ref
-        fork_ref = target_repo.remotes[remote_name].refs[0]
+        # Pin to main branch — single-mainline model, ignore other branches.
+        refs = [r for r in target_repo.remotes[remote_name].refs if r.name.endswith("/main")]
+        if not refs:
+            raise MergeConflictError(
+                f"Fork repo {fork.name} has no main branch — "
+                "only single-mainline repos are supported"
+            )
+        fork_ref = refs[0]
 
         # Set committer via env so the merge commit has a predictable author
         # rather than inheriting the system git config.

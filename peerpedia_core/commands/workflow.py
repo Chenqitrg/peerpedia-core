@@ -65,6 +65,12 @@ from peerpedia_core.workflow.reputation import (
 )
 from peerpedia_core.workflow.scoring import aggregate_review_scores
 from peerpedia_core.workflow.sedimentation import apply_no_review_penalty, is_ready_to_publish
+from peerpedia_core.workflow.state import (
+    ArticleSnapshot,
+    ReputationState,
+    ReviewSnapshot,
+    UserSnapshot,
+)
 
 
 def publish_ready_articles(db: Session) -> int:
@@ -185,6 +191,64 @@ def recompute_article_score(db: Session, article_id: str) -> dict | None:
     return score
 
 
+def extract_state(db: Session, user_id: str) -> ReputationState:
+    """Build an immutable snapshot of the data needed to compute reputation.
+
+    This is the ONLY place where reputation computation touches the database.
+    All pure-algorithm functions consume ``ReputationState`` — never a Session.
+    """
+    user = get_user(db, user_id)
+    if user is None:
+        raise ValueError(f"User not found: {user_id}")
+
+    # Gather all articles by this user (needed for compute_reputation).
+    articles = get_articles_by_author(db, user_id)
+    article_ids = {a.id for a in articles}
+    article_map: dict[str, ArticleSnapshot] = {}
+    reviews_map: dict[str, tuple[ReviewSnapshot, ...]] = {}
+
+    for a in articles:
+        authors = get_author_ids(db, a.id)
+        all_reviews = get_reviews_for_article(db, a.id)
+        review_count = len(all_reviews)
+
+        article_map[a.id] = ArticleSnapshot(
+            id=a.id,
+            score=a.score,
+            status=a.status,
+            author_ids=tuple(authors),
+            review_count=review_count,
+        )
+
+        reviews_map[a.id] = tuple(
+            ReviewSnapshot(
+                reviewer_id=r.reviewer_id,
+                scores=r.scores,
+                is_self=r.reviewer_id in authors,
+                scope=r.scope,
+            )
+            for r in all_reviews
+        )
+
+    # Gather user snapshots (author + reviewer reputations for weighting).
+    reviewer_ids: set[str] = set()
+    for revs in reviews_map.values():
+        for r in revs:
+            reviewer_ids.add(r.reviewer_id)
+    all_user_ids = {user_id} | reviewer_ids
+    user_rows = get_users_by_ids(db, all_user_ids)
+    user_map = {
+        u.id: UserSnapshot(id=u.id, reputation=u.reputation if u.reputation else None)
+        for u in user_rows
+    }
+
+    return ReputationState(
+        articles=article_map,
+        reviews=reviews_map,
+        users=user_map,
+    )
+
+
 def recompute_author_reputation(db: Session, user_id: str, *, user=None) -> ReputationScores:
     """Compute and persist a blended reputation for *user_id*.
 
@@ -198,13 +262,8 @@ def recompute_author_reputation(db: Session, user_id: str, *, user=None) -> Repu
     if user is None:
         raise ValueError(f"User not found: {user_id}")
 
-    articles = get_articles_by_author(db, user_id)
-    article_dicts = [
-        {"score": a.score, "status": a.status}
-        for a in articles
-    ]
-
-    new_rep = compute_reputation(article_dicts)
+    state = extract_state(db, user_id)
+    new_rep = compute_reputation(state, user_id)
     existing_rep = user.reputation if user.reputation else {}
     blended = blend_reputation(existing_rep, new_rep)
 

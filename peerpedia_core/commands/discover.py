@@ -104,10 +104,6 @@ def merge_follows(
         added += 1
 
     if authoritative:
-        # TODO(data-loss-01): when remote_ids is empty (home server returns []),
-        # ALL local follows are soft-deleted — a transient server bug wipes the
-        # entire social graph.  Guard: skip deletion when the remote set is
-        # empty to prevent catastrophic data loss from a buggy server response.
         if remote_ids:
             # Soft-delete local follows not present in the authoritative list.
             local_follows = (

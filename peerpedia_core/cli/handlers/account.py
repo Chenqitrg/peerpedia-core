@@ -1,11 +1,10 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""Account commands — register, login, recover, whoami.
+"""Account commands — register, login, recover, whoami, bootstrap.
 
-TODO(multi-device): ``account login`` on a new device.  Currently session
-is a local file; multi-device needs the recovered private key + P2P identity
-sync (social graph transport, not git bundle).
+TODO(multi-device): ``account login`` on a new device now has the bootstrap
+flow — ``account bootstrap --from <json>`` then ``account recover``.
 """
 
 from __future__ import annotations
@@ -17,7 +16,7 @@ from peerpedia_core.cli.helpers import (
 )
 from peerpedia_core.cli.display import display_user as _render_user, console
 from peerpedia_core.commands import (
-    create_user, get_user_by_name, search_users,
+    create_user, create_user_stub, get_user, get_user_by_name, search_users,
     update_user_salt,
 )
 from peerpedia_core.crypto import derive_key_pair, new_salt
@@ -102,18 +101,35 @@ def _cmd_recover(db, args):
 
     Re-derives the key pair deterministically (scrypt + Ed25519) and
     writes the session file.  Works on any device — the user only needs
-    their password; the salt is fetched from the local DB (synced via P2P).
+    their password; the salt is fetched from the local DB.
 
-    args: --name, --json
+    Specify the user by --name or --user-id.  If both are given, --user-id
+    takes precedence.  On a new device, bootstrap first with
+    ``account bootstrap`` to populate the local User record.
+
+    args: --name, --user-id, --json
     """
-
-    user = get_user_by_name(db, args.name)
-    if len(user) == 0:
-        _die(f"User '{args.name}' not found.")
-    if len(user) > 1:
-        _die(f"Multiple users named '{args.name}'. "
-             f"Use user ID to recover: {', '.join(u.id for u in user)}")
-    user = user[0]
+    if args.user_id:
+        user = get_user(db, args.user_id)
+        if user is None:
+            _die(f"User {args.user_id[:8]} not found locally. "
+                 "Bootstrap first with: peerpedia account bootstrap --from '<json>'")
+        if args.name:
+            import logging
+            logging.getLogger(__name__).warning(
+                "Both --name and --user-id given — using --user-id"
+            )
+    elif args.name:
+        user = get_user_by_name(db, args.name)
+        if len(user) == 0:
+            _die(f"User '{args.name}' not found locally. "
+                 "Bootstrap first with: peerpedia account bootstrap --from '<json>'")
+        if len(user) > 1:
+            _die(f"Multiple users named '{args.name}'. "
+                 f"Use --user-id to specify: {', '.join(u.id for u in user)}")
+        user = user[0]
+    else:
+        _die("Specify either --name or --user-id.")
 
     if user.salt is None:
         _die(f"User '{args.name}' has no stored salt — key was not derived. "
@@ -136,21 +152,132 @@ def _cmd_recover(db, args):
 def _cmd_whoami(db, args):
     """Show the currently logged-in user.
 
-    args: --json
+    args: --json, --verbose
     """
     session = _read_session()
     if session:
         user_id = session.get("user_id", "")
         name = session.get("name", "unknown")
-        if args.json:
-            _json_out({"user_id": user_id, "name": name})
+
+        if args.verbose:
+            user = get_user(db, user_id)
+            if user is None:
+                _die(f"User {user_id[:8]} not found in local DB. "
+                     "Run account recover first.")
+            extra = {
+                "user_id": user_id,
+                "name": name,
+                "public_key": user.public_key or "not set",
+                "salt": user.salt or "not set",
+            }
+            if args.json:
+                _json_out(extra)
+            else:
+                console.print(
+                    f"[accent]{name}[/] (id: {user_id[:8]})\n"
+                    f"Public key: {extra['public_key']}\n"
+                    f"Salt:       {extra['salt']}"
+                )
         else:
-            console.print(f"[accent]{name}[/] (id: {user_id[:8]})")
+            if args.json:
+                _json_out({"user_id": user_id, "name": name})
+            else:
+                console.print(f"[accent]{name}[/] (id: {user_id[:8]})")
     else:
         if args.json:
             _json_out({"status": "not logged in"})
         else:
             console.print("[muted]Not logged in. Use register or login.[/]")
+
+
+def _validate_bootstrap_json(data: dict) -> None:
+    """Validate the bootstrap JSON blob.  Dies with a clear message on failure."""
+    import uuid as _uuid
+
+    if not data.get("name"):
+        _die("Bootstrap JSON missing 'name' field.")
+    if not data.get("user_id"):
+        _die("Bootstrap JSON missing 'user_id' field.")
+    if not data.get("public_key"):
+        _die("Bootstrap JSON missing 'public_key' field.")
+    if not data.get("salt"):
+        _die("Bootstrap JSON missing 'salt' field.")
+
+    try:
+        _uuid.UUID(data["user_id"])
+    except (ValueError, AttributeError):
+        _die(f"Invalid user_id: {data['user_id']!r} — must be a valid UUID.")
+
+    pubkey = data["public_key"]
+    if len(pubkey) != 64:
+        _die(f"Invalid public_key length: {len(pubkey)} — must be 64 hex characters (32 bytes).")
+    try:
+        bytes.fromhex(pubkey)
+    except (ValueError, AttributeError):
+        _die(f"Invalid public_key: not valid hex.")
+
+    salt = data["salt"]
+    if len(salt) != 32:
+        _die(f"Invalid salt length: {len(salt)} — must be 32 hex characters (16 bytes).")
+    try:
+        bytes.fromhex(salt)
+    except (ValueError, AttributeError):
+        _die(f"Invalid salt: not valid hex.")
+
+
+@_with_db
+def _cmd_bootstrap(db, args):
+    """Create a minimal user stub on a new device for key recovery.
+
+    Takes a JSON blob (from ``account whoami --verbose --json`` on the
+    original device).  After bootstrap, run ``account recover`` to verify
+    the password and obtain a session.
+
+    args: --from, --peer, --json
+    """
+    import json as _json
+
+    try:
+        data = _json.loads(args.from_)
+    except _json.JSONDecodeError as e:
+        _die(f"Invalid JSON in --from: {e}")
+
+    _validate_bootstrap_json(data)
+
+    user_id = data["user_id"]
+    name = data["name"]
+    public_key = data["public_key"]
+    salt = data["salt"]
+
+    existing = get_user(db, user_id)
+    if existing is not None:
+        _die(f"User '{existing.name}' (id: {user_id[:8]}) already exists in local DB.")
+
+    create_user_stub(
+        db,
+        user_id=user_id,
+        name=name,
+        public_key=public_key,
+        salt=salt,
+    )
+    db.commit()
+
+    if args.json:
+        _json_out({"id": user_id, "name": name})
+    else:
+        _ok(f"Bootstrapped user [accent]{name}[/] (id: {user_id[:8]})")
+        console.print("Now run: [accent]peerpedia account recover --user-id "
+                       f"{user_id[:8]}[/] to verify your password.")
+
+    if args.peer:
+        if args.json:
+            _json_out({"id": user_id, "name": name,
+                       "peer_note": "Data sync not yet available — run `peerpedia sync pull` manually."})
+        else:
+            console.print(
+                f"[muted]Peer {args.peer}: data sync not yet available. "
+                "Run [accent]peerpedia sync pull <url>[/] manually.[/]"
+            )
 
 
 @_with_db

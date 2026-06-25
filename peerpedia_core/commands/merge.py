@@ -3,10 +3,6 @@
 
 r"""Merge orchestration — accept merge proposals and reconcile state.
 
-TODO(merge-notify): merge proposals should trigger a notification to the
-target article's maintainers.  Currently proposal creators must manually
-tell the target maintainer to run ``merge accept``.  Implement by writing
-an event to a notifications table; peers poll the event stream.
 
 Call graph::
 
@@ -59,6 +55,7 @@ from peerpedia_core.storage.db.crud_merge import (
 )
 from peerpedia_core.storage.db.crud_user import get_user
 from peerpedia_core.storage.db.crud_merge import create_merge_proposal as _create
+from peerpedia_core.commands.notifications import create_notification
 from peerpedia_core.storage.git_backend import (
     DEFAULT_ARTICLES_DIR, MergeConflictError, commit_status_marker,
     get_head_hash, merge_git_repos,
@@ -119,6 +116,13 @@ def accept_merge(db: Session, article_id: str, proposal_id: str, user_id: str) -
     mp = accept_merge_proposal(db, proposal_id)
     head_hash = get_head_hash(target_repo)
 
+    # Notify the proposer that their merge was accepted.
+    create_notification(
+        db, user_id=mp.proposer_id, event="merge_accepted",
+        message=f"{user.name} accepted your merge proposal",
+        article_id=article_id, actor_id=user_id,
+    )
+
     return {"id": article.id, "title": article.title, "status": article.status,
             "commit_hash": head_hash}
 
@@ -127,8 +131,21 @@ def accept_merge(db: Session, article_id: str, proposal_id: str, user_id: str) -
 
 
 def create_merge_proposal(db: Session, fork_id: str, target_id: str, proposer_id: str):
-    """Create a merge proposal from a fork to its original article."""
-    return _create(db, fork_id, target_id, proposer_id)
+    """Create a merge proposal and notify target article maintainers."""
+    proposer = get_user(db, proposer_id)
+    proposer_name = proposer.name if proposer else "A user"
+
+    mp = _create(db, fork_id, target_id, proposer_id)
+
+    mids = get_maintainer_ids(db, target_id)
+    for mid in mids:
+        if mid != proposer_id:
+            create_notification(
+                db, user_id=mid, event="merge_proposed",
+                message=f"{proposer_name} proposed merging a fork into your article",
+                article_id=target_id, actor_id=proposer_id,
+            )
+    return mp
 
 
 def withdraw_merge_proposal(db: Session, proposal_id: str, user_id: str) -> dict:

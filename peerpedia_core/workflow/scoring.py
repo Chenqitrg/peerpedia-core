@@ -20,8 +20,9 @@ Reviewer's checklist
 """
 
 from peerpedia_core.config.params import params
+from peerpedia_core.types.scores import SCORE_DIMENSIONS
 
-DIMS = ["originality", "rigor", "completeness", "pedagogy", "impact"]
+DIMS = list(SCORE_DIMENSIONS.values())  # derived, not hardcoded
 
 
 def aggregate_review_scores(
@@ -32,7 +33,7 @@ def aggregate_review_scores(
     """Compute weighted average score from a list of reviews.
 
     Each review is a dict with:
-        - scores: {originality, rigor, completeness, pedagogy, impact}
+        - scores: dict with keys from SCORE_DIMENSIONS.values()
         - is_self: bool (reviewer is article author)
         - reviewer_id: str (required when *reviewer_weights* is provided)
         - scope: str (optional, weighted by *scope_weights* if provided)

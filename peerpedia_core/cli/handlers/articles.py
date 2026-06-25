@@ -10,12 +10,13 @@ from peerpedia_core.cli.helpers import (
     _find_article_file, _open_editor,
     _prompt_commit_message, _parse_scores, _page, _ok, _die, _json_out,
 )
-from peerpedia_core.cli.display import console
+from peerpedia_core.cli.display import console, display_diff
 from peerpedia_core.cli.bundle_utils import _sync_server, _try_sync
 from peerpedia_core.social import discover_articles
 from peerpedia_core.commands import (
     assert_article_integrity, create_article_with_content,
-    get_article, get_article_view, get_author_ids_batch, list_article_views, list_articles, publish_article,
+    diff_article, get_article, get_article_view, get_author_ids_batch,
+    list_article_views, list_articles, publish_article,
     publish_ready_articles, delete_article, update_article_content, get_user,
 )
 
@@ -261,4 +262,21 @@ def _cmd_article_scan(db, args):
         _json_out({"published": count})
     else:
         _ok(f"Published [accent]{count}[/] article(s)")
+
+
+@_with_db
+def _cmd_article_diff(db, args):
+    """Diff two commits of an article.  Commits can be hashes, HEAD, or ~N.
+
+    args: id [positional], hash1 [positional], hash2 [positional], --json
+    """
+    try:
+        result = diff_article(args.id, args.hash1, args.hash2)
+    except (ValueError, FileNotFoundError) as e:
+        _die(str(e))
+
+    if args.json:
+        _json_out(result)
+    else:
+        display_diff(result["diff_text"], result["stats"])
         

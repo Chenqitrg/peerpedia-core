@@ -61,6 +61,7 @@ from typing import Optional
 
 from peerpedia_core.exceptions import BadRequestError, ConflictError, NotAuthorizedError
 from peerpedia_core.storage.db.models import Article, Review, User
+from peerpedia_core.types.scores import SCORE_DIMENSIONS
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Visibility rules
@@ -219,29 +220,43 @@ def assert_can_rollback_article(article: Article, maintainer_ids: list[str], use
     return article
 
 
+def _assert_all_maintainers_consented(article: Article, maintainer_ids: list[str]) -> None:
+    """Raise if not all maintainers have consented to publish/merge.
+
+    Single-maintainer articles are exempt — sole maintainer's action IS consent.
+    """
+    if len(maintainer_ids) <= 1:
+        return
+    consents = set(article.publish_consents or [])
+    missing = [m for m in maintainer_ids if m not in consents]
+    if missing:
+        raise NotAuthorizedError(
+            f"Unanimous consent required — {len(missing)} maintainer(s) "
+            f"have not yet consented. Use 'peerpedia maintainer consent'."
+        )
+
+
 def assert_can_publish_article(article: Article, maintainer_ids: list[str], user: User) -> Article:
-    """Raise if *user* is not a maintainer, or article is in sedimentation.
+    """Raise if *user* is not a maintainer, or unanimous consent is missing.
 
     Publishing transitions a draft article into the sedimentation pool
     for peer review.  Once in sedimentation, an article publishes
     automatically when the sink timer expires — manual re-publish is
     not allowed.
-
-    TODO: unanimous consent — all maintainers must confirm before publishing.
     """
     _assert_maintainer(article, maintainer_ids, user, "publish")
+    _assert_all_maintainers_consented(article, maintainer_ids)
     return article
 
 
 def assert_can_accept_merge(article: Article, maintainer_ids: list[str], user: User) -> Article:
-    """Raise if *user* is not a maintainer, or article is in sedimentation.
+    """Raise if *user* is not a maintainer, or unanimous consent is missing.
 
     Merge proposals can be accepted on draft or published articles.
     Sedimentation articles are immutable during peer review.
-
-    TODO: consent model — merge acceptance should require all maintainers.
     """
     _assert_maintainer(article, maintainer_ids, user, "accept merge")
+    _assert_all_maintainers_consented(article, maintainer_ids)
     return article
 
 
@@ -254,6 +269,20 @@ def assert_can_submit_review(article: Article) -> Article:
     if article.status in ("sedimentation", "published"):
         return article
     raise NotAuthorizedError("Cannot review a draft article")
+
+
+def assert_can_reply_to_review(article: Article, maintainer_ids: list[str], user: User) -> Article:
+    """Raise if *user* (an author) cannot reply to reviews on *article*.
+
+    Authors can reply to reviews during sedimentation and after publication.
+    Only maintainers (authors) of the article can reply.
+    """
+    assert_not_folded(article)
+    if article.status not in ("sedimentation", "published"):
+        raise NotAuthorizedError("Cannot reply to reviews on a draft article")
+    if user.id not in maintainer_ids:
+        raise NotAuthorizedError("Only article authors can reply to reviews")
+    return article
 
 
 def assert_can_extend_sink(article: Article, maintainer_ids: list[str], user: User) -> Article:
@@ -307,13 +336,10 @@ def assert_can_fork_article(
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # Abbreviated keys (CLI input) and full-name keys (internal representation).
-# Must mirror SCORE_DIMENSIONS in peerpedia_core.types.scores — hardcoded
-# here because this module is architecturally restricted to importing only
-# models + exceptions (see test_policies_only_imports_models_and_exceptions).
-# If dimensions change, update both places.
-_FULL_DIMS = {"originality", "rigor", "completeness", "pedagogy", "impact"}
-_ABBR_DIMS = {"orig", "rigor", "comp", "ped", "imp"}
-
+# Derived from SCORE_DIMENSIONS (types/scores.py) — single source of truth.
+_FULL_DIMS = set(SCORE_DIMENSIONS.values())
+_ABBR_DIMS = set(SCORE_DIMENSIONS.keys())
+_DIMS_LIST = ", ".join(sorted(SCORE_DIMENSIONS.keys()))
 
 def validate_self_review_scores(self_review: dict) -> None:
     """Validate self-review scores BEFORE any mutations.
@@ -326,8 +352,8 @@ def validate_self_review_scores(self_review: dict) -> None:
     keys = set(self_review.keys())
     if not (_ABBR_DIMS.issubset(keys) or _FULL_DIMS.issubset(keys)):
         raise BadRequestError(
-            "self_review must contain all 5 dimensions: "
-            "orig, rigor, comp, ped, imp"
+            f"self_review must contain all {len(SCORE_DIMENSIONS)} dimensions: "
+            f"{_DIMS_LIST}"
         )
     for dim, val in self_review.items():
         if not isinstance(val, (int, float)) or val < 1 or val > 5:

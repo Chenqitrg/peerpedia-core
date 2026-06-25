@@ -42,6 +42,7 @@ def _with_db(func):
 
     @functools.wraps(func)
     def wrapper(args):
+        global _data_dir_ready
         if not _data_dir_ready:
             DB_PATH.parent.mkdir(parents=True, exist_ok=True)
             _data_dir_ready = True

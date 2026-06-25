@@ -3,16 +3,11 @@
 
 r"""Review orchestration — submit reviews and write review files to git.
 
-TODO(review-feedback): after a review, the reviewer should be notified when
-the article publishes (outcome feedback loop).  Currently a reviewer writes
-a review and never learns whether their input mattered.
+review-feedback: reviewers are notified when the article publishes
+(see publish_article → get_reviews_for_article → create_notification).
 
-TODO(author-rebuttal): after receiving reviews, the author should be able to
-write a formal rebuttal — a structured point-by-point response to each review,
-stored in the git repo under the reviewer's directory (reviews/{id}/threads/).
-This is standard in academic peer review: author responds, reviewers discuss,
-editor decides.  Currently the review is one-way and final — no author
-response path exists.
+author-rebuttal / author-reply: implemented — authors can reply to reviews
+via submit_reply(), which posts to the review thread with a [reply] marker.
 
 Call graph::
 
@@ -63,14 +58,18 @@ from peerpedia_core.storage.db import Session
 
 from peerpedia_core.config.params import params
 from peerpedia_core.exceptions import ConflictError, NotFoundError
-from peerpedia_core.policies.articles import assert_can_submit_review, assert_not_folded
+from peerpedia_core.policies.articles import (
+    assert_can_reply_to_review, assert_can_submit_review, assert_not_folded,
+)
 from peerpedia_core.storage.db.crud_article import get_article, get_author_ids
+from peerpedia_core.storage.db.crud_maintainer import get_maintainer_ids
 from peerpedia_core.storage.db.crud_review import get_reviews_for_article as _get, upsert_review
 from peerpedia_core.storage.db.crud_user import derive_anonymous_name, get_user
 from peerpedia_core.crypto import write_key_to_tempfile
 from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, commit_article
 from peerpedia_core.storage.locks import get_article_lock
 from peerpedia_core.commands.workflow import recompute_article_score, recompute_author_reputation
+from peerpedia_core.commands.notifications import create_notification
 
 
 def submit_review(
@@ -122,7 +121,7 @@ def submit_review(
 
     r = upsert_review(
         db, article_id=article_id, commit_hash=commit_hash,
-        reviewer_id=reviewer_id, scores=scores, comment=comment,
+        reviewer_id=reviewer_id, scores=scores,
     )
 
     recompute_article_score(db, article_id)
@@ -130,16 +129,76 @@ def submit_review(
     for aid in author_ids:
         recompute_author_reputation(db, aid)
 
-    # TODO(author-reply): authors cannot reply to reviews.  The reply should
-    # be written to the reviewer's directory in the git repo (e.g.
-    # reviews/{anon_id}/threads/{timestamp}-reply.md), forming a complete
-    # conversation record.  The old system had a Review.thread field and a
-    # POST .../reviews/{id}/messages endpoint for this.
-    #
-    # TODO(review-update): reviews are immutable after submission.  Reviewers
-    # cannot correct scores or update comments if they discover an error.
+    # Notify article authors about the new review (exclude self-review).
+    for aid in author_ids:
+        if aid != reviewer_id:
+            create_notification(
+                db, user_id=aid, event="review_submitted",
+                message=f"{user.name} submitted a review on your article",
+                article_id=article_id, actor_id=reviewer_id,
+            )
 
     return {"review_id": r.id, "scores": r.scores, "commit_hash": commit_hash}
+
+
+def submit_reply(
+    db: Session,
+    article_id: str,
+    user_id: str,
+    reviewer_ref: str,
+    content: str,
+    *,
+    signing_key_bytes: bytes | None = None,
+    pubkey_hex: str | None = None,
+) -> dict:
+    """Post an author reply to a review thread.  Git-first — committed to the
+    reviewer's directory under ``threads/{nnn}.md`` with a ``[reply]`` marker.
+
+    *reviewer_ref* is the reviewer's user ID (real UUID for published articles,
+    or the target reviewer UUID for sedimentation — the directory ID is derived
+    from this).
+
+    Notifies the reviewer via the notification system.
+    """
+    user = get_user(db, user_id)
+    if user is None:
+        raise NotFoundError("User not found")
+
+    article = get_article(db, article_id)
+    if article is None:
+        raise NotFoundError("Article not found")
+
+    reviewer = get_user(db, reviewer_ref)
+    if reviewer is None:
+        raise NotFoundError("Reviewer not found")
+
+    mids = get_maintainer_ids(db, article_id)
+    assert_can_reply_to_review(article, mids, user)
+
+    if article.status == "sedimentation":
+        directory_id = _derive_anonymous_id(article_id, reviewer_ref)
+        display_name = derive_anonymous_name(directory_id)
+        email = f"anon-{directory_id}@peerpedia"
+    else:
+        directory_id = reviewer_ref
+        display_name = user.name
+        email = f"{user_id}@peerpedia"
+
+    commit_hash = _write_thread_message(
+        article_id, directory_id, content, display_name, email,
+        commit_marker="[reply]",
+        signing_key_bytes=signing_key_bytes, pubkey_hex=pubkey_hex,
+    )
+
+    create_notification(
+        db, user_id=reviewer_ref, event="review_reply",
+        message=f"{user.name} replied to your review",
+        article_id=article_id, actor_id=user_id,
+    )
+
+    return {"article_id": article_id, "directory_id": directory_id,
+            "commit_hash": commit_hash}
+
 
 
 def _derive_anonymous_id(article_id: str, reviewer_id: str) -> str:
@@ -153,6 +212,55 @@ def _derive_anonymous_id(article_id: str, reviewer_id: str) -> str:
     return hashlib.sha256(seed.encode()).hexdigest()[:12]
 
 
+def _write_thread_message(
+    article_id: str,
+    directory_id: str,
+    content: str,
+    display_name: str,
+    email: str,
+    commit_marker: str,
+    *,
+    signing_key_bytes: bytes | None = None,
+    pubkey_hex: str | None = None,
+) -> str:
+    """Append a message to the review thread.  Returns the new HEAD commit hash.
+
+    *commit_marker* is ``"[review]"`` for reviewer messages or ``"[reply]"``
+    for author replies.
+    """
+    rp = DEFAULT_ARTICLES_DIR / article_id
+    if not (rp / ".git").is_dir():
+        raise NotFoundError(f"Article repo not found: {article_id}")
+
+    threads_dir = rp / "reviews" / directory_id / "threads"
+    threads_dir.mkdir(parents=True, exist_ok=True)
+
+    existing = sorted(threads_dir.glob("*.md"))
+    next_num = len(existing) + 1
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    thread_path = threads_dir / f"{next_num:03d}.md"
+    thread_path.write_text(f"### {display_name} ({ts})\n\n{content}\n")
+
+    lock = get_article_lock(article_id)
+    acquired = lock.acquire(timeout=10)
+    if not acquired:
+        raise ConflictError("Article busy — retry later")
+
+    try:
+        key_path = write_key_to_tempfile(signing_key_bytes) if signing_key_bytes else None
+        try:
+            h = commit_article(
+                rp, f"{commit_marker} {display_name}", display_name, email,
+                signing_key=key_path, pubkey_hex=pubkey_hex,
+            )
+        finally:
+            if key_path:
+                key_path.unlink(missing_ok=True)
+    finally:
+        lock.release()
+    return h
+
+
 def write_review_to_git(
     article_id: str,
     directory_id: str,
@@ -163,39 +271,29 @@ def write_review_to_git(
     signing_key_bytes: bytes | None = None,
     pubkey_hex: str | None = None,
 ) -> str:
-    """Write review to git: a folder per reviewer with ``scores.json`` and
-    a ``threads/`` subdirectory of timestamped Markdown files.
-
-    *directory_id* is the real reviewer_id for published reviews, or a
-    derived anonymous ID for sedimentation reviews.
-
-    Returns the new HEAD commit hash.
-    """
+    """Write review to git: scores.json + thread message.  Returns HEAD hash."""
     rp = DEFAULT_ARTICLES_DIR / article_id
     if not (rp / ".git").is_dir():
         raise NotFoundError(f"Article repo not found: {article_id}")
 
     review_dir = rp / "reviews" / directory_id
-    threads_dir = review_dir / "threads"
-    threads_dir.mkdir(parents=True, exist_ok=True)
+    review_dir.mkdir(parents=True, exist_ok=True)
 
     # Scores: always overwrite with latest.
     (review_dir / "scores.json").write_text(json.dumps(scores, indent=2))
 
-    # Comment: create a new numbered thread file.
     if comment:
-        existing = sorted(threads_dir.glob("*.md"))
-        next_num = len(existing) + 1
-        ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        thread_path = threads_dir / f"{next_num:03d}.md"
-        thread_path.write_text(f"### {display_name} ({ts})\n\n{comment}\n")
+        return _write_thread_message(
+            article_id, directory_id, comment, display_name, email,
+            commit_marker="[review]",
+            signing_key_bytes=signing_key_bytes, pubkey_hex=pubkey_hex,
+        )
 
-    # Lock for commit.
+    # Comment-less review — still need to commit scores.json.
     lock = get_article_lock(article_id)
     acquired = lock.acquire(timeout=10)
     if not acquired:
         raise ConflictError("Article busy — retry later")
-
     try:
         key_path = write_key_to_tempfile(signing_key_bytes) if signing_key_bytes else None
         try:

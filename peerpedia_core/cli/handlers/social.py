@@ -34,7 +34,7 @@ def _pull_social(db, user_id: str) -> None:
     """
     server = os.environ.get("PEERPEDIA_SERVER")
     if not server:
-        console.print("[dim]⚠ No PEERPEDIA_SERVER set — social pull skipped.[/]")
+        console.print("[warning]⚠ No PEERPEDIA_SERVER set — social pull skipped. Set with: export PEERPEDIA_SERVER=https://your-peer.example.com[/]")
         return
     try:
         discover_following(db, server, user_id)
@@ -42,7 +42,7 @@ def _pull_social(db, user_id: str) -> None:
         discover_articles(db, server, user_id)
         discover_shares(db, server, user_id)
     except Exception as e:
-        console.print(f"[dim]⚠ Social pull from {server} failed: {e}[/]")
+        console.print(f"[warning]⚠ Social pull from {server} failed: {e}[/]")
 
 
 def _push_social(action: str, **kwargs) -> None:
@@ -54,7 +54,7 @@ def _push_social(action: str, **kwargs) -> None:
     """
     server = os.environ.get("PEERPEDIA_SERVER")
     if not server:
-        console.print("[dim]⚠ No PEERPEDIA_SERVER set — social push skipped.[/]")
+        console.print("[warning]⚠ No PEERPEDIA_SERVER set — social push skipped. Set with: export PEERPEDIA_SERVER=https://your-peer.example.com[/]")
         return
     try:
         key = _get_session_key()
@@ -65,7 +65,7 @@ def _push_social(action: str, **kwargs) -> None:
             push_unfollow(server, kwargs["follower_id"], kwargs["followed_id"],
                           private_key_bytes=key)
     except Exception as e:
-        console.print(f"[dim]⚠ Social sync ({action}) to {server} failed: {e}[/]")
+        console.print(f"[warning]⚠ Social sync ({action}) to {server} failed: {e}[/]")
 
 
 def _push_share(article_id: str, sharer_id: str, recipient_id: str | None = None,
@@ -76,7 +76,7 @@ def _push_share(article_id: str, sharer_id: str, recipient_id: str | None = None
     """
     server = os.environ.get("PEERPEDIA_SERVER")
     if not server:
-        console.print("[dim]⚠ No PEERPEDIA_SERVER set — share push skipped.[/]")
+        console.print("[warning]⚠ No PEERPEDIA_SERVER set — share push skipped. Set with: export PEERPEDIA_SERVER=https://your-peer.example.com[/]")
         return
     try:
         key = _get_session_key()
@@ -88,7 +88,7 @@ def _push_share(article_id: str, sharer_id: str, recipient_id: str | None = None
                        recipient_id=recipient_id, comment=comment,
                        private_key_bytes=key)
     except Exception as e:
-        console.print(f"[dim]⚠ Share push to {server} failed: {e}[/]")
+        console.print(f"[warning]⚠ Share push to {server} failed: {e}[/]")
 
 
 @_with_db
@@ -178,7 +178,7 @@ def _cmd_bookmark_add(db, args):
                     )
             except Exception as e:
                 console.print(
-                    f"[dim]⚠ Could not pull metadata for {article_id[:8]}: {e}[/]"
+                    f"[warning]⚠ Could not pull metadata for {article_id[:8]}: {e}[/]"
                 )
 
     if args.json:

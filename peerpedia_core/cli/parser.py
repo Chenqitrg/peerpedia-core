@@ -12,24 +12,27 @@ from __future__ import annotations
 import argparse
 
 from peerpedia_core.cli.handlers import (
-    _cmd_article_create, _cmd_article_delete, _cmd_article_edit,
+    _cmd_article_create, _cmd_article_delete, _cmd_article_diff, _cmd_article_edit,
     _cmd_article_list,
     _cmd_article_publish, _cmd_article_scan,
     _cmd_article_show,
     _cmd_alias_list, _cmd_alias_remove, _cmd_alias_set,
     _cmd_bookmark_add, _cmd_bookmark_remove,
     _cmd_follow_user, _cmd_followers, _cmd_following, _cmd_unfollow_user,
+    _cmd_bootstrap,
     _cmd_compile,
     _cmd_fork,
     _cmd_account_search,
     _cmd_login,
     _cmd_recover,
-    _cmd_maintainer_add, _cmd_maintainer_list, _cmd_maintainer_remove,
+    _cmd_maintainer_add, _cmd_maintainer_consent, _cmd_maintainer_list,
+    _cmd_maintainer_remove, _cmd_maintainer_revoke,
     _cmd_merge_accept, _cmd_merge_propose, _cmd_merge_withdraw,
+    _cmd_notifications, _cmd_notification_read,
     _cmd_share_add, _cmd_share_list, _cmd_share_remove,
     _cmd_mother,
     _cmd_register,
-    _cmd_review_list, _cmd_review_submit,
+    _cmd_review_list, _cmd_review_reply, _cmd_review_submit,
     _cmd_server_start,
     _cmd_sync_pull, _cmd_sync_push, _cmd_sync_status,
     _cmd_whoami,
@@ -71,9 +74,17 @@ COMMAND_GROUPS = [
             (("--name",), {"required": True, "help": "Your display name"}),
         ]),
         ("recover", _cmd_recover, [
-            (("--name",), {"required": True, "help": "Your display name"}),
+            (("--name",), {"help": "Your display name"}),
+            (("--user-id",), {"help": "Your user ID (UUID)"}),
         ]),
-        ("whoami", _cmd_whoami, []),
+        ("whoami", _cmd_whoami, [
+            (("--verbose",), {"action": "store_true", "help": "Show user ID, public key, and salt for device bootstrap"}),
+        ]),
+        ("bootstrap", _cmd_bootstrap, [
+            (("--from",), {"required": True, "dest": "from_", "metavar": "JSON",
+             "help": "JSON blob from 'account whoami --verbose --json'"}),
+            (("--peer",), {"help": "Peer URL for data sync after bootstrap"}),
+        ]),
         ("search", _cmd_account_search, [
             (("query",), {"help": "Search query (partial name, case-insensitive)"}),
         ]),
@@ -118,8 +129,13 @@ COMMAND_GROUPS = [
             (("id",), {"help": "Article ID (or prefix)"}),
         ]),
         ("scan", _cmd_article_scan, []),
+        ("diff", _cmd_article_diff, [
+            (("id",), {"help": "Article ID (or prefix)"}),
+            (("hash1",), {"help": "Old commit (hash, HEAD, or ~N)"}),
+            (("hash2",), {"help": "New commit (hash, HEAD, or ~N)"}),
+        ]),
     ]),
-    ("review", None, [
+    ("review", "Submit and list peer reviews", [
         ("submit", _cmd_review_submit, [
             (("article_id",), {"help": "Article ID (or prefix)"}),
             (("--scores",), {"required": True,
@@ -131,8 +147,12 @@ COMMAND_GROUPS = [
             (("--show",), {"choices": ["meta", "full"], "default": "meta",
                            "help": "Display: meta (scores, default) or full (scores + threads)"}),
         ]),
+        ("reply", _cmd_review_reply, [
+            (("article_id",), {"help": "Article ID (or prefix)"}),
+            (("--to",), {"required": True, "help": "Reviewer (@name, UUID, or prefix) to reply to"}),
+        ]),
     ]),
-    ("merge", None, [
+    ("merge", "Propose, accept, or withdraw merge proposals", [
         ("propose", _cmd_merge_propose, [
             (("fork_id",), {"help": "Your fork's article ID"}),
             (("--target",), {"required": True, "help": "Original article ID to merge into"}),
@@ -168,7 +188,7 @@ COMMAND_GROUPS = [
             (("article_id",), {"help": "Article ID to unshare"}),
         ]),
     ]),
-    ("bookmark", None, [
+    ("bookmark", "Bookmark articles for later reading", [
         ("add", _cmd_bookmark_add, [
             (("article_id",), {"help": "Article ID (or prefix)"}),
         ]),
@@ -176,14 +196,14 @@ COMMAND_GROUPS = [
             (("article_id",), {"help": "Article ID (or prefix)"}),
         ]),
     ]),
-    ("following", None, [
+    ("following", "View who a user follows", [
         ("", _cmd_following, [
             (("--user",), {"required": True, "help": "User ID to query"}),
             (("--local",), {"action": "store_true", "help": "Read from local DB"}),
             (("--server",), {"help": "Peer server URL"}),
         ]),
     ]),
-    ("followers", None, [
+    ("followers", "View who follows a user", [
         ("", _cmd_followers, [
             (("--user",), {"required": True, "help": "User ID to query"}),
             (("--local",), {"action": "store_true", "help": "Read from local DB"}),
@@ -196,7 +216,7 @@ COMMAND_GROUPS = [
             (("--port",), {"default": 8080, "type": int, "help": "Listen port"}),
         ]),
     ]),
-    ("sync", None, [
+    ("sync", "Push/pull articles to/from a peer server", [
         ("status", _cmd_sync_status, [
             (("--server",), {"help": "Peer server URL (or set PEERPEDIA_SERVER env var)"}),
         ]),
@@ -212,7 +232,15 @@ COMMAND_GROUPS = [
         # local commit via _push_social(); a future ``sync social push`` command
         # would batch offline social changes.
     ]),
-    ("maintainer", None, [
+    ("notifications", "View and manage notifications", [
+        ("", _cmd_notifications, [
+            (("--all",), {"action": "store_true", "help": "Show all notifications (not just unread)"}),
+        ]),
+        ("read", _cmd_notification_read, [
+            (("notification_id",), {"help": "Notification ID to mark as read"}),
+        ]),
+    ]),
+    ("maintainer", "Manage article co-authors (maintainers)", [
         ("add", _cmd_maintainer_add, [
             (("article_id",), {"help": "Article ID"}),
             (("--target-user",), {"required": True, "help": "User ID to add as maintainer"}),
@@ -223,6 +251,12 @@ COMMAND_GROUPS = [
         ]),
         ("list", _cmd_maintainer_list, [
             (("article_id",), {"help": "Article ID"}),
+        ]),
+        ("consent", _cmd_maintainer_consent, [
+            (("article_id",), {"help": "Article ID to consent to publish/merge"}),
+        ]),
+        ("revoke", _cmd_maintainer_revoke, [
+            (("article_id",), {"help": "Article ID to revoke consent"}),
         ]),
     ]),
 ]
@@ -252,28 +286,6 @@ TOP_LEVEL = [
 
 
 def build_parser() -> argparse.ArgumentParser:
-    # TODO(release): README + install guide — currently zero onboarding docs.
-    # TODO(release): pip install smoke test — verify deps are declared correctly.
-    # TODO(release): data migration — schema evolves, need upgrade path for users.
-    # TODO(ux-onboarding): first-run wizard — register + create first article flow.
-    # TODO(ux-onboarding): group commands in --help (Account / Article / Review).
-    # TODO(ux-network): social pull is manual — after ``follow`` the user must
-    #   explicitly run ``following --server`` to see the followed user's content.
-    #   Auto-pull on follow.
-    # TODO(ux-discovery): no way to discover peers — users must know a peer's
-    #   URL and user_id out-of-band.  Add a ``peerpedia discover`` command that
-    #   suggests peers based on the social graph.
-    # TODO(ux-feedback): commands that push to a remote server (follow, bookmark)
-    #   succeed silently even if the server is unreachable — the push is
-    #   best-effort with a dim warning.  Surface network errors more visibly
-    #   so users know their changes haven't propagated.
-    # TODO(ux-history): no browsing history — after reading an article, there is
-    #   no record of what you've read.  Add a read-history log so users can
-    #   revisit recently-viewed articles and avoid losing track of papers.
-    # Share/forward is implemented (crud_share.py, commands/shares.py,
-    #   cli/handlers/social.py — peerpedia share add/list/remove).
-    #   TODO(share-p2p): push shares to servers so followers on other peers
-    #   can see shares in their feed.  Currently shares are local-only.
     import importlib.metadata
 
     try:
@@ -281,8 +293,28 @@ def build_parser() -> argparse.ArgumentParser:
     except importlib.metadata.PackageNotFoundError:
         _version = "unknown"
 
+    # Build grouped command overview for --help
+    _group_lines = []
+    for name, help_text, subcommands in COMMAND_GROUPS:
+        subs = [s[0] for s in subcommands if s[0]]
+        label = help_text or name
+        _group_lines.append(f"  {name:<14} {label}")
+        if subs:
+            _group_lines.append(f"    {'':14} → {', '.join(subs)}")
+    _top_level_names = [t[0] for t in TOP_LEVEL]
+    _group_lines.append(f"\n  Direct:  {', '.join(_top_level_names)}")
+
+    epilog = (
+        "Command groups:\n"
+        + "\n".join(_group_lines)
+        + "\n\nRun 'peerpedia <group> --help' for subcommand details."
+    )
+
     parser = argparse.ArgumentParser(
-        "peerpedia", description="PeerPedia — peer review from the terminal",
+        "peerpedia",
+        description="PeerPedia — peer review from the terminal",
+        epilog=epilog,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {_version}")
     subs = parser.add_subparsers(dest="command")

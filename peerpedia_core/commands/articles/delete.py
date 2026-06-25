@@ -9,6 +9,7 @@ from peerpedia_core.storage.db import Session
 from peerpedia_core.exceptions import NotFoundError
 from peerpedia_core.policies.articles import assert_can_delete_article
 from peerpedia_core.storage.db.crud_article import (
+    decrement_fork_count,
     delete_article as _delete,
     get_article as _get_article,
 )
@@ -36,8 +37,8 @@ def delete_article(db: Session, article_id: str, *, user_id: str) -> None:
     assert_can_delete_article(article, mids, user)
 
     _delete(db, article_id)
-    # TODO(fork-count-decrement): decrement fork_count on the original article
-    # when a fork is deleted.  Currently only increment_fork_count exists
-    # (called at fork creation); deletes never decrement.  Over time fork_count
-    # becomes inflated — it counts "forks ever created" not "active forks".
+
+    if article.forked_from:
+        decrement_fork_count(db, article.forked_from)
+
     delete_article_repo(DEFAULT_ARTICLES_DIR / article_id)

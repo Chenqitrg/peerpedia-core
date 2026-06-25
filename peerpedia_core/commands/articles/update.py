@@ -12,6 +12,7 @@ from peerpedia_core.frontmatter import make_article_frontmatter, strip_frontmatt
 from peerpedia_core.policies.articles import assert_can_edit_article, assert_not_folded
 from peerpedia_core.commands.integrity import assert_article_integrity
 from peerpedia_core.storage.db.crud_article import (
+    clear_publish_consents,
     get_article as _get_article,
     set_sink_start,
 )
@@ -85,6 +86,9 @@ def update_article_content(
         a.keywords = keywords
     if categories is not None:
         a.categories = categories
+
+    # Content edit resets publish consents — all maintainers must re-consent.
+    clear_publish_consents(db, article_id)
 
     rebuild_article_authors(db, article_id, since_hash=a.last_author_rebuild_hash)
 

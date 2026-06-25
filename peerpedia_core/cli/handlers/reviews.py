@@ -6,12 +6,16 @@
 from __future__ import annotations
 
 from peerpedia_core.cli.helpers import (
-    _with_db, _get_session_user, _get_session_key, _parse_scores, _page, _ok, _die, _json_out,
+    _with_db, _get_session_user, _get_session_key, _open_editor, _parse_scores,
+    _page, _resolve_user, _ok, _die, _json_out,
     DEFAULT_ARTICLES_DIR,
 )
 from peerpedia_core.cli.display import _stars, console
 from peerpedia_core.cli.bundle_utils import _try_sync
-from peerpedia_core.commands import get_reviews_for_article, get_user, get_users_by_ids, submit_review
+from peerpedia_core.commands import (
+    get_reviews_for_article, get_user, get_users_by_ids,
+    submit_reply, submit_review,
+)
 
 
 @_with_db
@@ -83,3 +87,42 @@ def _cmd_review_list(db, args):
             _page("\n".join(parts))
         else:
             console.print("[muted]No review threads found.[/]")
+
+
+@_with_db
+def _cmd_review_reply(db, args):
+    """Reply to a reviewer on an article.  Opens $EDITOR for the reply.
+
+    args: article_id [positional], --to, --json
+    """
+    user_id = _get_session_user()
+    reviewer_ref = _resolve_user(db, args.to)
+
+    template = (
+        "# Author Reply\n"
+        f"# Article: {args.article_id}\n"
+        f"# Replying to: {reviewer_ref}\n"
+        "#\n"
+        "# Write your reply below. Lines starting with # are ignored.\n"
+        "# An empty reply aborts.\n"
+        "\n"
+    )
+    content = _open_editor(template)
+    lines = [l for l in content.splitlines() if not l.strip().startswith("#")]
+    reply = "\n".join(lines).strip()
+    if not reply:
+        _die("Aborting: empty reply.")
+
+    key_bytes = _get_session_key()
+    user = get_user(db, user_id)
+    result = submit_reply(
+        db, article_id=args.article_id, user_id=user_id,
+        reviewer_ref=reviewer_ref, content=reply,
+        signing_key_bytes=key_bytes,
+        pubkey_hex=user.public_key if user else None,
+    )
+    db.commit()
+    if args.json:
+        _json_out(result)
+    else:
+        _ok("Reply posted to review thread")

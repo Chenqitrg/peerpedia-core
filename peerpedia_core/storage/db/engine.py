@@ -103,6 +103,7 @@ def migrate_db(engine: Engine) -> None:
     """
     _log = logging.getLogger(__name__)
     _migrations = [
+        "ALTER TABLE articles ADD COLUMN publish_consents TEXT",
         "ALTER TABLE articles ADD COLUMN witnessed_at DATETIME",
         "ALTER TABLE follows ADD COLUMN deleted_at DATETIME",
         "CREATE TABLE IF NOT EXISTS aliases ("
@@ -121,6 +122,17 @@ def migrate_db(engine: Engine) -> None:
         "  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,"
         "  UNIQUE (sharer_id, article_id)"
         ")",
+        "CREATE TABLE IF NOT EXISTS notifications ("
+        "  id TEXT PRIMARY KEY,"
+        "  user_id TEXT NOT NULL REFERENCES users(id),"
+        "  event TEXT NOT NULL,"
+        "  article_id TEXT REFERENCES articles(id),"
+        "  actor_id TEXT REFERENCES users(id),"
+        "  message TEXT NOT NULL,"
+        "  read INTEGER NOT NULL DEFAULT 0,"
+        "  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP"
+        ")",
+        "CREATE INDEX IF NOT EXISTS ix_notifications_user_id ON notifications(user_id)",
     ]
     with engine.connect() as conn:
         for sql in _migrations:

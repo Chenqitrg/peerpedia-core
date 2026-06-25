@@ -9,8 +9,10 @@ from peerpedia_core.cli.helpers import _with_db, _get_session_user, _ok, _json_o
 from peerpedia_core.cli.display import _print_table, console
 from peerpedia_core.commands import (
     add_maintainer_to_article,
+    consent_to_publish,
     list_maintainers,
     remove_maintainer_from_article,
+    revoke_publish_consent,
 )
 
 
@@ -59,3 +61,33 @@ def _cmd_maintainer_list(db, args):
         return
     rows = [[uid[:8]] for uid in ids]
     _print_table(["Maintainer ID"], rows, title=f"{len(rows)} maintainer(s)")
+
+
+@_with_db
+def _cmd_maintainer_consent(db, args):
+    """Record consent to publish/merge the article.
+
+    args: article_id [positional], --json
+    """
+    user_id = _get_session_user()
+    result = consent_to_publish(db, args.article_id, user_id)
+    db.commit()
+    if args.json:
+        _json_out(result)
+    else:
+        _ok(f"Consent recorded for article [accent]{args.article_id[:8]}[/]")
+
+
+@_with_db
+def _cmd_maintainer_revoke(db, args):
+    """Revoke consent to publish/merge the article.
+
+    args: article_id [positional], --json
+    """
+    user_id = _get_session_user()
+    result = revoke_publish_consent(db, args.article_id, user_id)
+    db.commit()
+    if args.json:
+        _json_out(result)
+    else:
+        _ok(f"Consent revoked for article [accent]{args.article_id[:8]}[/]")

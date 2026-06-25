@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-r"""Maintainer management — add, remove, and list article maintainers.
+r"""Maintainer management — add, remove, consent, and list article maintainers.
 
 Call graph::
 
@@ -11,29 +11,26 @@ Call graph::
       └► crud_maintainer.is_maintainer          (pre-check for duplicate)
 
     remove_maintainer_from_article
-      ├► policies._is_maintainer               (caller must be maintainer)
+      ├► policies._is_maintainer               (caller must be maintainer, or self)
       └► crud_maintainer.remove_maintainer      (delete row)
 
-    list_maintainers
-      └► crud_maintainer.get_maintainer_ids     (read-only)
+    consent_to_publish / revoke_publish_consent
+      └► crud_article.add_publish_consent / clear_publish_consents
 
 Only existing maintainers can add or remove other maintainers.
-Transfer is achieved via add(new) + remove(self), always add before remove
-to ensure at least one maintainer exists at all times.
+Self-removal is allowed as long as there is at least one other maintainer.
+Transfer: add(new) + remove(self), always add before remove.
 """
-
-# TODO(maintainer-transfer): a maintainer cannot voluntarily leave their role,
-# and there is no transfer mechanism.  If the sole maintainer disappears, the
-# article becomes unmaintainable — no one can edit, publish, or add new
-# maintainers.  Needs: (1) maintainer self-removal, (2) transfer/community
-# takeover for orphaned articles.
 
 from __future__ import annotations
 
 from peerpedia_core.storage.db import Session
 
 from peerpedia_core.exceptions import ConflictError, NotAuthorizedError, NotFoundError
-from peerpedia_core.storage.db.crud_article import get_article
+from peerpedia_core.storage.db.crud_article import (
+    add_publish_consent, clear_publish_consents, get_article,
+)
+from peerpedia_core.storage.db.models import Article
 from peerpedia_core.storage.db import crud_maintainer
 from peerpedia_core.storage.db.crud_user import get_user
 
@@ -68,11 +65,19 @@ def remove_maintainer_from_article(
 ) -> dict:
     """Revoke maintainer status from *user_id* for *article_id*.
 
-    Only an existing maintainer (*caller_id*) can remove a maintainer.
-    Removing the last maintainer is allowed (enables transfer via
-    add-before-remove).
+    An existing maintainer can remove another maintainer.  Self-removal is
+    allowed as long as there is at least one other maintainer (orphan
+    prevention).
     """
     _assert_caller_is_maintainer(db, article_id, caller_id)
+
+    if caller_id == user_id:
+        mids = crud_maintainer.get_maintainer_ids(db, article_id)
+        if len(mids) <= 1:
+            raise NotAuthorizedError(
+                "Cannot remove yourself as the last maintainer. "
+                "Add another maintainer first, then remove yourself."
+            )
 
     deleted = crud_maintainer.remove_maintainer(db, article_id, user_id)
     if not deleted:
@@ -101,3 +106,24 @@ def _assert_caller_is_maintainer(db: Session, article_id: str, caller_id: str) -
         raise NotAuthorizedError(
             f"User {caller_id} is not a maintainer of script {article_id}"
         )
+
+
+def consent_to_publish(db: Session, article_id: str, user_id: str) -> dict:
+    """Record a maintainer's consent to publish/merge the article."""
+    _assert_caller_is_maintainer(db, article_id, user_id)
+    add_publish_consent(db, article_id, user_id)
+    return {"article_id": article_id, "user_id": user_id, "action": "consented"}
+
+
+def revoke_publish_consent(db: Session, article_id: str, user_id: str) -> dict:
+    """Revoke a maintainer's consent to publish/merge."""
+    _assert_caller_is_maintainer(db, article_id, user_id)
+    article = get_article(db, article_id)
+    if article is None:
+        raise NotFoundError("Article not found")
+    consents = list(article.publish_consents or [])
+    if user_id in consents:
+        consents.remove(user_id)
+        article.publish_consents = consents if consents else None
+        db.flush()
+    return {"article_id": article_id, "user_id": user_id, "action": "revoked"}

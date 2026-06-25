@@ -10,9 +10,13 @@ CLI and routes never import storage/db directly.
 from __future__ import annotations
 
 from peerpedia_core.storage.db import Session
+from peerpedia_core.commands.notifications import create_notification
 from peerpedia_core.storage.db.crud_user import (
     create_user as _create,
+    create_user_stub as _create_stub,
     follow_user as _follow,
+    get_user as _get,
+    list_users as _list_users,
     get_followers as _get_followers,
     get_following as _get_following,
     get_user as _get,
@@ -30,6 +34,20 @@ def create_user(db: Session, *, name: str, public_key: str, affiliation: str = "
     return _create(db, name=name, public_key=public_key, affiliation=affiliation)
 
 
+def create_user_stub(db: Session, *, user_id: str, name: str, public_key: str, salt: str):
+    """Create a minimal User record with all fields set — for device bootstrap.
+
+    Used when setting up a new device: the user copies their user_id, name,
+    public_key, and salt from their original device (via ``account whoami
+    --verbose --json``) and runs ``account bootstrap`` on the new device so
+    that ``account recover`` can find the User row and re-derive the key.
+
+    Does NOT write a session file — the user still needs ``account recover``
+    to verify their password and obtain a session.
+    """
+    return _create_stub(db, user_id=user_id, name=name, public_key=public_key, salt=salt)
+
+
 def get_user(db: Session, user_ref: str):
     """Get a user by ID or name. Returns None if not found."""
     return _get(db, user_ref)
@@ -42,22 +60,7 @@ def get_user_by_name(db: Session, name: str) -> list:
 
 def update_user_public_key(db: Session, user_id: str, pubkey_hex: str):
     """Set the public key for a user."""
-    # TODO(account-lifecycle): users cannot delete/deactivate their account,
-    # cannot change their display name (no update_user_name), and cannot
-    # export their data.  The User model has no is_active or deleted_at flag.
-    #
-    # TODO(social-recovery): key recovery from lost device.  If a user loses
-    #   their device AND their salt (the only recovery path is password+salt),
-    #   they are permanently locked out — all articles, follows, reputation
-    #   are irrecoverable.  Needs a social recovery protocol:
-    #     1. User pre-designates N trusted recovery guardians (mutual follows).
-    #     2. Guardians each hold an encrypted key shard (Shamir's secret sharing
-    #        or threshold signatures, M-of-N).
-    #     3. On recovery: M guardians confirm the request → reconstruct the
-    #        private key.  The new key is pushed via push_key_rotation.
-    #     4. Guardians must be online peers — the protocol is P2P, not
-    #        centralized.  No single guardian can unilaterally recover.
-    #   Requires: guardian model, shard protocol, recovery CLI, P2P messaging.
+    # TODO(social-recovery): see docs/social-recovery-design.md
     return _update_pubkey(db, user_id, pubkey_hex)
 
 
@@ -67,8 +70,17 @@ def update_user_salt(db: Session, user_id: str, salt_hex: str):
 
 
 def follow_user(db: Session, follower_id: str, followed_id: str):
-    """Follow a user. Raises ValueError if self-follow."""
-    return _follow(db, follower_id, followed_id)
+    """Follow a user. Notifies followed user. Raises ValueError if self-follow."""
+    result = _follow(db, follower_id, followed_id)
+
+    follower = _get(db, follower_id)
+    follower_name = follower.name if follower else "Someone"
+    create_notification(
+        db, user_id=followed_id, event="new_follower",
+        message=f"{follower_name} started following you",
+        actor_id=follower_id,
+    )
+    return result
 
 
 def unfollow_user(db: Session, follower_id: str, followed_id: str):
@@ -94,3 +106,8 @@ def get_following(db: Session, user_id: str) -> list:
 def search_users(db: Session, query: str, limit: int | None = None, offset: int = 0) -> list:
     """Fuzzy search users by name."""
     return _search_users(db, query, limit=limit, offset=offset)
+
+
+def list_users(db: Session) -> list:
+    """Return all users, newest first."""
+    return _list_users(db)

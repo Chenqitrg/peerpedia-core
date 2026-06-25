@@ -141,7 +141,8 @@ from peerpedia_core.config.paths import DB_PATH, DB_URL, REPL_HISTORY_FILE
 
 # ── Commands for tab completion ──────────────────────────────────────────
 
-_META_COMMANDS = [":help", ":h", ":user", ":u", ":article", ":a", ":theme", ":feed", ":school", ":quit", ":q"]
+_META_COMMANDS = [":help", ":h", ":user", ":u", ":article", ":a", ":theme",
+                  ":feed", ":school", ":inbox", ":quit", ":q"]
 COMMANDS = sorted(get_cmd_map().keys()) + _META_COMMANDS
 FLAGS = ["--title", "--format", "--content", "--user", "--json", "--rich", "--force",
          "--scores", "--comment", "--commit-hash", "--target", "--status",
@@ -151,6 +152,8 @@ FLAGS = ["--title", "--format", "--content", "--user", "--json", "--rich", "--fo
 
 _repl_user: str | None = None
 _repl_article_id: str | None = None
+_repl_article_title: str = ""  # cached for prompt display
+_repl_article_commit: str = ""  # latest commit hash (arXiv-style identifier)
 _repl_theme: str = "parchment"  # "parchment" | "ember"
 _repl_db = None
 
@@ -165,9 +168,25 @@ def _ensure_db():
 
 def _prompt_text():
     user = _repl_user or "guest"
-    parts = [("class:prompt", f"{user}")]
+    # Notification badge
+    try:
+        from peerpedia_core.cli.helpers import _read_session
+        from peerpedia_core.commands import count_unread_notifications
+        db = _ensure_db()
+        sid = _read_session()
+        if sid:
+            unread = count_unread_notifications(db, sid["user_id"])
+            badge = f" ({unread})" if unread > 0 else ""
+        else:
+            badge = ""
+    except Exception:
+        badge = ""
+    parts = [("class:prompt", f"{user}{badge}")]
     if _repl_article_id:
-        parts.append(("class:separator", f" ▸ {_repl_article_id[:8]}"))
+        label = _repl_article_title or _repl_article_id[:8]
+        parts.append(("class:separator", f" ▸ {label}"))
+        if _repl_article_commit:
+            parts.append(("class:separator", f" @{_repl_article_commit[:7]}"))
     parts.append(("class:separator", "> "))
     return parts
 
@@ -197,6 +216,7 @@ def _meta_help():
          :article <ref> → set article context
          :feed          → your feed
          :school        → user leaderboard
+         :inbox         → notifications
          :theme <l|d>    → light / dark mode
          :help          → show this
          :quit, :q      → exit
@@ -235,10 +255,12 @@ def _meta_user(name):
 def _meta_article(ref: str):
     """Set or clear the current article context.  ``:article <ref>`` sets,
     ``:article`` (no argument) clears."""
-    global _repl_article_id
+    global _repl_article_id, _repl_article_title, _repl_article_commit
     db = _ensure_db()
     if not ref:
         _repl_article_id = None
+        _repl_article_title = ""
+        _repl_article_commit = ""
         console.print("[muted]Article context cleared.[/]")
         return
     article = db.query(Article).filter(
@@ -255,7 +277,19 @@ def _meta_article(ref: str):
             return
     if article:
         _repl_article_id = article.id
-        console.print(f"[success]▸[/] [accent]{article.title}[/] [muted]({article.id[:8]})[/]")
+        _repl_article_title = article.title
+        # Fetch latest commit hash (arXiv-style identifier).
+        try:
+            from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, get_head_hash
+            rp = DEFAULT_ARTICLES_DIR / article.id
+            if (rp / ".git").is_dir():
+                _repl_article_commit = get_head_hash(rp)
+            else:
+                _repl_article_commit = ""
+        except Exception:
+            _repl_article_commit = ""
+        commit_str = f" @{_repl_article_commit[:7]}" if _repl_article_commit else ""
+        console.print(f"[success]▸[/] [accent]{article.title}[/] [muted]({article.id[:8]}{commit_str})[/]")
     else:
         console.print(f"[error]✗[/] Article '{ref}' not found.")
 
@@ -278,6 +312,31 @@ def _meta_theme(mode: str):
         console.print("[muted]☀   Parchment (light) theme.[/]")
     else:
         console.print(f"[warning]Unknown theme '{mode}'. Use [accent]light[/] or [accent]dark[/].[/]")
+
+
+def _show_inbox():
+    """Display recent notifications in a styled table."""
+    from peerpedia_core.cli.helpers import _read_session
+    from peerpedia_core.commands import get_notifications_for_user
+    db = _ensure_db()
+    session_data = _read_session()
+    if not session_data:
+        console.print("[muted]Not logged in.[/]")
+        return
+    notifications = get_notifications_for_user(db, session_data["user_id"])
+    if not notifications:
+        console.print("[muted]No notifications.[/]")
+        return
+    from rich.table import Table
+    t = Table(title="Notifications", border_style="muted")
+    t.add_column("Time", style="muted", width=16)
+    t.add_column("Event", style="accent")
+    for n in notifications[:20]:
+        ts_raw = n.get("created_at", "")
+        ts = ts_raw[:16].replace("T", " ") if ts_raw else ""
+        marker = "[bold]●[/] " if not n.get("read") else "  "
+        t.add_row(ts, f"{marker}{n.get('message', '')}")
+    console.print(t)
 
 
 # ── Interactive browsing ──────────────────────────────────────────────────
@@ -430,6 +489,9 @@ def _dispatch(cmd_str: str, parser) -> bool:
             return True
         elif meta == ":school":
             return _dispatch("school --local", parser)
+        elif meta == ":inbox":
+            _show_inbox()
+            return True
         else:
             console.print(f"[error]Unknown meta-command: {meta}[/]. Try :help")
             return True

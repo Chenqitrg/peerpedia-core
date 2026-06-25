@@ -70,6 +70,10 @@ def _push_social(action: str, **kwargs) -> None:
     """Push a social action to the peer server.  Best-effort — warns on failure.
 
     *action* is one of ``"follow"``, ``"unfollow"``.
+
+    TODO(v1-follow-sync): push succeeds via TOFU, but the followed user
+    does not receive a notification on the server side.  Also, pull_social
+    after follow may fail to merge the followed user's graph data.
     """
     key = _get_session_key()
     pubkey = _get_session_pubkey()

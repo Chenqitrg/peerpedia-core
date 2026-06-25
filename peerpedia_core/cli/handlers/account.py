@@ -1,10 +1,14 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""Account commands — register, login, recover, whoami, bootstrap.
+"""Account commands -- register, login, recover, whoami, bootstrap.
+
+TODO(v1-account-delete): no delete/close-account command.  Users cannot
+leave the system.  GDPR compliance requires a way to soft-delete or
+permanently remove user data.  See docs/user-flow-audit.md §1.
 
 TODO(multi-device): ``account login`` on a new device now has the bootstrap
-flow — ``account bootstrap --from <json>`` then ``account recover``.
+flow: ``account bootstrap --from <json>`` then ``account recover``.
 """
 
 from __future__ import annotations
@@ -109,6 +113,9 @@ def _cmd_login(db, args):
 
     password = _get_password(args)
     private_key_bytes, pubkey_bytes = derive_key_pair(password, user.salt)
+    # TODO(v1-rate-limit): no brute-force protection.  Add exponential
+    # backoff or a failed-attempt counter on the User record after N
+    # consecutive wrong passwords.
     if pubkey_bytes.hex() != user.public_key:
         _die("Wrong password.",
              suggestion="If you forgot your password, run: peerpedia account recover "

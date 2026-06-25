@@ -107,7 +107,7 @@ from peerpedia_core.commands.users import (
 )
 from peerpedia_core.commands.workflow import (
     publish_ready_articles,
-    recalculate_all_reputations,
+    recompute_all_reputations,
     recompute_article_score,
     recompute_author_reputation,
 )
@@ -165,7 +165,7 @@ from peerpedia_core.commands.notifications import (
 from peerpedia_core.config.paths import ARTICLES_DIR
 from peerpedia_core.storage.db import db_repl_setup as _db_repl_setup
 from peerpedia_core.storage.db.session_utils import db_session_scope as _db_session_scope
-from peerpedia_core.storage.db.crud_article import get_author_ids_batch, insert_article
+from peerpedia_core.storage.db.crud_article import create_article_from_orm, get_author_ids_batch
 from peerpedia_core.storage.db.crud_alias import (
     list_aliases, remove_alias, resolve_username_or_alias, set_alias,
 )
@@ -222,7 +222,7 @@ __all__ = [
     "delete_article",
     "follow_user",
     "fork_article",
-    "insert_article",
+    "create_article_from_orm",
     "get_article",
     "get_article_view",
     "get_author_ids",
@@ -257,7 +257,7 @@ __all__ = [
     "publish_ready_articles",
     "rebuild_article_authors",
     "resolve_username_or_alias",
-    "recalculate_all_reputations",
+    "recompute_all_reputations",
     "recompute_article_score",
     "recompute_author_reputation",
     "remove_alias",

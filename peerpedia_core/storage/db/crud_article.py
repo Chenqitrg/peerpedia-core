@@ -124,12 +124,12 @@ def create_article(
     return a
 
 
-def insert_article(
+def create_article_from_orm(
     session: Session,
     article: Article,
     author_ids: list[str],
 ) -> Article:
-    """Insert a pre-constructed Article ORM object with author join rows.
+    """Create an Article row from a pre-built ORM object with author join rows.
 
     Unlike ``create_article`` which constructs the Article from keyword
     parameters, this takes an already-built Article object. Use when the

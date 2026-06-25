@@ -156,7 +156,12 @@ def test_articles_empty(client):
 
 
 def test_auth_required_without_token():
-    """Without PEERPEDIA_SKIP_AUTH, social routes return 401."""
+    """Without PEERPEDIA_SKIP_AUTH, non-public routes return 401.
+
+    Uses ``/api/v1/peers`` which is NOT in any public prefix/suffix/contains
+    list — unlike ``/following``, ``/articles``, ``/head``, etc. which are
+    intentionally public for peer-to-peer discovery.
+    """
     from peerpedia_core.transport.http_server import create_app as _create
     from starlette.testclient import TestClient as TC
 
@@ -164,9 +169,7 @@ def test_auth_required_without_token():
     old = os.environ.pop("PEERPEDIA_SKIP_AUTH", None)
     try:
         c = TC(_create())
-        resp = c.get(
-            "/api/v1/users/00000000-0000-0000-0000-000000000001/following"
-        )
+        resp = c.get("/api/v1/peers")
         assert resp.status_code == 401
     finally:
         if old:

@@ -421,7 +421,8 @@ class TestFollowCRUD:
 
         session = get_session(engine)
         a = create_user(session, name="A", public_key="0000000000000000000000000000000000000000000000000000000000000000")
-        with pytest.raises(ValueError, match="cannot follow themselves"):
+        from peerpedia_core.exceptions import BadRequestError
+        with pytest.raises(BadRequestError, match="cannot follow themselves"):
             follow_user(session, a.id, a.id)
         session.close()
 
@@ -685,9 +686,10 @@ class TestUpdateNotFound:
 
     def test_update_user_reputation_not_found(self, engine):
         from peerpedia_core.storage.db.crud_user import update_user_reputation
+        from peerpedia_core.exceptions import NotFoundError
 
         session = get_session(engine)
-        with pytest.raises(ValueError):
+        with pytest.raises(NotFoundError):
             update_user_reputation(session, "no-such-id", {})
         session.close()
 
@@ -768,19 +770,19 @@ class TestSaltRoundtrip:
 
 class TestAnonymousNames:
     def test_generate_anonymous_name(self):
-        from peerpedia_core.storage.db.crud_user import generate_anonymous_name
+        from peerpedia_core.names import generate_anonymous_name
         name = generate_anonymous_name()
         assert isinstance(name, str)
         assert len(name) >= 2  # at least 2 Chinese chars
 
     def test_derive_anonymous_name_deterministic(self):
-        from peerpedia_core.storage.db.crud_user import derive_anonymous_name
+        from peerpedia_core.names import derive_anonymous_name
         n1 = derive_anonymous_name("seed-abc")
         n2 = derive_anonymous_name("seed-abc")
         assert n1 == n2
 
     def test_derive_anonymous_name_different_seeds(self):
-        from peerpedia_core.storage.db.crud_user import derive_anonymous_name
+        from peerpedia_core.names import derive_anonymous_name
         n1 = derive_anonymous_name("seed-1")
         n2 = derive_anonymous_name("seed-2")
         assert n1 != n2
@@ -790,9 +792,10 @@ class TestUserCrudErrorPaths:
     def test_update_public_key_not_found(self, engine):
         from peerpedia_core.storage.db.crud_user import update_user_public_key
         from peerpedia_core.storage.db.engine import get_session
+        from peerpedia_core.exceptions import NotFoundError
 
         session = get_session(engine)
-        with pytest.raises(ValueError, match="not found"):
+        with pytest.raises(NotFoundError, match="not found"):
             update_user_public_key(session, "nonexistent", "00" * 32)
         session.rollback()
         session.close()
@@ -800,9 +803,10 @@ class TestUserCrudErrorPaths:
     def test_update_salt_not_found(self, engine):
         from peerpedia_core.storage.db.crud_user import update_user_salt
         from peerpedia_core.storage.db.engine import get_session
+        from peerpedia_core.exceptions import NotFoundError
 
         session = get_session(engine)
-        with pytest.raises(ValueError, match="not found"):
+        with pytest.raises(NotFoundError, match="not found"):
             update_user_salt(session, "nonexistent", "00" * 16)
         session.rollback()
         session.close()

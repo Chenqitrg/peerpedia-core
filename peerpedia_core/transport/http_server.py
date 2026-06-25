@@ -72,7 +72,6 @@ import logging
 import os
 import traceback
 
-import git as gitmod
 from starlette.applications import Starlette
 from starlette.middleware import Middleware
 from starlette.requests import Request
@@ -132,7 +131,11 @@ _ERROR_MAP: dict[type[Exception], int] = {
     FileNotFoundError: 404,
 }
 
-_ERROR_MAP[gitmod.GitCommandError] = 500
+try:
+    import git as _git
+    _ERROR_MAP[_git.GitCommandError] = 500
+except ImportError:
+    pass  # git not available — GitCommandError never raised
 
 
 async def _error_handler(request: Request, exc: Exception) -> JSONResponse:

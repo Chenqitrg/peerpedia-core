@@ -74,8 +74,8 @@ class TestAuthMiddlewarePublicPaths:
         assert not _is_public("/ahead")
 
     def test_normal_api_route_requires_auth(self):
-        """GET /api/v1/articles requires auth."""
-        assert not _is_public("/api/v1/articles")
+        """GET /api/v1/peers requires auth (not in any public list)."""
+        assert not _is_public("/api/v1/peers")
 
     def test_user_endpoint_requires_auth(self):
         """GET /api/v1/users requires auth."""

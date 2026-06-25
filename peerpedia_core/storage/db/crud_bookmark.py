@@ -10,6 +10,11 @@ from peerpedia_core.storage.db.models import Article, Bookmark
 
 def add_bookmark(session: Session, user_id: str, article_id: str) -> Bookmark:
     """Bookmark an article.  Idempotent — duplicates silently succeed."""
+    existing = session.query(Bookmark).filter(
+        Bookmark.user_id == user_id, Bookmark.article_id == article_id,
+    ).first()
+    if existing:
+        return existing
     b = Bookmark(user_id=user_id, article_id=article_id)
     session.add(b)
     session.flush()

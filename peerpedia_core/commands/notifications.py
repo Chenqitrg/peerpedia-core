@@ -91,17 +91,20 @@ def create_notifications_batch(
     Each entry dict must have keys matching ``create_notification`` kwargs:
     user_id, event, message, plus optional article_id and actor_id.
     Returns the list of created Notification ORM objects.
+
+    Delegates to ``create_notification`` for consistency with the single
+    notification path — any future validation or side effects added there
+    will be applied to batch-created notifications as well.
     """
-    notifications = [
-        Notification(
+    notifications = []
+    for e in entries:
+        n = create_notification(
+            db,
             user_id=e["user_id"],
             event=e["event"],
             message=e["message"],
             article_id=e.get("article_id"),
             actor_id=e.get("actor_id"),
         )
-        for e in entries
-    ]
-    db.add_all(notifications)
-    db.flush()
+        notifications.append(n)
     return notifications

@@ -45,9 +45,6 @@ Reviewer's checklist
 
 from __future__ import annotations
 
-import base64
-import io
-import tarfile
 from pathlib import Path
 
 from peerpedia_core.exceptions import ProtocolError
@@ -59,11 +56,12 @@ from peerpedia_core.bundle.git_bundle import (
     find_common_ancestor,
     get_head,
     ingest_bundle,
+    pack_article_repo,
 )
 from peerpedia_core.bundle.server import ingest_article
 
 from peerpedia_core.config.paths import ARTICLES_DIR as DEFAULT_ARTICLES_DIR
-from peerpedia_core.transport import pull_article_repo
+from peerpedia_core.transport import fetch_article_repo
 from peerpedia_core.transport.health import check_clock_skew
 
 
@@ -191,7 +189,7 @@ def pull_incremental(
 def pull_new_article(db: Session, server: str, article_id: str) -> str | None:
     """Pull an article that doesn't exist locally.
 
-    Downloads the full repo as base64 tar.gz via ``pull_article_repo`` and
+    Downloads the full repo as base64 tar.gz via ``fetch_article_repo`` and
     unpacks it — the mirror of ``upload_article`` → ``push_article_repo``.
 
     TODO(v1-content-sync): not yet wired into the discovery flow.  After
@@ -199,7 +197,7 @@ def pull_new_article(db: Session, server: str, article_id: str) -> str | None:
     fetch the actual git content.  Currently ``article show`` fails with
     "No source file found" for discovered articles.
     """
-    repo_b64 = pull_article_repo(server, article_id)
+    repo_b64 = fetch_article_repo(server, article_id)
     if not repo_b64:
         return None
     payload = {"id": article_id, "repo_bundle": repo_b64}
@@ -236,13 +234,7 @@ def upload_article(server: str, article_id: str) -> bool:
     # one commit (the initial commit from init_article_repo).
     get_head(rp)
 
-    # Memory: tar.gz → memoryview (zero-copy) → base64 → str.  Peak ~2×
-    # compressed size (memoryview avoids the third copy from getvalue()).
-    buf = io.BytesIO()
-    with tarfile.open(fileobj=buf, mode="w:gz") as tar:
-        tar.add(str(rp), arcname=article_id)
-    bundle_b64 = base64.b64encode(buf.getbuffer()).decode("ascii")
-
+    bundle_b64 = pack_article_repo(rp)
     return push_article_repo(server, article_id, bundle_b64)
 
 

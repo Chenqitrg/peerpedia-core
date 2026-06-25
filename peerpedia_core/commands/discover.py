@@ -24,7 +24,7 @@ import logging
 from datetime import datetime, timezone
 
 from peerpedia_core.storage.db import Session
-from peerpedia_core.storage.db.crud_article import get_article, insert_article
+from peerpedia_core.storage.db.crud_article import create_article_from_orm, get_article
 from peerpedia_core.storage.db.crud_bookmark import add_bookmark, is_bookmarked
 from peerpedia_core.storage.db.crud_maintainer import add_maintainer, is_maintainer
 from peerpedia_core.storage.db.crud_share import add_share as _add_share, is_shared
@@ -147,6 +147,9 @@ def merge_article_meta(db: Session, entries: list[dict]) -> int:
     articles are skipped — full reconciliation (authors, status, reviews,
     scores) happens in ``apply_sync_bundle`` when the git content is pulled.
 
+    **Side effect:** Creates User stubs via ``create_user_stub`` for any
+    author IDs not already present in the local DB, ensuring FK integrity.
+
     Raises ValueError if any entry is missing *id*, *title*, or *status*.
     """
     _require_keys(entries, "id", "title", "status", label="article_meta")
@@ -170,7 +173,7 @@ def merge_article_meta(db: Session, entries: list[dict]) -> int:
                 create_user_stub(db, user_id=aid, name=aid[:8],
                                  public_key="", salt="")
         article = Article(**{k: v for k, v in e.items() if k != "authors"})
-        insert_article(db, article, author_ids)
+        create_article_from_orm(db, article, author_ids)
         added += 1
     db.flush()
     return added

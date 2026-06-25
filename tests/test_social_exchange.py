@@ -43,33 +43,42 @@ class TestMergeUsers:
         assert u.name == "Alice"
         assert u.address == "http://a:8080"
 
-    def test_skips_existing_user(self, db):
+    def test_raises_on_address_conflict(self, db):
+        """When local and peer both have non-empty addresses that differ → error."""
         _make_user(db, "u1", "Alice")
         get_user(db, "u1").address = "http://existing:8080"
         db.flush()
-        n = merge_users(db, [{"id": "u1", "name": "Alice", "address": "http://a:8080"}])
+        with pytest.raises(ValueError, match="address conflict"):
+            merge_users(db, [{"id": "u1", "name": "Alice", "address": "http://a:8080"}])
+
+    def test_address_filled_for_existing_user_without_address(self, db):
+        """Existing user without address + peer has address → no conflict, address stays empty."""
+        _make_user(db, "u1", "Alice")
+        # Old behavior: raised ValueError.  New behavior: address is optional,
+        # and conflict is only checked when BOTH sides have a non-empty address.
+        n = merge_users(db, [{"id": "u1", "name": "Alice", "address": "http://n:8080"}])
+        assert n == 0  # existing user, skipped
+
+    def test_skips_existing_user_with_same_address(self, db):
+        _make_user(db, "u1", "Alice")
+        get_user(db, "u1").address = "http://same:8080"
+        db.flush()
+        n = merge_users(db, [{"id": "u1", "name": "Alice", "address": "http://same:8080"}])
         assert n == 0
 
-    def test_raises_on_missing_address_for_existing_user(self, db):
-        """Existing user without address + peer has address → data inconsistency."""
-        _make_user(db, "u1", "Alice")
-        with pytest.raises(ValueError, match="has no address"):
-            merge_users(db, [{"id": "u1", "name": "Alice", "address": "http://n:8080"}])
+    def test_address_is_optional(self, db):
+        """Address is optional — not all users run their own server."""
+        n = merge_users(db, [{"id": "u1", "name": "Alice"}])
+        assert n == 1
+        u = get_user(db, "u1")
+        assert u.address == ""
 
-    def test_does_not_overwrite_existing_address(self, db):
-        _make_user(db, "u1", "Alice")
-        get_user(db, "u1").address = "http://original:8080"
-        db.flush()
-        merge_users(db, [{"id": "u1", "name": "Alice", "address": "http://attacker:8080"}])
-        assert get_user(db, "u1").address == "http://original:8080"
-
-    def test_raises_on_missing_address(self, db):
-        with pytest.raises(ValueError, match="missing 'address'"):
-            merge_users(db, [{"id": "u1", "name": "Alice"}])
-
-    def test_raises_on_empty_address(self, db):
-        with pytest.raises(ValueError, match="missing 'address'"):
-            merge_users(db, [{"id": "u1", "name": "Alice", "address": ""}])
+    def test_empty_address_accepted(self, db):
+        """Empty address is accepted (treated as no address)."""
+        n = merge_users(db, [{"id": "u1", "name": "Alice", "address": ""}])
+        assert n == 1
+        u = get_user(db, "u1")
+        assert u.address == ""
 
 
 # ── merge_follows ────────────────────────────────────────────────────────────

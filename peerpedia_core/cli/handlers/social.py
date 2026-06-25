@@ -22,9 +22,11 @@ from peerpedia_core.commands import (
     get_follower_views, get_followers, get_following, get_following_views,
     create_user_stub, get_article, get_top_users_by_followers, get_user, merge_article_meta,
 )
-from peerpedia_core.transport import fetch_article_meta, fetch_school, push_share, push_share_remove
 from peerpedia_core.social import discover_articles, discover_followers, discover_following, discover_shares
-from peerpedia_core.transport import push_follow, push_unfollow
+from peerpedia_core.transport import (
+    fetch_article_meta, fetch_school,
+    push_follow, push_share, push_share_remove, push_unfollow,
+)
 
 def _pull_social(db, user_id: str) -> None:
     """Pull social graph + articles for *user_id* from the peer server.  Best-effort.

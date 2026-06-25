@@ -16,10 +16,15 @@ from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, get_commit_
 
 
 def rebuild_article_authors(db: Session, article_id: str, since_hash: str | None = None) -> None:
-    """Read author IDs from git commits and merge them into DB.
+    """Read author IDs from new git commits and merge them into DB.
+
+    This is **incremental** — only adds new authors discovered in commits
+    since ``since_hash`` (or ``last_author_rebuild_hash``).  It never removes
+    authors already in the DB, even if they are no longer in git history.
+    For a full replacement use ``crud_article.set_article_authors`` directly.
 
     Sets ``last_author_rebuild_hash`` to the current HEAD so the next
-    rebuild only scans new commits (*since_hash*).
+    rebuild only scans new commits.
 
     Raises NotFoundError if the article does not exist.
     """

@@ -10,7 +10,7 @@ from peerpedia_core.storage.db.crud_user import create_user, update_user_reputat
 from peerpedia_core.storage.db.engine import get_session
 from peerpedia_core.storage.db.models import User
 from peerpedia_core.types.scores import ReputationScores
-from peerpedia_core.commands import recompute_author_reputation, recalculate_all_reputations
+from peerpedia_core.commands import recompute_all_reputations, recompute_author_reputation
 from peerpedia_core.workflow.reputation import (
     get_reviewer_weight,
 )
@@ -223,7 +223,7 @@ class TestGetReviewerWeight:
         assert rep == pytest.approx(0.8, abs=0.01)
 
 
-# ---- recalculate_all_reputations ---------------------------------------------
+# ---- recompute_all_reputations ------------------------------------------------
 
 
 class TestRecalculateAllReputations:
@@ -247,7 +247,7 @@ class TestRecalculateAllReputations:
             score=_build_score(originality=5, rigor=5, completeness=5, pedagogy=5, impact=5),
         )
 
-        count = recalculate_all_reputations(session)
+        count = recompute_all_reputations(session)
         assert count == 2
 
         session.expire_all()
@@ -261,12 +261,12 @@ class TestRecalculateAllReputations:
         """The function returns the number of users processed."""
         create_user(session, name="ken", public_key="0000000000000000000000000000000000000000000000000000000000000000")
         create_user(session, name="laura", public_key="0000000000000000000000000000000000000000000000000000000000000000")
-        count = recalculate_all_reputations(session)
+        count = recompute_all_reputations(session)
         assert count == 2
 
     def test_empty_db_returns_zero(self, session):
         """No users -> returns 0 (idempotent)."""
-        count = recalculate_all_reputations(session)
+        count = recompute_all_reputations(session)
         assert count == 0
 
 

@@ -112,14 +112,17 @@ def _repair_from_git(db: Session, article_id: str, repo_path: Path) -> None:
 
 
 def _read_status_from_git(repo_path: Path) -> str | None:
-    """Read the latest [status] tag from platform commit messages."""
+    """Read the latest [status] tag from platform commit messages.
+
+    Delegates parsing to ``commands.bundle._parse_status_tag`` — the
+    single canonical parser for status markers in git history.
+    """
+    from peerpedia_core.commands.bundle import _parse_status_tag  # noqa: PLC0415
+
     for commit in get_commit_history(repo_path):
-        if commit["author_email"] != PLATFORM_EMAIL:
-            continue
-        msg = commit["message"]
-        for line in msg.splitlines():
-            if line.strip().startswith("[status]"):
-                return line.strip().split("[status]", 1)[1].strip()
+        status = _parse_status_tag(commit["message"], commit["author_email"])
+        if status is not None:
+            return status
     return None
 
 

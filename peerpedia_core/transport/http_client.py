@@ -142,12 +142,12 @@ def fetch_incremental_bundle(server: str, article_id: str, since_hash: str | Non
     raise ProtocolError(f"fetch_incremental_bundle: unexpected status {resp.status_code} from {server}")
 
 
-def pull_article_repo(server: str, article_id: str) -> str | None:
+def fetch_article_repo(server: str, article_id: str) -> str | None:
     """GET /api/v1/articles/{id}/repo → base64 tar.gz string, or None if 404."""
     try:
         resp = _get_client().get(f"{_api_url(server, article_id)}/repo", timeout=60)
     except httpx.HTTPError as e:
-        raise TransportError(f"pull_article_repo failed for {article_id} at {server}: {e}") from e
+        raise TransportError(f"fetch_article_repo failed for {article_id} at {server}: {e}") from e
 
     if resp.status_code == 200:
         try:
@@ -156,7 +156,7 @@ def pull_article_repo(server: str, article_id: str) -> str | None:
             raise ProtocolError(f"Malformed JSON from {server} for {article_id}/repo") from e
     if resp.status_code == 404:
         return None
-    raise ProtocolError(f"pull_article_repo: unexpected status {resp.status_code} from {server}")
+    raise ProtocolError(f"fetch_article_repo: unexpected status {resp.status_code} from {server}")
 
 
 def push_article_repo(server: str, article_id: str, bundle_b64: str) -> bool:
@@ -470,16 +470,23 @@ def fetch_shares(server: str, user_id: str) -> list[dict] | None:
 
 def fetch_peers(server: str) -> list[str]:
     """GET /api/v1/peers → list of known peer URLs for discovery."""
-    import json as _json
-    client = _get_client(server)
     try:
-        resp = client.get("/api/v1/peers")
-        resp.raise_for_status()
-        return resp.json().get("peers", [])
-    except (httpx.HTTPError, _json.JSONDecodeError) as e:
+        resp = _get_client().get(f"{server}/api/v1/peers")
+    except httpx.HTTPError as e:
         raise TransportError(
             f"Failed to fetch peers from {server}: {e}"
         ) from e
+
+    if resp.status_code == 200:
+        try:
+            return resp.json().get("peers", [])
+        except json.JSONDecodeError as e:
+            raise ProtocolError(
+                f"Malformed JSON from {server}/peers"
+            ) from e
+    raise ProtocolError(
+        f"fetch_peers: unexpected status {resp.status_code} from {server}"
+    )
 
 
 def fetch_school(server: str, limit: int = 20) -> list[dict]:

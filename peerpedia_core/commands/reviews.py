@@ -64,7 +64,8 @@ from peerpedia_core.policies.articles import (
 from peerpedia_core.storage.db.crud_article import get_article, get_author_ids
 from peerpedia_core.storage.db.crud_maintainer import get_maintainer_ids
 from peerpedia_core.storage.db.crud_review import get_reviews_for_article as _get, upsert_review
-from peerpedia_core.storage.db.crud_user import derive_anonymous_name, get_user
+from peerpedia_core.storage.db.crud_user import get_user
+from peerpedia_core.names import derive_anonymous_name
 from peerpedia_core.crypto import write_key_to_tempfile
 from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, commit_article
 from peerpedia_core.storage.locks import get_article_lock

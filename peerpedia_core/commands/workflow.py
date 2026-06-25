@@ -34,7 +34,7 @@ Call graph::
       ├► workflow.reputation.blend_reputation       (pure, EMA)
       └► crud_user.update_user_reputation
 
-    recalculate_all_reputations
+    recompute_all_reputations
       └► recompute_author_reputation for every user
 
 Reviewer's checklist
@@ -263,7 +263,7 @@ def recompute_author_reputation(db: Session, user_id: str, *, user=None) -> Repu
     """Compute and persist a blended reputation for *user_id*.
 
     Pass *user* to avoid a re-fetch when the caller already has the User
-    object (e.g. ``recalculate_all_reputations`` already called ``list_users``).
+    object (e.g. ``recompute_all_reputations`` already called ``list_users``).
 
     Raises ValueError if the user does not exist.
     """
@@ -281,8 +281,8 @@ def recompute_author_reputation(db: Session, user_id: str, *, user=None) -> Repu
     return blended
 
 
-def recalculate_all_reputations(db: Session) -> int:
-    """Recalculate reputation for every user in the system.
+def recompute_all_reputations(db: Session) -> int:
+    """Recompute reputation for every user in the system.
 
     Returns the number of users whose reputation was (re)computed.
     """

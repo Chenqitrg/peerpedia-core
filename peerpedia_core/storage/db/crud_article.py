@@ -43,6 +43,7 @@ Reviewer's checklist
 
 from sqlalchemy.orm import Session
 
+from peerpedia_core.exceptions import NotFoundError
 from peerpedia_core.storage.db.models import (
     Article, ArticleAuthor, Bookmark, Citation, MergeProposal, Review,
     ScriptMaintainer,
@@ -264,10 +265,14 @@ def increment_fork_count(session: Session, article_id: str) -> None:
 
 
 def decrement_fork_count(session: Session, article_id: str) -> None:
-    """Atomically decrement ``fork_count`` by 1 (floor at 0). No-op if not found."""
-    session.query(Article).filter(Article.id == article_id).update(
-        {"fork_count": Article.fork_count - 1}, synchronize_session="fetch"
+    """Atomically decrement ``fork_count`` by 1 (floor at 0). Raises ValueError if not found."""
+    from sqlalchemy import case
+    rows = session.query(Article).filter(Article.id == article_id).update(
+        {"fork_count": case((Article.fork_count > 0, Article.fork_count - 1), else_=0)},
+        synchronize_session="fetch",
     )
+    if rows == 0:
+        raise ValueError(f"Article {article_id} not found")
     session.expire_all()
 
 
@@ -381,11 +386,26 @@ def add_publish_consent(session: Session, article_id: str, user_id: str) -> None
     """
     article = session.get(Article, article_id)
     if article is None:
-        raise ValueError(f"Article {article_id} not found")
+        raise NotFoundError("Article not found", resource_type="article", resource_id=article_id)
     consents = list(article.publish_consents or [])
     if user_id not in consents:
         consents.append(user_id)
         article.publish_consents = consents
+    session.flush()
+
+
+def remove_publish_consent(session: Session, article_id: str, user_id: str) -> None:
+    """Remove a single maintainer's consent to publish/merge.
+
+    No-op if the consent was not recorded.  Raises NotFoundError if article not found.
+    """
+    article = session.get(Article, article_id)
+    if article is None:
+        raise NotFoundError("Article not found", resource_type="article", resource_id=article_id)
+    consents = list(article.publish_consents or [])
+    if user_id in consents:
+        consents.remove(user_id)
+        article.publish_consents = consents if consents else None
     session.flush()
 
 

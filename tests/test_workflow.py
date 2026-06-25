@@ -168,12 +168,13 @@ class TestPerCommitScoring:
         session.close()
 
     def test_unknown_article_raises(self, engine):
-        """recompute_article_score for non-existent article raises ValueError."""
+        """recompute_article_score for non-existent article raises NotFoundError."""
         from peerpedia_core.storage.db.engine import get_session
         from peerpedia_core.commands import recompute_article_score
+        from peerpedia_core.exceptions import NotFoundError
 
         session = get_session(engine)
-        with pytest.raises(ValueError, match="not found"):
+        with pytest.raises(NotFoundError, match="not found"):
             recompute_article_score(session, "no-such-article")
         session.close()
 

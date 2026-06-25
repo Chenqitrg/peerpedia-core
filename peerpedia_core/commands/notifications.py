@@ -6,7 +6,7 @@
 from peerpedia_core.storage.db import Session
 from peerpedia_core.storage.db.models import Notification
 from peerpedia_core.storage.db.crud_notification import (
-    count_unread as _count_unread,
+    count_unread_notifications as _count_unread_notifications,
     create_notification as _create,
     get_notifications as _get,
     mark_read as _mark_read,
@@ -39,9 +39,9 @@ def mark_read(db: Session, notification_id: str):
     return _mark_read(db, notification_id)
 
 
-def count_unread(db: Session, user_id: str) -> int:
+def count_unread_notifications(db: Session, user_id: str) -> int:
     """Return the count of unread notifications for *user_id*."""
-    return _count_unread(db, user_id)
+    return _count_unread_notifications(db, user_id)
 
 
 def merge_notifications(

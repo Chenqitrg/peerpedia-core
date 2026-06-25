@@ -58,7 +58,7 @@ def _try_sync(db, server: str | None = None) -> None:
         console.print("[dim]⚠ Auto-sync conflict — pull and retry.[/]")
 
 
-def _sync_server(args) -> str:
+def _resolve_server_url(args) -> str:
     """Return the peer server URL from --server flag, env var, or saved default.
 
     The last-used server URL is saved to ``~/.peerpedia/server_default`` so

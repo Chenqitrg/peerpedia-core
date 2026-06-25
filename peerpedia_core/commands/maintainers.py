@@ -28,7 +28,7 @@ from peerpedia_core.storage.db import Session
 
 from peerpedia_core.exceptions import ConflictError, NotAuthorizedError, NotFoundError
 from peerpedia_core.storage.db.crud_article import (
-    add_publish_consent, clear_publish_consents, get_article,
+    add_publish_consent, clear_publish_consents, get_article, remove_publish_consent,
 )
 from peerpedia_core.storage.db.models import Article
 from peerpedia_core.storage.db import crud_maintainer
@@ -130,12 +130,5 @@ def revoke_publish_consent(db: Session, article_id: str, user_id: str) -> dict:
     Raises NotFoundError if the article is not found.
     """
     _assert_caller_is_maintainer(db, article_id, user_id)
-    article = get_article(db, article_id)
-    if article is None:
-        raise NotFoundError("Article not found")
-    consents = list(article.publish_consents or [])
-    if user_id in consents:
-        consents.remove(user_id)
-        article.publish_consents = consents if consents else None
-        db.flush()
+    remove_publish_consent(db, article_id, user_id)
     return {"article_id": article_id, "user_id": user_id, "action": "revoked"}

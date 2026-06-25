@@ -16,7 +16,7 @@ from peerpedia_core.policies.articles import (
     FORKABLE_STATUSES,
     PUBLIC_READABLE_STATUSES,
     assert_can_delete_article,
-    assert_can_download_content,
+    assert_can_access_content,
     assert_can_edit_article,
     assert_can_extend_sink,
     assert_can_fork_article,
@@ -144,20 +144,20 @@ class TestForkPermissions:
 class TestDownloadPermissions:
     def test_anyone_can_download_published(self):
         a = _article(id="a-dl-pub", status="published")
-        result = assert_can_download_content(a, [], None)
+        result = assert_can_access_content(a, [], None)
         assert result.id == "a-dl-pub"
 
     def test_author_can_download_draft(self):
         u = _user(id="u-dl-author")
         a = _article(id="a-dl-draft", status="draft")
-        result = assert_can_download_content(a, ["u-dl-author"], u)
+        result = assert_can_access_content(a, ["u-dl-author"], u)
         assert result.id == "a-dl-draft"
 
     def test_non_author_cannot_download_draft(self):
         u = _user(id="u-dl-nonauth")
         a = _article(id="a-dl-draft2", status="draft")
         with pytest.raises(NotAuthorizedError, match="Content download not available"):
-            assert_can_download_content(a, [], u)
+            assert_can_access_content(a, [], u)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

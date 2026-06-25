@@ -53,6 +53,7 @@ from datetime import timedelta, timezone
 from peerpedia_core.storage.db import Session
 
 from peerpedia_core.config.params import params
+from peerpedia_core.exceptions import NotFoundError
 from peerpedia_core.storage.db.crud_article import get_article, get_articles_by_author, get_author_ids, get_author_ids_batch, list_articles, update_article_score, update_article_status
 from peerpedia_core.storage.db.crud_review import get_reviews_for_article, upsert_review
 from peerpedia_core.storage.db.crud_user import get_user, get_users_by_ids, list_users, update_user_reputation
@@ -157,11 +158,11 @@ def recompute_article_score(db: Session, article_id: str) -> dict | None:
     """Compute the article score from all cached reviews and write it to DB.
 
     Returns the computed score dict, or None if no reviews exist.
-    Raises ValueError if the article does not exist.
+    Raises NotFoundError if the article does not exist.
     """
     article = get_article(db, article_id)
     if article is None:
-        raise ValueError(f"Article not found: {article_id}")
+        raise NotFoundError("Article not found", resource_type="article", resource_id=article_id)
 
     all_reviews = get_reviews_for_article(db, article_id)
     if not all_reviews:

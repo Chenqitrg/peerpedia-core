@@ -13,7 +13,7 @@ from peerpedia_core.cli.helpers import (
     _resolve_and_display_article, _ok, _die, _json_out,
 )
 from peerpedia_core.cli.display import console
-from peerpedia_core.cli.bundle_utils import _sync_server, _try_sync
+from peerpedia_core.cli.bundle_utils import _resolve_server_url, _try_sync
 from peerpedia_core.commands import (
     fork_article, create_merge_proposal, accept_merge, withdraw_merge_proposal,
     add_bookmark, add_share, get_feed_shares, get_shares_for_user,
@@ -280,7 +280,7 @@ def _cmd_following(db, args):
     args: --user, --server, --local, --json
     """
     if not args.local:
-        server = _sync_server(args)
+        server = _resolve_server_url(args)
         discover_following(db, server, args.user)
         db.commit()
     if args.json:
@@ -297,7 +297,7 @@ def _cmd_followers(db, args):
     args: --user, --server, --local, --json
     """
     if not args.local:
-        server = _sync_server(args)
+        server = _resolve_server_url(args)
         discover_followers(db, server, args.user)
         db.commit()
     if args.json:
@@ -442,7 +442,7 @@ def _cmd_school(db, args):
     users: list[dict] = []
     if not getattr(args, "local", False):
         # Default: fetch from peer server.
-        server = _sync_server(args)
+        server = _resolve_server_url(args)
         try:
             users = fetch_school(server, limit=limit)
             # Merge fetched users into local DB so they appear in future

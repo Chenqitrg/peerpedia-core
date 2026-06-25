@@ -87,12 +87,12 @@ def _public_key_to_bytes(key: ed25519.Ed25519PublicKey) -> bytes:
     return key.public_bytes_raw()
 
 
-def _load_private_key(key_bytes: bytes) -> ed25519.Ed25519PrivateKey:
+def load_private_key(key_bytes: bytes) -> ed25519.Ed25519PrivateKey:
     """Deserialize raw 32 bytes to Ed25519PrivateKey."""
     return ed25519.Ed25519PrivateKey.from_private_bytes(key_bytes)
 
 
-def _load_public_key(key_bytes: bytes) -> ed25519.Ed25519PublicKey:
+def load_public_key(key_bytes: bytes) -> ed25519.Ed25519PublicKey:
     """Deserialize raw 32 bytes to Ed25519PublicKey."""
     return ed25519.Ed25519PublicKey.from_public_bytes(key_bytes)
 
@@ -137,14 +137,14 @@ def new_salt() -> str:
 
 def sign_detached(private_key_bytes: bytes, message: bytes) -> bytes:
     """Sign a message with the private key. Returns the signature (64 bytes)."""
-    key = _load_private_key(private_key_bytes)
+    key = load_private_key(private_key_bytes)
     return key.sign(message)
 
 
 def verify_signature(pubkey_bytes: bytes, message: bytes, signature: bytes) -> bool:
     """Verify a detached Ed25519 signature. Returns True if valid."""
     try:
-        key = _load_public_key(pubkey_bytes)
+        key = load_public_key(pubkey_bytes)
         key.verify(signature, message)
         return True
     except InvalidSignature:

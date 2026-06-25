@@ -13,7 +13,7 @@ from peerpedia_core.cli.helpers import (
     _prompt_commit_message, _parse_scores, _page, _ok, _die, _json_out,
 )
 from peerpedia_core.cli.display import console, display_diff
-from peerpedia_core.cli.bundle_utils import _sync_server, _try_sync
+from peerpedia_core.cli.bundle_utils import _resolve_server_url, _try_sync
 from peerpedia_core.social import discover_articles
 from peerpedia_core.commands import (
     assert_article_integrity, create_article_with_content,
@@ -100,7 +100,7 @@ def _cmd_article_list(db, args):
     """
     # Remote fetch: pull article metadata or bookmarks from a peer.
     if args.server:
-        server = _sync_server(args)
+        server = _resolve_server_url(args)
         if args.user:
             n = discover_articles(db, server, args.user)
             db.commit()

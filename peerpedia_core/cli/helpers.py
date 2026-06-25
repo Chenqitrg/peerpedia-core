@@ -20,7 +20,7 @@ from pathlib import Path
 from peerpedia_core.cli.display import console, theme, display_article as _render_article
 from peerpedia_core.commands import db_session, get_article, get_author_ids, list_articles, parse_frontmatter, resolve_username_or_alias
 from peerpedia_core.config.paths import ARTICLES_DIR as DEFAULT_ARTICLES_DIR, DB_PATH, DB_URL, SESSION_FILE
-from peerpedia_core.crypto import _load_private_key, _public_key_to_bytes
+from peerpedia_core.crypto import load_private_key, _public_key_to_bytes
 from peerpedia_core.exceptions import PeerpediaError
 from peerpedia_core.storage.db.models import Article, User
 from peerpedia_core.types.scores import SCORE_DIMENSIONS
@@ -280,7 +280,7 @@ def _get_session_pubkey() -> str:
     session private key.  Returns ``""`` if not logged in."""
     key = _get_session_key()
     if key:
-        priv = _load_private_key(key)
+        priv = load_private_key(key)
         pub = priv.public_key()
         return _public_key_to_bytes(pub).hex()
     return ""

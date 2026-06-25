@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from peerpedia_core.cli.helpers import _with_db, _ok, _die
 from peerpedia_core.cli.display import _print_panel, console
-from peerpedia_core.cli.bundle_utils import _sync_server
+from peerpedia_core.cli.bundle_utils import _resolve_server_url
 from peerpedia_core.exceptions import ConflictError, ProtocolError, TransportError
 from peerpedia_core.bundle.pending import list_all, remove as pop_pending
 from peerpedia_core.bundle import count as pending_count, sync_article
@@ -20,7 +20,7 @@ def _cmd_sync_status(args):
 
     args: --server, --json
     """
-    server = _sync_server(args)
+    server = _resolve_server_url(args)
     online = is_online(server)
     n = pending_count()
     status = "[success]online[/]" if online else "[error]offline[/]"
@@ -73,7 +73,7 @@ def _cmd_sync_push(db, args):
 
     args: --server, --json
     """
-    server = _sync_server(args)
+    server = _resolve_server_url(args)
     if not is_online(server):
         _die("Server unreachable",
              suggestion=f"Cannot connect to {server}. Check: (1) is the server "
@@ -93,7 +93,7 @@ def _cmd_sync_pull(db, args):
     locally.  Add article *discovery* — fetch the server's article list
     and pull new articles that the user doesn't have yet.
     """
-    server = _sync_server(args)
+    server = _resolve_server_url(args)
     if not is_online(server):
         _die("Server unreachable",
              suggestion=f"Cannot connect to {server}. Check: (1) is the server "

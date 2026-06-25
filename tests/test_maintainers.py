@@ -53,18 +53,17 @@ class TestAddMaintainer:
 
         assert is_maintainer(db, "a1", "u1")
 
-    def test_duplicate_raises_integrity_error(self, db_engine):
+    def test_duplicate_is_idempotent(self, db_engine):
         db = get_session(db_engine)
         _user(db, "u1")
         _article(db, "a1", ["u1"])
-        add_maintainer(db, "a1", "u1")
+        m1 = add_maintainer(db, "a1", "u1")
         db.commit()
 
-        from sqlalchemy.exc import IntegrityError
-
-        with pytest.raises(IntegrityError):
-            add_maintainer(db, "a1", "u1")
-            db.flush()
+        # Second call returns the existing row — idempotent, no error.
+        m2 = add_maintainer(db, "a1", "u1")
+        assert m2.article_id == m1.article_id
+        assert m2.user_id == m1.user_id
 
 
 # ── CRUD: remove_maintainer ──────────────────────────────────────────────

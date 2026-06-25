@@ -17,7 +17,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
-from peerpedia_core.crypto import _load_public_key
+from peerpedia_core.crypto import load_public_key
 from peerpedia_core.commands import (
     add_share,
     follow_user,
@@ -97,7 +97,7 @@ async def _rotate_key(request: Request) -> JSONResponse:
     # Validate the Ed25519 curve point — reject low-order points and
     # points-off-curve that would break all future auth for this user.
     try:
-        _load_public_key(key_bytes)
+        load_public_key(key_bytes)
     except Exception as e:
         raise BadRequestError(
             f"public_key is not a valid Ed25519 key: {e}"

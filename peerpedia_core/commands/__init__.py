@@ -128,7 +128,7 @@ from peerpedia_core.commands.discover import (
     merge_users,
 )
 from peerpedia_core.commands.notifications import (
-    count_unread,
+    count_unread_notifications,
     create_notification,
     get_notifications,
     mark_read,

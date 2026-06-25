@@ -139,7 +139,7 @@ class TestCrudMarkRead:
 class TestCrudCountUnread:
     def test_counts_correctly(self, db):
         from peerpedia_core.storage.db.crud_notification import (
-            count_unread, create_notification, mark_read,
+            count_unread_notifications, create_notification, mark_read,
         )
 
         _make_user(db, "user-1")
@@ -148,13 +148,13 @@ class TestCrudCountUnread:
         n2 = create_notification(db, user_id="user-1", event="new_follower",
                                  message="2")
         mark_read(db, n2.id)
-        assert count_unread(db, "user-1") == 1
+        assert count_unread_notifications(db, "user-1") == 1
 
     def test_zero(self, db):
-        from peerpedia_core.storage.db.crud_notification import count_unread
+        from peerpedia_core.storage.db.crud_notification import count_unread_notifications
 
         _make_user(db, "user-1")
-        assert count_unread(db, "user-1") == 0
+        assert count_unread_notifications(db, "user-1") == 0
 
 
 # ── Facade Tests ─────────────────────────────────────────────────────────
@@ -188,13 +188,13 @@ class TestCommandsFacade:
         mark_read(db, n.id)
         assert n.read == 1
 
-    def test_count_unread_delegates(self, db):
-        from peerpedia_core.commands.notifications import count_unread, create_notification
+    def test_count_unread_notifications_delegates(self, db):
+        from peerpedia_core.commands.notifications import count_unread_notifications, create_notification
 
         _make_user(db, "user-1")
         create_notification(db, user_id="user-1", event="new_follower",
                             message="Test")
-        assert count_unread(db, "user-1") == 1
+        assert count_unread_notifications(db, "user-1") == 1
 
 
 # ── Event Emission Tests ─────────────────────────────────────────────────

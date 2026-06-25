@@ -8,7 +8,7 @@ from peerpedia_core.cli.helpers import (
 )
 from peerpedia_core.cli.display import console
 from peerpedia_core.commands import (
-    count_unread, get_notifications, mark_read,
+    count_unread_notifications, get_notifications, mark_read,
 )
 
 
@@ -18,7 +18,7 @@ def _cmd_notifications(db, args):
     user_id = _get_session_user()
     unread_only = not getattr(args, "all", False)
     notifs = get_notifications(db, user_id, unread_only=unread_only, limit=50)
-    unread_count = count_unread(db, user_id)
+    unread_count = count_unread_notifications(db, user_id)
 
     if args.json:
         _json_out([

@@ -27,7 +27,7 @@ Permission matrix
 |-------------|-------------------------------|------------------|-------------------------|
 | Read        | assert_can_read_article       | Anyone           | sedimentation, published|
 |             |                               | Author           | draft, sedimentation, published |
-| Download    | assert_can_download_content   | Anyone           | published               |
+| Download    | assert_can_access_content    | Anyone           | published               |
 |             |                               | Author           | any                     |
 | Edit        | assert_can_edit_article       | Maintainer only  | draft, published        |
 | Delete      | assert_can_delete_article     | Maintainer only  | draft                   |
@@ -174,12 +174,12 @@ def assert_can_read_article(
     raise NotAuthorizedError("Article is private")
 
 
-def assert_can_download_content(
+def assert_can_access_content(
     article: Article,
     author_ids: list[str],
     user: User | None,
 ) -> Article:
-    """Raise if *user* cannot download article content."""
+    """Raise if *user* cannot download article content (authorization guard, no I/O)."""
     if article.status in PUBLIC_DOWNLOADABLE_STATUSES:
         return article
     if _is_author(author_ids, user):

@@ -51,7 +51,7 @@ def mark_read(session: Session, notification_id: str) -> None:
         session.flush()
 
 
-def count_unread(session: Session, user_id: str) -> int:
+def count_unread_notifications(session: Session, user_id: str) -> int:
     """Return the number of unread notifications for a user."""
     return (
         session.query(Notification)

@@ -22,9 +22,14 @@ from peerpedia_core.storage.db.models import ScriptMaintainer
 def add_maintainer(session: Session, article_id: str, user_id: str) -> ScriptMaintainer:
     """Grant maintainer status to a user for an article.
 
-    Raises sqlalchemy.exc.IntegrityError if the row already exists
-    (unique constraint on article_id + user_id).
+    Idempotent — returns existing row if already a maintainer.
     """
+    existing = session.query(ScriptMaintainer).filter(
+        ScriptMaintainer.article_id == article_id,
+        ScriptMaintainer.user_id == user_id,
+    ).first()
+    if existing:
+        return existing
     row = ScriptMaintainer(article_id=article_id, user_id=user_id)
     session.add(row)
     session.flush()

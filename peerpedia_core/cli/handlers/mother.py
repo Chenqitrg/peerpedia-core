@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""?Mother — interactive user guide.
+"""Mother — interactive user guide.
 
 TODO(mother-agent): Mother evolves through four phases:
 
@@ -96,4 +96,4 @@ publishing.  Every article lives in its own git repository on your machine.
 
 [muted]In the future, I'll be able to answer questions and help you write.
 For now, this guide is all I can offer.[/]
-""", title="?Mother — PeerPedia Guide", border_style="accent", title_align="left"))
+""", title="Mother — PeerPedia Guide", border_style="accent", title_align="left"))

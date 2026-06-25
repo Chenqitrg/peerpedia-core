@@ -118,6 +118,33 @@ def test_no_internal_peerpedia_imports():
         ("peerpedia_core/cli/helpers.py",
          "peerpedia_core.bundle"):
             "heavy optional: lazy pull of article content from peer server; only needed when source file is missing",
+        ("peerpedia_core/cli/__init__.py",
+         "peerpedia_core.repl"):
+            "circular: cli/__init__.py imports from repl, repl imports from cli (parser, helpers)",
+        ("peerpedia_core/repl/__init__.py",
+         "peerpedia_core.cli.helpers"):
+            "circular: repl → cli.helpers; cli/__init__.py → repl",
+        ("peerpedia_core/repl/__init__.py",
+         "peerpedia_core.cli"):
+            "circular: repl → cli (build_parser for non-TTY fallback)",
+        ("peerpedia_core/repl/state.py",
+         "peerpedia_core.cli.helpers"):
+            "circular: repl state accesses session data from cli.helpers",
+        ("peerpedia_core/repl/state.py",
+         "peerpedia_core.commands"):
+            "circular: repl state loads articles/users for completions from commands",
+        ("peerpedia_core/repl/__init__.py",
+         "peerpedia_core.commands"):
+            "circular: repl init publishes ready articles and counts on startup",
+        ("peerpedia_core/repl/__init__.py",
+         "peerpedia_core.repl.state"):
+            "circular: repl init mutates repl state (_repl_user, theme) from run()",
+        ("peerpedia_core/repl/__init__.py",
+         "peerpedia_core.repl.commands"):
+            "circular: repl init imports _META_COMMANDS for completer setup",
+        ("peerpedia_core/repl/browse.py",
+         "peerpedia_core.commands"):
+            "circular: repl browse uses commands for article/user data",
     }
 
     for f in _all_modules():

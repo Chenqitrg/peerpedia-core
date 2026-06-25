@@ -550,7 +550,8 @@ class TestMergeProposalCRUD:
         session = get_session(engine)
         author = _make_user(session, "mp_sr")
         article = _make_article(session, authors=[author.id])
-        with pytest.raises(ValueError, match="Cannot create a merge proposal for an article with itself"):
+        from peerpedia_core.exceptions import BadRequestError
+        with pytest.raises(BadRequestError, match="Cannot create a merge proposal for an article with itself"):
             create_merge_proposal(session, fork_id=article.id, target_id=article.id, proposer_id=author.id)
         session.close()
 

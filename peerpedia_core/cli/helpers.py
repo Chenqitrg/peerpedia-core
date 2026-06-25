@@ -20,7 +20,7 @@ from pathlib import Path
 from peerpedia_core.cli.display import console, theme, display_article as _render_article
 from peerpedia_core.commands import (
     assert_article_integrity, db_session, get_article, get_author_ids,
-    list_articles, parse_frontmatter, resolve_username_or_alias,
+    get_users_by_ids, list_articles, parse_frontmatter, resolve_username_or_alias,
 )
 from peerpedia_core.config.paths import ARTICLES_DIR as DEFAULT_ARTICLES_DIR, DB_PATH, DB_URL, SESSION_FILE
 from peerpedia_core.crypto import load_private_key, _public_key_to_bytes
@@ -201,9 +201,14 @@ def _resolve_and_display_article(db, article, *, author_ids: list[str] | None = 
     If *author_ids* is passed, it is used directly (allows batch preloading
     in list handlers).  Otherwise ``get_author_ids`` queries the DB.
 
+    Author UUIDs are resolved to display names for human readability.
     Skips articles without a local source file (discovered stubs) rather
     than crashing — the user sees title/status only.
     """
+    author_ids_list = author_ids if author_ids is not None else get_author_ids(db, article.id)
+    # Resolve UUIDs to display names.
+    author_names = _resolve_author_names(db, author_ids_list)
+
     try:
         raw = _find_article_file(article.id, db=db).read_text()
     except SystemExit:
@@ -211,7 +216,7 @@ def _resolve_and_display_article(db, article, *, author_ids: list[str] | None = 
         _render_article(
             title=article.title,
             status=article.status,
-            authors=author_ids if author_ids is not None else [],
+            authors=author_names,
             score=article.score,
             abstract=article.abstract,
         )
@@ -220,7 +225,7 @@ def _resolve_and_display_article(db, article, *, author_ids: list[str] | None = 
     _render_article(
         title=fm.get("title", article.title),
         status=article.status,
-        authors=author_ids if author_ids is not None else get_author_ids(db, article.id),
+        authors=author_names,
         score=article.score,
         abstract=fm.get("abstract", article.abstract),
     )
@@ -442,6 +447,17 @@ def _output_result(args, result: dict, success_msg: str) -> None:
         _json_out(result)
     else:
         _ok(success_msg)
+
+
+def _resolve_author_names(db, author_ids: list[str]) -> list[str]:
+    """Convert author UUIDs to display names for human-readable output.
+
+    UUIDs that can't be resolved are shown as 8-char prefixes.
+    """
+    if not author_ids:
+        return []
+    users = {u.id: u for u in get_users_by_ids(db, set(author_ids))}
+    return [users[uid].name if uid in users else uid[:8] for uid in author_ids]
 
 
 def _require_resolved_article(db, args_id: str, *, check_integrity: bool = True):

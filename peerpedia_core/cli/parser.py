@@ -43,7 +43,7 @@ from peerpedia_core.cli.handlers import (
     _cmd_whoami,
 )
 
-from peerpedia_core.types.scores import SCORE_FORMAT_EXAMPLE
+from peerpedia_core.types.scores import SCORE_FORMAT_EXAMPLE, _SCORE_DIMS_LIST
 
 _HELP_DIR = Path(__file__).resolve().parent / "help"
 
@@ -121,7 +121,7 @@ COMMAND_GROUPS = [
             (("--content",), {"help": "Article body (inline; omit to open editor)"}),
             (("--no-editor",), {"action": "store_true", "help": "Create empty article without opening editor"}),
             (("--publish",), {"action": "store_true", "help": "Publish immediately after creation"}),
-            (("--scores",), {"help": f'Self-review scores, e.g. "{SCORE_FORMAT_EXAMPLE}"'}),
+            (("--scores",), {"help": f'Self-review scores ({_SCORE_DIMS_LIST}), e.g. "{SCORE_FORMAT_EXAMPLE}"'}),
         ], {"epilog": _load_help("article_create")}),
         ("show", _cmd_article_show, [
             (("id",), {"metavar": "ref", "help": "Article UUID, prefix, or title keyword"}),
@@ -147,7 +147,7 @@ COMMAND_GROUPS = [
         ("publish", _cmd_article_publish, [
             (("id",), {"metavar": "ref", "help": "Article UUID, prefix, or title keyword"}),
             (("--scores",), {"required": True,
-                             "help": f'Self-review scores, e.g. "{SCORE_FORMAT_EXAMPLE}"'}),
+                             "help": f'Self-review scores ({_SCORE_DIMS_LIST}), e.g. "{SCORE_FORMAT_EXAMPLE}"'}),
         ], {"epilog": _load_help("article_publish")}),
         ("delete", _cmd_article_delete, [
             (("id",), {"metavar": "ref", "help": "Article UUID, prefix, or title keyword"}),
@@ -163,7 +163,7 @@ COMMAND_GROUPS = [
         ("submit", _cmd_review_submit, [
             (("article_id",), {"metavar": "ref", "help": "Article UUID, prefix, or title keyword"}),
             (("--scores",), {"required": True,
-                             "help": f'Five-dim scores, e.g. "{SCORE_FORMAT_EXAMPLE}"'}),
+                             "help": f'Five-dim scores ({_SCORE_DIMS_LIST}), e.g. "{SCORE_FORMAT_EXAMPLE}"'}),
             (("--comment",), {"required": True, "help": "Review comment (min 200 characters)"}),
         ], {"epilog": _load_help("review_submit")}),
         ("list", _cmd_review_list, [
@@ -323,7 +323,7 @@ TOP_LEVEL = [
     ("unfollow", _cmd_unfollow_user, [
         (("user_identifier",), {"help": "User ID, @name, or UUID prefix"}),
     ]),
-    ("?Mother", _cmd_mother, []),
+    ("mother", _cmd_mother, []),
     ("school", _cmd_school, [
         (("--limit",), {"type": int, "default": 20, "help": "Max users to show"}),
         (("--server",), {"help": "Peer server URL (or set PEERPEDIA_SERVER env var)"}),

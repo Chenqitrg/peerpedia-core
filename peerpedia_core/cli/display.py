@@ -59,9 +59,10 @@ def display_article(title: str, status: str, authors: list[str], score: dict | N
     body = (
         f"[bold info]{title}[/]      {_status_badge(status)}\n"
         f"Authors: {', '.join(authors)}\n"
-        f"Score:   {scores_str}\n"
-        f"Abstract: {abstract or '[muted]none[/]'}"
+        f"Score:   {scores_str}"
     )
+    if abstract:
+        body += f"\nAbstract: {abstract}"
     _print_panel("Article", body)
 
 

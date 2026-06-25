@@ -34,8 +34,8 @@ def _cmd_compile(db, args):
 
     if result.success:
         if result.output_path:
-            _ok(f"Compiled → {result.output_path}")
-            console.print(f"[muted]Format: {result.format}[/]")
+            _ok(f"Compiled to [accent]{result.format.upper()}[/]")
+            console.print(f"  [dim]{result.output_path}[/]")
             _open_file(result.output_path)
         if result.html_content:
             _page(result.html_content) if len(result.html_content) > 500 else console.print(result.html_content)

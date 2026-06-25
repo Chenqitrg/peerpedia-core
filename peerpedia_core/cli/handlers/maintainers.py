@@ -10,6 +10,7 @@ from peerpedia_core.cli.display import _print_table, console
 from peerpedia_core.commands import (
     add_maintainer_to_article,
     consent_to_publish,
+    get_users_by_ids,
     list_maintainers,
     remove_maintainer_from_article,
     revoke_publish_consent,
@@ -58,8 +59,10 @@ def _cmd_maintainer_list(db, args):
     if not ids:
         console.print("[muted]No maintainers.[/]")
         return
-    rows = [[uid[:8]] for uid in ids]
-    _print_table(["Maintainer ID"], rows, title=f"{len(rows)} maintainer(s)")
+    # Resolve UUIDs to display names.
+    users = {u.id: u for u in get_users_by_ids(db, set(ids))}
+    rows = [[f"{users[uid].name} ({uid[:8]})" if uid in users else uid[:8]] for uid in ids]
+    _print_table(["Maintainer"], rows, title=f"{len(rows)} maintainer(s)")
 
 
 @_with_db

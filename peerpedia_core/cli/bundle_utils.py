@@ -25,7 +25,7 @@ from peerpedia_core.transport.health import check_clock_skew
 
 
 def _require_online_server(args) -> str:
-    """Resolve server URL and die if unreachable.
+    """Resolve server URL, ensure it's online, check clock skew, die if not.
 
     Replaces the duplicated 7-line guard in ``_cmd_sync_push`` and
     ``_cmd_sync_pull``.
@@ -37,6 +37,15 @@ def _require_online_server(args) -> str:
                         "running? (2) is PEERPEDIA_SERVER set correctly? "
                         "(3) is your network up?",
              see_also=["sync status"])
+    # Clock skew check only before sync operations (push/pull/discover).
+    skew = check_clock_skew(server)
+    if skew is not None and abs(skew) > 30:
+        direction = "behind" if skew > 0 else "ahead"
+        _die(
+            f"Clock is {abs(skew)}s {direction} {server}. "
+            "Fix your system clock before syncing — "
+            "commit timestamps would be unreliable for priority claims."
+        )
     return server
 
 def _sync_articles_to_peer(db, server: str, *, pre_check: bool = True) -> int:
@@ -160,6 +169,9 @@ def _resolve_server_url(args) -> str:
 
     The last-used server URL is saved to ``~/.peerpedia/server_default`` so
     users don't need to pass ``--server`` on every command.
+
+    Warns once if the saved default server has been unreachable for 3+
+    consecutive calls, and offers to clear it.
     """
     srv = getattr(args, "server", None) or os.environ.get("PEERPEDIA_SERVER")
     if not srv:
@@ -174,17 +186,27 @@ def _resolve_server_url(args) -> str:
 
     _save_default_server(srv)
 
-    # Check clock sync before any network operation.
-    skew = check_clock_skew(srv)
-    if skew is not None and abs(skew) > 30:
-        direction = "behind" if skew > 0 else "ahead"
-        _die(
-            f"Clock is {abs(skew)}s {direction} {srv}. "
-            "Fix your system clock before syncing — "
-            "commit timestamps would be unreliable for priority claims."
-        )
+    # Warn if the saved default server has been unreachable for 3+ consecutive
+    # calls — the user may not realize it's a stale server from a past session.
+    if not is_online(srv):
+        _stale_hits = _stale_counter.get(srv, 0) + 1
+        _stale_counter[srv] = _stale_hits
+        if _stale_hits == 3:
+            console.print(
+                f"[warning]⚠ Server {srv} is unreachable after 3 attempts. "
+                f"It may be from a previous session.[/]"
+            )
+            console.print(
+                f"  [dim]→ To clear: rm {DATA_ROOT / 'server_default'}[/]"
+            )
+    else:
+        _stale_counter.pop(srv, None)
 
     return srv
+
+
+# Track consecutive stale-server hits for the warning threshold.
+_stale_counter: dict[str, int] = {}
 
 
 def _save_default_server(url: str) -> None:

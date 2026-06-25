@@ -5,8 +5,10 @@
 
 from datetime import datetime, timezone
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from peerpedia_core.exceptions import BadRequestError, ConflictError
 from peerpedia_core.storage.db.models import MergeProposal
 
 
@@ -18,10 +20,11 @@ def create_merge_proposal(
 ) -> MergeProposal:
     """Create a merge request from *fork_id* into *target_id*.
 
-    Raises ValueError if fork and target are the same article.
+    Raises BadRequestError if fork and target are the same article or if
+    the foreign key constraints fail (e.g. fork/target don't exist).
     """
     if fork_id == target_id:
-        raise ValueError("Cannot create a merge proposal for an article with itself")
+        raise BadRequestError("Cannot create a merge proposal for an article with itself")
     mp = MergeProposal(
         fork_article_id=fork_id,
         target_article_id=target_id,
@@ -29,7 +32,20 @@ def create_merge_proposal(
         status="open",
     )
     session.add(mp)
-    session.flush()
+    try:
+        session.flush()
+    except IntegrityError as e:
+        session.rollback()
+        msg = str(e).lower()
+        if "foreign key" in msg:
+            raise BadRequestError(
+                "Cannot create merge proposal: one of the articles does not exist. "
+                "Check that both the fork and target article IDs are correct.",
+                field="fork_id" if "fork" in msg else "target_id",
+            ) from e
+        raise BadRequestError(
+            f"Cannot create merge proposal: {e}",
+        ) from e
     return mp
 
 

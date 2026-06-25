@@ -121,8 +121,10 @@ def submit_review(
         accepted_inv = get_accepted_invitation(db, article_id, reviewer_id)
         if accepted_inv is None:
             raise NotAuthorizedError(
-                "Must accept a review invitation before submitting a review "
-                "during sedimentation"
+                "You have not been invited to review this article. "
+                "During sedimentation, only invited reviewers may submit reviews. "
+                "Ask the author to invite you: "
+                f"peerpedia review invite {article_id} --user @you"
             )
         anon_id = _derive_anonymous_id(article_id, signing_key=signing_key_bytes)
         display_name = derive_anonymous_name(anon_id)
@@ -285,7 +287,11 @@ def accept_invitation(
         )
         if declined is not None:
             raise BadRequestError("Cannot accept a declined invitation")
-        raise NotFoundError("No pending invitation found for this article")
+        raise NotFoundError(
+            "No pending invitation found for this article. "
+            "Ask the article author to invite you with: "
+            f"peerpedia review invite {article_id} --user @you"
+        )
 
     update_review_status(db, inv, "accepted")
     db.flush()
@@ -310,7 +316,10 @@ def decline_invitation(
         acc = get_accepted_invitation(db, article_id, reviewer_id)
         if acc is not None:
             raise BadRequestError("Cannot decline an already accepted invitation")
-        raise NotFoundError("No pending invitation found for this article")
+        raise NotFoundError(
+            "No pending invitation to decline for this article — "
+            "it may have already been accepted, declined, or expired."
+        )
 
     update_review_status(db, inv, "declined")
     db.flush()
@@ -398,31 +407,39 @@ def assert_valid_review(scores: dict, comment: str | None = None, *, check_comme
     ``sync_reviews_from_worktree`` (sync, *check_comment=False* — comment
     is in thread files not scores.json).
     """
+    errors: list[str] = []
+
     if check_comment:
         min_len = params.comment.min_length
         if not comment or not isinstance(comment, str):
-            raise BadRequestError("Review comment is required")
-        if len(comment.strip()) < min_len:
-            raise BadRequestError(
+            errors.append("Review comment is required")
+        elif len(comment.strip()) < min_len:
+            actual = len(comment.strip())
+            errors.append(
                 f"Review comment must be at least {min_len} characters "
-                f"(got {len(comment.strip())})"
+                f"(got {actual} — {min_len - actual} more needed). "
+                f"Tip: echo 'your comment' | wc -c to count before pasting."
             )
 
     full_dims = set(SCORE_DIMENSIONS.values())
     abbr_dims = set(SCORE_DIMENSIONS.keys())
     if not isinstance(scores, dict):
-        raise BadRequestError("scores must be a dict")
-    keys = set(scores.keys())
-    if not (abbr_dims.issubset(keys) or full_dims.issubset(keys)):
-        raise BadRequestError(
-            f"scores must contain all {len(SCORE_DIMENSIONS)} dimensions: "
-            f"{', '.join(sorted(SCORE_DIMENSIONS.keys()))}"
-        )
-    for dim, val in scores.items():
-        if not isinstance(val, (int, float)) or val < 1 or val > 5:
-            raise BadRequestError(
-                f"score dimension '{dim}' must be a number between 1 and 5, got {val!r}"
+        errors.append("scores must be a dict")
+    else:
+        keys = set(scores.keys())
+        if not (abbr_dims.issubset(keys) or full_dims.issubset(keys)):
+            errors.append(
+                f"scores must contain all {len(SCORE_DIMENSIONS)} dimensions: "
+                f"{', '.join(sorted(SCORE_DIMENSIONS.keys()))}"
             )
+        for dim, val in scores.items():
+            if not isinstance(val, (int, float)) or val < 1 or val > 5:
+                errors.append(
+                    f"score dimension '{dim}' must be a number between 1 and 5, got {val!r}"
+                )
+
+    if errors:
+        raise BadRequestError("; ".join(errors))
 
     # Normalize abbreviation keys to full names for downstream consistency.
     # aggregate_review_scores accesses only full-name keys (DIMS =

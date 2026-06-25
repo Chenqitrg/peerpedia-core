@@ -18,6 +18,11 @@ Sub-packages:
 from __future__ import annotations
 
 import sys
+import warnings
+
+# Suppress SQLAlchemy deprecation warnings from user-facing output.
+# SAWarning about Subquery coercion is harmless and confusing to users.
+warnings.filterwarnings("ignore", category=Warning, module="sqlalchemy")
 
 from peerpedia_core.cli.parser import build_parser
 from peerpedia_core.config.paths import DB_PATH, DB_URL
@@ -64,7 +69,7 @@ def _show_dashboard() -> None:
     console.print("  Get started:")
     console.print("    [accent]peerpedia article create --title \"My Paper\"[/]")
     console.print("    [accent]peerpedia article list[/]")
-    console.print("    [accent]peerpedia ?Mother[/]                   ← full guide")
+    console.print("    [accent]peerpedia mother[/]                   ← full guide")
     console.print()
 
 
@@ -105,12 +110,11 @@ def main():
     except ImportError:
         pass
     args = parser.parse_args()
-    # Default to JSON output for AI consumption; --rich enables human-readable.
-    if hasattr(args, "rich"):
-        if args.rich:
-            args.json = False  # --rich takes precedence
-        else:
-            args.json = True   # default: JSON for AI
+    # Default is human-readable (Rich) output.
+    # Use --json for machine-readable output (AI agents, scripts).
+    # --rich is also accepted as an explicit alias.
+    if getattr(args, "rich", False):
+        args.json = False
     if hasattr(args, "func"):
         args.func(args)
     else:

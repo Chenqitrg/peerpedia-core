@@ -28,18 +28,30 @@ from peerpedia_core.transport import (
     push_follow, push_share, push_share_remove, push_unfollow,
 )
 
+# Track whether the "no server configured" warning has been shown in this
+# process — avoids repetitive warnings when a single command triggers
+# multiple sync attempts (e.g. _try_sync + _push_social + _pull_social).
+_server_warned: bool = False
+
+
 def _get_server_or_warn(label: str = "Social") -> str | None:
     """Read PEERPEDIA_SERVER from env, warn and return None if not set.
 
     Replaces the duplicated ``os.environ.get("PEERPEDIA_SERVER")`` + warn
     pattern in ``_pull_social`` and ``_push_to_peer``.
+
+    Only warns once per process — subsequent calls for the same missing
+    server are silent.
     """
+    global _server_warned
     server = os.environ.get("PEERPEDIA_SERVER")
     if not server:
-        console.print(
-            f"[warning]⚠ No PEERPEDIA_SERVER set — {label} skipped. "
-            "Set with: export PEERPEDIA_SERVER=https://your-peer.example.com[/]"
-        )
+        if not _server_warned:
+            _server_warned = True
+            console.print(
+                "[warning]⚠ No PEERPEDIA_SERVER set — network sync skipped. "
+                "Set with: export PEERPEDIA_SERVER=https://your-peer.example.com[/]"
+            )
         return None
     return server
 
@@ -63,7 +75,7 @@ def _pull_social(db, user_id: str) -> None:
 
 def _push_to_peer(label: str, push_fn) -> None:
     """Best-effort push to PEERPEDIA_SERVER.  Warns on failure."""
-    server = _get_server_or_warn(f"{label} push")
+    server = _get_server_or_warn(label)
     if not server:
         return
     try:
@@ -139,7 +151,7 @@ def _cmd_fork(db, args):
     if args.json:
         _json_out(result)
     else:
-        _ok(f"Forked → [accent]{result['id'][:8]}[/]")
+        _ok(f"Forked → [accent]{result['id'][:8]}[/] ({result['title']})")
 
 
 @_with_db
@@ -222,7 +234,7 @@ def _cmd_bookmark_add(db, args):
     if args.json:
         _json_out({"bookmarked": True})
     else:
-        _ok(f"Bookmarked [accent]{article_id[:8]}[/]")
+        _ok(f"Bookmarked [accent]{args.article_id}[/]")
 
 
 @_with_db
@@ -257,7 +269,9 @@ def _cmd_follow_user(db, args):
     if args.json:
         _json_out({"following": True})
     else:
-        _ok(f"Now following [accent]{followed_id[:8]}[/]")
+        followed_user = get_user(db, followed_id)
+        followed_name = followed_user.name if followed_user else args.user_identifier
+        _ok(f"Now following [accent]{followed_name}[/]")
 
 
 @_with_db
@@ -275,7 +289,9 @@ def _cmd_unfollow_user(db, args):
     if args.json:
         _json_out({"following": False})
     else:
-        _ok(f"Stopped following [accent]{followed_id[:8]}[/]")
+        followed_user = get_user(db, followed_id)
+        followed_name = followed_user.name if followed_user else args.user_identifier
+        _ok(f"Stopped following [accent]{followed_name}[/]")
 
 
 @_with_db
@@ -381,7 +397,7 @@ def _cmd_share_add(db, args):
         _json_out(result)
     else:
         to_str = f" → {args.to}" if getattr(args, "to", None) else ""
-        _ok(f"Shared [accent]{args.article_id[:8]}[/]{to_str}")
+        _ok(f"Shared [accent]{args.article_id}[/]{to_str}")
 
 
 @_with_db

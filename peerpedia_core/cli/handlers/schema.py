@@ -95,7 +95,8 @@ def _cmd_schema(args):
 
     # Nested command groups (e.g. ``article create``)
     for name, _help, subcommands in COMMAND_GROUPS:
-        for sub_name, handler, arg_specs in subcommands:
+        for entry in subcommands:
+            sub_name, handler, arg_specs = entry[0], entry[1], entry[2]
             if sub_name:
                 commands.append(_build_command_schema(name, sub_name, handler, arg_specs))
             else:

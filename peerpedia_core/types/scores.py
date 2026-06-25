@@ -46,6 +46,11 @@ SCORE_DIMENSIONS: dict[str, str] = {
 
 # Example for CLI help text: "orig=4,rigor=3,comp=4,ped=3,imp=3"
 SCORE_FORMAT_EXAMPLE = ",".join(f"{abbr}=N" for abbr in SCORE_DIMENSIONS)
+# Human-readable dimension guide for --help output.
+# e.g. "orig (originality), rigor (rigor), comp (completeness), ped (pedagogy), imp (impact)"
+_SCORE_DIMS_LIST = ", ".join(
+    f"{abbr}={full}" for abbr, full in SCORE_DIMENSIONS.items()
+)
 
 
 def _clamp(value: float, lo: float = 0.0, hi: float = 5.0) -> float:

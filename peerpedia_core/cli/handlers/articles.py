@@ -27,7 +27,7 @@ from peerpedia_core.transport import is_online
 from peerpedia_core.commands import (
     assert_article_integrity, create_article_with_content,
     diff_article, get_article, get_article_view, get_author_ids_batch, get_user,
-    list_article_views, list_articles, publish_article,
+    list_article_views, list_articles, parse_frontmatter, publish_article,
     publish_ready_articles, delete_article, update_article_content,
 )
 from peerpedia_core.commands.articles._helpers import require_user
@@ -103,7 +103,15 @@ def _cmd_article_show(db, args):
     if show_mode == "full":
         raw = _find_article_file(article.id, db=db).read_text()
         console.print("\n[bold]── Content ──[/]")
-        _page(raw)
+        # If content is just YAML frontmatter with no body, show a hint.
+        body = raw.split("---\n", 2)[-1].strip() if raw.count("---") >= 2 else raw
+        if not body:
+            console.print(
+                "[muted]No content yet. Use [accent]peerpedia article edit "
+                f"{article.id[:8]}[/] to add content.[/]"
+            )
+        else:
+            _page(raw)
 
 
 @_with_db
@@ -139,15 +147,12 @@ def _cmd_article_list(db, args):
     if args.bookmarked:
         bookmarked_by = resolved_user_id or me
 
-    # Default: only publicly readable articles.  Drafts require --mine.
+    # Default: only publicly readable articles.  Drafts imply --mine.
+    if args.status == "draft" and not args.mine:
+        args.mine = True
     if args.mine:
         status = args.status or None
     elif args.status:
-        if args.status == "draft":
-            _die("--status draft requires --mine",
-                 suggestion="Drafts are private. Add --mine to see your own drafts, "
-                            "or omit --status to browse published articles.",
-                 see_also=["article list --mine"])
         status = args.status
     else:
         user_obj = get_user(db, me) if me else None
@@ -316,7 +321,10 @@ def _cmd_article_scan(db, args):
     if args.json:
         _json_out({"published": count})
     else:
-        _ok(f"Published [accent]{count}[/] article(s)")
+        if count:
+            _ok(f"Scan complete — [accent]{count}[/] article(s) auto-published")
+        else:
+            console.print("[muted]Scan complete — 0 articles ready for publish.[/]")
 
 
 @_with_db
@@ -340,6 +348,8 @@ def _cmd_article_diff(db, args):
 
     if args.json:
         _json_out(result)
+    elif not result["diff_text"].strip():
+        console.print("[muted]These are the same revision — no changes to show.[/]")
     else:
         display_diff(result["diff_text"], result["stats"])
 

@@ -50,7 +50,8 @@ from pathlib import Path
 from peerpedia_core.storage.db import Session
 
 from peerpedia_core.config.params import EMAIL_SUFFIX, PLATFORM_EMAIL
-from peerpedia_core.exceptions import NotAuthorizedError, SignatureVerificationError
+from peerpedia_core.types.status import VALID_ARTICLE_STATUSES
+from peerpedia_core.exceptions import BadRequestError, NotAuthorizedError, SignatureVerificationError
 from peerpedia_core.storage.db.crud_article import get_article, update_article_status, update_witnessed_at
 from peerpedia_core.storage.db.crud_maintainer import get_maintainer_ids
 from peerpedia_core.storage.db.crud_review import upsert_review
@@ -72,7 +73,7 @@ from peerpedia_core.commands.workflow import publish_ready_articles, recompute_a
 
 
 _PLATFORM_EMAIL = PLATFORM_EMAIL
-_VALID_STATUSES = {"draft", "sedimentation", "published"}
+_VALID_STATUSES = set(VALID_ARTICLE_STATUSES)
 
 
 def _parse_status_tag(message: str, author_email: str) -> str | None:
@@ -127,7 +128,12 @@ def sync_reviews_from_worktree(db: Session, article_id: str) -> None:
     real UUIDs both work (derive_anonymous_name handles display).
 
     Fail fast: malformed or missing scores.json raises immediately.
+    Reviews without valid scores or comment are skipped with a warning.
     """
+    import logging
+    from .reviews import assert_valid_review
+
+    _logger = logging.getLogger(__name__)
     rp = DEFAULT_ARTICLES_DIR / article_id
     head_hash = get_head_hash(rp)
 
@@ -137,6 +143,16 @@ def sync_reviews_from_worktree(db: Session, article_id: str) -> None:
             raise FileNotFoundError(
                 f"scores.json not found in reviews/{dir_name}/ for article {article_id}"
             )
+        # Validate scores on sync path — comment is stored in thread files
+        # (not scores.json) so we only enforce score validity here.
+        try:
+            assert_valid_review(scores, comment=None, check_comment=False)
+        except BadRequestError as e:
+            _logger.warning(
+                "Sync: skipping invalid review in %s/reviews/%s: %s",
+                article_id, dir_name, e.detail,
+            )
+            continue
         upsert_review(
             db,
             article_id=article_id,

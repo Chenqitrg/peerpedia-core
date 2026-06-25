@@ -57,7 +57,7 @@ from pathlib import Path
 from peerpedia_core.storage.db import Session
 
 from peerpedia_core.config.params import params
-from peerpedia_core.exceptions import ConflictError, NotFoundError
+from peerpedia_core.exceptions import BadRequestError, ConflictError, NotFoundError
 from peerpedia_core.policies.articles import (
     assert_can_reply_to_review, assert_can_submit_review, assert_not_folded,
 )
@@ -70,6 +70,7 @@ from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, commit_arti
 from peerpedia_core.storage.locks import get_article_lock
 from peerpedia_core.commands.workflow import recompute_article_score, recompute_author_reputation
 from peerpedia_core.commands.notifications import create_notification
+from peerpedia_core.types.scores import SCORE_DIMENSIONS
 
 
 def submit_review(
@@ -78,7 +79,7 @@ def submit_review(
     reviewer_id: str,
     scores: dict,
     *,
-    comment: str = "",
+    comment: str,
     signing_key_bytes: bytes | None = None,
     pubkey_hex: str | None = None,
 ) -> dict:
@@ -88,9 +89,12 @@ def submit_review(
     Recomputes article score and author reputations.
     The commit_hash for the DB cache is taken from the new git commit.
 
+    *comment* is required — reviews without substantive feedback are rejected.
     If *signing_key_bytes* and *pubkey_hex* are provided, the review commit
     is signed via SSH and the pubkey is embedded.
     """
+    assert_valid_review(scores, comment)
+
     user = get_user(db, reviewer_id)
     if user is None:
         raise NotFoundError("Reviewer not found")
@@ -104,7 +108,7 @@ def submit_review(
     author_ids = get_author_ids(db, article_id)
 
     if article.status == "sedimentation":
-        anon_id = _derive_anonymous_id(article_id, reviewer_id)
+        anon_id = _derive_anonymous_id(article_id, signing_key=signing_key_bytes)
         display_name = derive_anonymous_name(anon_id)
         email = f"anon-{anon_id}@peerpedia"
         commit_hash = write_review_to_git(
@@ -179,7 +183,7 @@ def submit_reply(
     )
 
     if article.status == "sedimentation":
-        directory_id = _derive_anonymous_id(article_id, reviewer_ref)
+        directory_id = _derive_anonymous_id(article_id, signing_key=signing_key_bytes)
         display_name = derive_anonymous_name(directory_id)
         email = f"anon-{directory_id}@peerpedia"
     else:
@@ -204,15 +208,54 @@ def submit_reply(
 
 
 
-def _derive_anonymous_id(article_id: str, reviewer_id: str) -> str:
+def _derive_anonymous_id(article_id: str, *, signing_key: bytes) -> str:
     """Derive a stable anonymous directory ID for a reviewer+article pair.
 
-    Deterministic — the same inputs always produce the same output, so a
-    reviewer's anonymous identity is consistent across multiple reviews of
-    the same article.  Different articles get different anonymous IDs.
+    Uses HMAC-SHA256 with the reviewer's Ed25519 signing key so the output
+    is deterministic for the same reviewer+article pair but cannot be
+    verified by anyone who doesn't hold the key.
+
+    Raises ValueError if *signing_key* is None — fail fast, no fallback.
     """
-    seed = f"{article_id}:{reviewer_id}:peerpedia-anon"
-    return hashlib.sha256(seed.encode()).hexdigest()[:12]
+    import hmac
+    if signing_key is None:
+        raise ValueError("signing_key is required for anonymous review ID derivation")
+    return hmac.new(signing_key, article_id.encode(), "sha256").hexdigest()[:12]
+
+
+def assert_valid_review(scores: dict, comment: str | None = None, *, check_comment: bool = True) -> None:
+    """Validate a review before submission — shared by local and sync paths.
+
+    Raises BadRequestError if scores are invalid or comment is too short.
+    Called by both ``submit_review`` (local, *check_comment=True*) and
+    ``sync_reviews_from_worktree`` (sync, *check_comment=False* — comment
+    is in thread files not scores.json).
+    """
+    if check_comment:
+        min_len = params.comment.min_length
+        if not comment or not isinstance(comment, str):
+            raise BadRequestError("Review comment is required")
+        if len(comment.strip()) < min_len:
+            raise BadRequestError(
+                f"Review comment must be at least {min_len} characters "
+                f"(got {len(comment.strip())})"
+            )
+
+    full_dims = set(SCORE_DIMENSIONS.values())
+    abbr_dims = set(SCORE_DIMENSIONS.keys())
+    if not isinstance(scores, dict):
+        raise BadRequestError("scores must be a dict")
+    keys = set(scores.keys())
+    if not (abbr_dims.issubset(keys) or full_dims.issubset(keys)):
+        raise BadRequestError(
+            f"scores must contain all {len(SCORE_DIMENSIONS)} dimensions: "
+            f"{', '.join(sorted(SCORE_DIMENSIONS.keys()))}"
+        )
+    for dim, val in scores.items():
+        if not isinstance(val, (int, float)) or val < 1 or val > 5:
+            raise BadRequestError(
+                f"score dimension '{dim}' must be a number between 1 and 5, got {val!r}"
+            )
 
 
 def _write_thread_message(
@@ -282,37 +325,15 @@ def write_review_to_git(
     review_dir = rp / "reviews" / directory_id
     review_dir.mkdir(parents=True, exist_ok=True)
 
-    # Scores: always overwrite with latest.  For the comment path,
-    # _write_thread_message acquires the lock for the git commit which
-    # includes both scores.json + thread file.  For the comment-less path
-    # we acquire the lock here to protect scores.json.
+    # Write scores.json first, then delegate to _write_thread_message
+    # which acquires the lock and commits both files in one git operation.
     (review_dir / "scores.json").write_text(json.dumps(scores, indent=2))
 
-    if comment:
-        return _write_thread_message(
-            article_id, directory_id, comment, display_name, email,
-            commit_marker="[review]",
-            signing_key_bytes=signing_key_bytes, pubkey_hex=pubkey_hex,
-        )
-
-    # Comment-less review — lock before git commit to prevent races.
-    lock = get_article_lock(article_id)
-    acquired = lock.acquire(timeout=10)
-    if not acquired:
-        raise ConflictError("Article busy — retry later")
-    try:
-        key_path = write_key_to_tempfile(signing_key_bytes) if signing_key_bytes else None
-        try:
-            h = commit_article(
-                rp, f"[review] {display_name}", display_name, email,
-                signing_key=key_path, pubkey_hex=pubkey_hex,
-            )
-        finally:
-            if key_path:
-                key_path.unlink(missing_ok=True)
-    finally:
-        lock.release()
-    return h
+    return _write_thread_message(
+        article_id, directory_id, comment, display_name, email,
+        commit_marker="[review]",
+        signing_key_bytes=signing_key_bytes, pubkey_hex=pubkey_hex,
+    )
 
 
 # ── Read wrapper ──────────────────────────────────────────────────────────

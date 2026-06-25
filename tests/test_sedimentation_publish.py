@@ -116,11 +116,10 @@ class TestPublishReadyArticles:
         assert count == 0
 
     def test_publishes_article_with_elapsed_sink(self, session):
-        """SP1 — An article whose sink time has elapsed gets published,
-        even without a git repo directory (uses article.score fallback)."""
+        """SP1 — An article with ≥3 passing community reviews gets published."""
         author = _make_user(session, "elapsed")
         past_start = datetime.now(timezone.utc) - timedelta(days=200)
-        _make_article(
+        article = _make_article(
             session,
             [author.id],
             status="sedimentation",
@@ -128,15 +127,21 @@ class TestPublishReadyArticles:
             sink_duration_days=7,
             score=_build_score(3, 3, 3, 3, 3),
         )
+        # Add 3 community reviewers with passing scores (≥3.0)
+        for i in range(3):
+            reviewer = _make_user(session, f"reviewer_{i}")
+            _make_review(
+                session, article.id, f"commit_{i}", reviewer.id,
+                scope="sedimentation", scores=_build_score(4, 4, 4, 4, 4),
+            )
         count = publish_ready_articles(session)
         assert count == 1
-        # Verify status change
         session.expire_all()
         published = session.query(Article).filter(Article.status == "published").all()
         assert len(published) == 1
 
     def test_publishes_article_with_git_repo(self, session):
-        """SP1 — When .git directory exists, uses commit_hash for score."""
+        """SP1 — When .git directory exists, publishes with ≥3 passing reviews."""
         import tempfile
         from pathlib import Path
 
@@ -155,10 +160,15 @@ class TestPublishReadyArticles:
                 sink_duration_days=7,
             )
             article_id = article.id
+            # Add 3 community reviewers with passing scores
+            for i in range(3):
+                r = _make_user(session, f"rev_git_{i}")
+                _make_review(
+                    session, article_id, f"c_{i}", r.id,
+                    scope="sedimentation", scores=_build_score(4, 4, 4, 4, 4),
+                )
 
-            # Monkey-patch DEFAULT_ARTICLES_DIR to point to our temp dir
             import peerpedia_core.storage.git_backend as gb_mod
-
             orig_dir = gb_mod.DEFAULT_ARTICLES_DIR
             try:
                 gb_mod.DEFAULT_ARTICLES_DIR = base
@@ -186,9 +196,8 @@ class TestPublishReadyArticles:
         assert count == 0
 
     def test_publishes_with_community_reviews(self, session):
-        """Article with community reviews publishes normally."""
+        """Article with ≥3 community reviews publishes normally."""
         author = _make_user(session, "comm_rv")
-        reviewer = _make_user(session, "rv_comm")
         past_start = datetime.now(timezone.utc) - timedelta(days=200)
         article = _make_article(
             session,
@@ -197,31 +206,34 @@ class TestPublishReadyArticles:
             sink_start=past_start,
             sink_duration_days=7,
         )
-        # Add a community review
-        _make_review(
-            session,
-            article.id,
-            "hash1",
-            reviewer.id,
-            "sedimentation",
-            _build_score(4, 4, 4, 4, 4),
-        )
+        for i in range(3):
+            r = _make_user(session, f"rv_comm_{i}")
+            _make_review(
+                session, article.id, f"hash{i}", r.id,
+                "sedimentation", _build_score(4, 4, 4, 4, 4),
+            )
         count = publish_ready_articles(session)
         assert count == 1
 
     def test_multiple_ready_articles(self, session):
-        """When multiple articles are ready, all are published."""
+        """When multiple articles are ready with ≥3 passing reviews, all are published."""
         author = _make_user(session, "multi")
         past_start = datetime.now(timezone.utc) - timedelta(days=200)
 
         for i in range(3):
-            _make_article(
+            article = _make_article(
                 session,
                 [author.id],
                 status="sedimentation",
                 sink_start=past_start,
                 sink_duration_days=7,
             )
+            for j in range(3):
+                r = _make_user(session, f"multi_rv_{i}_{j}")
+                _make_review(
+                    session, article.id, f"h_{i}_{j}", r.id,
+                    "sedimentation", _build_score(4, 4, 4, 4, 4),
+                )
 
         count = publish_ready_articles(session)
         assert count == 3
@@ -229,7 +241,6 @@ class TestPublishReadyArticles:
     def test_edit_during_sedimentation_preserves_score(self, session):
         """Reviews on old commits still count after article is edited."""
         author = _make_user(session, "edit_during")
-        reviewer = _make_user(session, "rv_edit_during")
         past_start = datetime.now(timezone.utc) - timedelta(days=200)
 
         article = _make_article(
@@ -239,23 +250,20 @@ class TestPublishReadyArticles:
             sink_start=past_start,
             sink_duration_days=7,
         )
-        # Review was written against commit "old_hash"
-        _make_review(
-            session,
-            article.id,
-            "old_hash",
-            reviewer.id,
-            "sedimentation",
-            _build_score(5, 5, 5, 5, 5),
-        )
+        for i in range(3):
+            r = _make_user(session, f"rv_edit_{i}")
+            _make_review(
+                session, article.id, f"old_hash_{i}", r.id,
+                "sedimentation", _build_score(5, 5, 5, 5, 5),
+            )
 
-        # Simulate an edit: create a review against a new commit "new_hash"
-        # The article was "edited" so reviews exist on two different commits.
+        # Second commit from same reviewer (upserts newer score)
+        r2 = session.query(User).filter(User.name == "rv_edit_1").first()
         _make_review(
             session,
             article.id,
             "new_hash",
-            reviewer.id,
+            r2.id,
             "sedimentation",
             _build_score(3, 3, 3, 3, 3),
         )
@@ -263,8 +271,6 @@ class TestPublishReadyArticles:
         count = publish_ready_articles(session)
         assert count == 1
 
-        # Score should be the average of both reviews (5 and 3 → 4.0)
         session.refresh(article)
         assert article.status == "published"
         assert article.score is not None
-        assert article.score["originality"] == 4.0

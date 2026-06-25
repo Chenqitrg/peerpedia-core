@@ -28,6 +28,12 @@ class SinkParams:
     max_days: int = 180
     max_sedimentation_per_author: int = 5  # anti-spam: max concurrent articles in pool
 
+    # Review gate
+    min_approvals: int = 3                # minimum reviewers who must approve (score ≥ threshold)
+    approval_score_threshold: float = 3.0 # avg score ≥ this → "approve"
+    review_deficit_extend_days: int = 3   # extra days when not enough reviewers
+    max_total_sink_days: int = 21         # hard cap on total accumulated sink days (initial 7 + extensions)
+
 
 @dataclass
 class ScoreParams:
@@ -72,6 +78,7 @@ class ReputationParams:
 class CommentParams:
     """Comment and thread parameters."""
 
+    min_length: int = 200
     max_length: int = 300
 
 

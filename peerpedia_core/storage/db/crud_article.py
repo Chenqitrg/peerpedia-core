@@ -224,7 +224,7 @@ def update_article_status(session: Session, article_id: str, new_status: str) ->
     be 100KB+).  Expires the session afterward so subsequent ``get()``
     calls reload from DB.
     """
-    _VALID_STATUSES = {"draft", "sedimentation", "published"}
+    _VALID_STATUSES = {"draft", "sedimentation", "published", "rejected"}
     if new_status not in _VALID_STATUSES:
         raise ValueError(f"Invalid status {new_status!r}, must be one of {_VALID_STATUSES}")
     rows = session.query(Article).filter(Article.id == article_id).update(

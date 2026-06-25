@@ -63,6 +63,7 @@ import git
 from peerpedia_core.config.git import make_article_gitignore, ssh_sign_env, ssh_verify_env
 from peerpedia_core.config.params import PLATFORM_EMAIL
 from peerpedia_core.config.paths import ARTICLES_DIR as DEFAULT_ARTICLES_DIR
+from peerpedia_core.types.status import VALID_ARTICLE_STATUSES
 
 
 def init_article_repo(repo_path: Path) -> Path:
@@ -200,7 +201,7 @@ def commit_status_marker(repo_path: Path, status: str) -> str:
 
     Raises ``ValueError`` if *status* is not a known article status.
     """
-    _VALID = {"draft", "sedimentation", "published"}
+    _VALID = set(VALID_ARTICLE_STATUSES)
     if status not in _VALID:
         raise ValueError(
             f"Invalid status {status!r}, must be one of {sorted(_VALID)}"

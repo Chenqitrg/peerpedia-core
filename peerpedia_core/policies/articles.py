@@ -67,12 +67,15 @@ from peerpedia_core.types.scores import SCORE_DIMENSIONS, FiveDimScores
 # Visibility rules
 # ═══════════════════════════════════════════════════════════════════════════════
 
-PUBLIC_READABLE_STATUSES = {"sedimentation", "published"}
-FORKABLE_STATUSES = {"published"}
-PUBLIC_DOWNLOADABLE_STATUSES = {"published"}
+PUBLIC_READABLE_STATUSES = {"sedimentation", "published", "rejected"}
+FORKABLE_STATUSES = {"published", "rejected"}
+PUBLIC_DOWNLOADABLE_STATUSES = {"published", "rejected"}
 
-# Sedimentation articles are immutable.
+# Sedimentation articles are immutable.  Rejected is terminal (not writable).
 _WRITABLE_STATUSES = {"draft", "published"}
+
+# Sync is allowed on rejected articles so the rejection propagates via P2P.
+_SYNCABLE_STATUSES = {"draft", "sedimentation", "published", "rejected"}
 
 
 def visible_statuses_for_user(current_user: Optional[User]) -> set[str]:
@@ -83,8 +86,8 @@ def visible_statuses_for_user(current_user: Optional[User]) -> set[str]:
     (the caller must still filter by author for drafts).
     """
     if current_user is not None:
-        return {"draft", "sedimentation", "published"}
-    return {"sedimentation", "published"}
+        return {"draft", "sedimentation", "published", "rejected"}
+    return {"sedimentation", "published", "rejected"}
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -301,13 +304,11 @@ def assert_can_extend_sink(article: Article, maintainer_ids: list[str], user: Us
 
 
 def assert_can_sync_article(article: Article, maintainer_ids: list[str], user: User) -> Article:
-    """Raise if *user* is not a maintainer, or article is in sedimentation.
+    """Raise if *user* is not a maintainer, or article status forbids sync.
 
-    Sync (P2P bundle exchange) is allowed on draft and published articles.
-    Sedimentation articles are immutable — sync would change the content
-    under active peer review.
+    Sync is allowed on draft, sedimentation, published, and rejected.
     """
-    _assert_maintainer(article, maintainer_ids, user, "sync")
+    _assert_maintainer(article, maintainer_ids, user, "sync", allowed_statuses=_SYNCABLE_STATUSES)
     return article
 
 

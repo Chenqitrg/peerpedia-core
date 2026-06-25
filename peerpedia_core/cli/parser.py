@@ -140,7 +140,7 @@ COMMAND_GROUPS = [
             (("article_id",), {"help": "Article ID (or prefix)"}),
             (("--scores",), {"required": True,
                              "help": f'Five-dim scores, e.g. "{SCORE_FORMAT_EXAMPLE}"'}),
-            (("--comment",), {"help": "Optional review comment"}),
+            (("--comment",), {"required": True, "help": "Review comment (min 200 characters)"}),
         ]),
         ("list", _cmd_review_list, [
             (("article_id",), {"help": "Article ID (or prefix)"}),

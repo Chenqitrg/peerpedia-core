@@ -84,6 +84,7 @@ class Article(Base):
     sink_start = Column(DateTime, nullable=True)
     sink_duration_days = Column(Integer, nullable=False, default=7)
     sink_extended_count = Column(Integer, nullable=False, default=0)
+    total_sink_days_accumulated = Column(Float, nullable=False, default=0.0)  # cumulative days from edits + extensions
     forked_from = Column(String, nullable=True, index=True)
     fork_count = Column(Integer, nullable=False, default=0)
     last_author_rebuild_hash = Column(String, nullable=True)  # HEAD commit hash of last author rebuild

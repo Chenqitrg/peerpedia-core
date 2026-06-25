@@ -48,19 +48,19 @@ def _user(**kwargs):
 
 class TestVisibilityRules:
     def test_public_readable_includes_sedimentation_and_published(self):
-        assert PUBLIC_READABLE_STATUSES == {"sedimentation", "published"}
+        assert PUBLIC_READABLE_STATUSES == {"sedimentation", "published", "rejected"}
 
-    def test_forkable_statuses_is_published_only(self):
-        assert FORKABLE_STATUSES == {"published"}
+    def test_forkable_statuses_includes_published_and_rejected(self):
+        assert FORKABLE_STATUSES == {"published", "rejected"}
 
     def test_visible_statuses_anonymous(self):
         result = visible_statuses_for_user(None)
-        assert result == {"sedimentation", "published"}
+        assert result == {"sedimentation", "published", "rejected"}
 
     def test_visible_statuses_authenticated(self):
         u = _user()
         result = visible_statuses_for_user(u)
-        assert result == {"draft", "sedimentation", "published"}
+        assert result == {"draft", "sedimentation", "published", "rejected"}
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

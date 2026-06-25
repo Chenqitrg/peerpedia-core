@@ -57,7 +57,7 @@ from peerpedia_core.storage.db.crud_article import get_article, get_articles_by_
 from peerpedia_core.storage.db.crud_review import get_reviews_for_article, upsert_review
 from peerpedia_core.storage.db.crud_user import get_user, get_users_by_ids, list_users, update_user_reputation
 from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, commit_article, commit_status_marker
-from peerpedia_core.types.scores import ReputationScores
+from peerpedia_core.types.scores import FiveDimScores, ReputationScores
 from peerpedia_core.workflow.reputation import (
     blend_reputation,
     compute_reputation,
@@ -74,23 +74,21 @@ from peerpedia_core.workflow.state import (
 
 
 def publish_ready_articles(db: Session) -> int:
-    """Scan all articles in sedimentation, publish those whose sink time has elapsed.
+    """Scan all articles in sedimentation, publish/reject those whose sink time has elapsed.
 
-    Uses a two-phase transaction: (1) batch all article status changes in one
-    commit, then (2) recompute reputations for all affected authors in a second
-    commit.
+    Review gate: at least *min_approvals* community reviewers must approve
+    (average score ≥ *approval_score_threshold*).  If not enough approvals,
+    the sink is extended up to *max_total_sink_days*; after that the article
+    is rejected.
 
-    Before scoring, syncs reviews from git worktree into DB cache via
-    sync_reviews_from_worktree(), ensuring the DB reflects the latest state.
-
-    Returns the number of articles published in this call.
+    Returns the number of articles whose status changed in this call
+    (published + rejected).
     """
     articles = list_articles(db, status="sedimentation")
 
-    published_count = 0
+    changed_count = 0
     all_author_ids: set[str] = set()
 
-    # Phase 1: mark ready articles and collect affected authors
     for article in articles:
         if article.sink_start is None:
             continue
@@ -103,47 +101,56 @@ def publish_ready_articles(db: Session) -> int:
         if not is_ready_to_publish(eta):
             continue
 
-        # NOTE: caller must call sync_reviews_from_worktree() before
-        # publish_ready_articles().  This function does not import from
-        # commands/bundle to avoid circular dependency.
-
-        # Compute score by aggregating all reviews
-        score = recompute_article_score(db, article.id)
-
-        # Check for community reviews and apply penalty if none
         all_reviews = get_reviews_for_article(db, article.id)
         authors = get_author_ids(db, article.id)
         community_reviews = [r for r in all_reviews if r.reviewer_id not in authors]
-        if len(community_reviews) == 0 and score is not None:
-            score = apply_no_review_penalty(score)
 
-        # Git commit records the status transition for P2P sync.
-        # If scoring produced changes, they ride on this commit.
-        # If nothing changed, allow_empty creates a marker commit
-        # so the published status survives sync.
+        # Count approvals: each reviewer's latest score avg ≥ threshold
+        approval_count = 0
+        for r in community_reviews:
+            if r.scores and isinstance(r.scores, dict):
+                vals = [v for v in r.scores.values() if isinstance(v, (int, float))]
+                if vals and sum(vals) / len(vals) >= params.sink.approval_score_threshold:
+                    approval_count += 1
+
         rp = DEFAULT_ARTICLES_DIR / article.id
-        if (rp / ".git").is_dir():
-            commit_status_marker(rp, "published")
+        has_repo = (rp / ".git").is_dir()
 
-        # Then DB.
-        update_article_status(db, article.id, "published")
-        if score:
+        if approval_count >= params.sink.min_approvals:
+            # Publish: enough reviewers approved.
+            score = recompute_article_score(db, article.id)
+            if score is None:
+                score = apply_no_review_penalty(FiveDimScores().to_dict())
+            if has_repo:
+                commit_status_marker(rp, "published")
+            update_article_status(db, article.id, "published")
             update_article_score(db, article.id, score)
+        else:
+            # Not enough approvals — extend or reject.
+            extra = params.sink.review_deficit_extend_days
+            if article.total_sink_days_accumulated + extra <= params.sink.max_total_sink_days:
+                # Extend: add days to sink, keep in sedimentation.
+                article.sink_duration_days += extra
+                article.total_sink_days_accumulated += extra
+                article.sink_extended_count += 1
+            else:
+                # Reject: no more extensions available.
+                if has_repo:
+                    commit_status_marker(rp, "rejected")
+                update_article_status(db, article.id, "rejected")
 
         for author_id in authors:
             all_author_ids.add(author_id)
 
-        published_count += 1
+        changed_count += 1
 
-    if published_count == 0:
+    if changed_count == 0:
         return 0
 
-    # Phase 2: recompute reputations for all affected authors.
-    # Caller is responsible for db.commit() — commands layer only flushes.
     for author_id in all_author_ids:
         recompute_author_reputation(db, author_id)
 
-    return published_count
+    return changed_count
 
 
 def recompute_article_score(db: Session, article_id: str) -> dict | None:

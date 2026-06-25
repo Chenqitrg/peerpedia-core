@@ -59,4 +59,7 @@ def _cmd_notification_read(db, args):
         db.commit()
         _ok(f"Notification {args.notification_id[:8]} marked as read")
     except ValueError as e:
-        _die(str(e))
+        _die(str(e), code="NOT_FOUND",
+             suggestion="Check the notification ID. You can list your "
+                        "notifications with 'peerpedia notifications'.",
+             see_also=["notifications"])

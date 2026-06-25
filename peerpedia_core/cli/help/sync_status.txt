@@ -1,0 +1,11 @@
+EXAMPLES
+  peerpedia sync status
+  peerpedia sync status --server https://peer.example.com
+
+Checks whether the peer server is reachable and counts pending
+sync operations.  Reads PEERPEDIA_SERVER from the environment
+if --server is not given.
+
+SEE ALSO
+  sync push          Send changes to the server
+  sync pull          Fetch updates from the server

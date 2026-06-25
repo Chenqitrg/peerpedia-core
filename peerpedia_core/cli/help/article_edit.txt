@@ -1,0 +1,16 @@
+EXAMPLES
+  # Open your editor to revise content
+  peerpedia article edit abc12345
+
+  # Update content inline
+  peerpedia article edit abc12345 --content "# Updated\n\nNew content." --no-editor
+
+  # Change only the title
+  peerpedia article edit abc12345 --title "Better Title" --no-editor
+
+Every edit creates a signed git commit.  Only article maintainers can edit.
+
+SEE ALSO
+  article create     Write a new article
+  article publish    Submit to sedimentation pool
+  article diff       See what changed between commits

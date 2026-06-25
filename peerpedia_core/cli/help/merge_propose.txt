@@ -1,0 +1,11 @@
+EXAMPLES
+  # Propose merging your fork into the original
+  peerpedia merge propose <fork-id> --target <original-id>
+
+Creates an open merge proposal.  The original article's maintainers
+can accept it with "merge accept".
+
+SEE ALSO
+  fork               Create a fork to work on
+  merge accept       Accept a merge proposal
+  merge withdraw     Withdraw your proposal

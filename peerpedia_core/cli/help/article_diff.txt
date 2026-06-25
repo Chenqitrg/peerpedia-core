@@ -1,0 +1,13 @@
+EXAMPLES
+  # Compare the last two commits
+  peerpedia diff abc12345 ~1 HEAD
+
+  # Compare two specific commits
+  peerpedia diff abc12345 abc12345 def67890
+
+Valid commit refs: a full hash, a short prefix, HEAD, or ~N
+(e.g. ~1 for the parent commit, ~3 for three commits back).
+
+SEE ALSO
+  article show       Read the current version
+  article edit       Revise an article

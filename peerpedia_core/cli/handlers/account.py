@@ -46,11 +46,15 @@ def _get_password(args, confirm: bool = False) -> str:
         return pw
     password = getpass.getpass("Password: ")
     if not password:
-        _die("Password must not be empty.")
+        _die("Password must not be empty.",
+             suggestion="Passwords protect your Ed25519 signing key. "
+                        "Choose a strong, memorable password.")
     if confirm:
         c = getpass.getpass("Confirm password: ")
         if password != c:
-            _die("Passwords do not match.")
+            _die("Passwords do not match.",
+                 suggestion="The two password entries must be identical. "
+                            "Try again.")
     return password
 
 
@@ -88,20 +92,28 @@ def _cmd_login(db, args):
 
     user = get_user_by_name(db, args.name)
     if len(user) == 0:
-        _die(f"User '{args.name}' not found.")
+        _die(f"User '{args.name}' not found.",
+             suggestion="Check the spelling, or register first: "
+                        "peerpedia account register --name <your-name>",
+             see_also=["account register", "account search"])
     if len(user) > 1:
-        _die(f"Multiple users named '{args.name}'. "
-             f"Use user ID to log in: {', '.join(u.id for u in user)}")
+        _die(f"Multiple users named '{args.name}'.",
+             suggestion=f"Use a user ID to specify which one: "
+                        f"{', '.join(u.id[:8] for u in user)}",
+             see_also=["account whoami"])
     user = user[0]
 
     if user.salt is None:
-        _die(f"User '{args.name}' was registered before key derivation was supported. "
-             "Please re-register: peerpedia account register --name {args.name}")
+        _die(f"User '{args.name}' was registered before key derivation was supported.",
+             suggestion=f"Re-register: peerpedia account register --name {args.name}")
 
     password = _get_password(args)
     private_key_bytes, pubkey_bytes = derive_key_pair(password, user.salt)
     if pubkey_bytes.hex() != user.public_key:
-        _die("Wrong password.")
+        _die("Wrong password.",
+             suggestion="If you forgot your password, run: peerpedia account recover "
+                        "--name <your-name>. If this is a new device, bootstrap first.",
+             see_also=["account recover", "account bootstrap"])
 
     _write_session(user.id, user.name, private_key_bytes.hex())
 
@@ -145,16 +157,22 @@ def _cmd_recover(db, args):
                  f"Use --user-id to specify: {', '.join(u.id for u in user)}")
         user = user[0]
     else:
-        _die("Specify either --name or --user-id.")
+        _die("Specify either --name or --user-id.",
+             suggestion="Use --name to look up by display name, "
+                        "or --user-id to look up by UUID.",
+             see_also=["account whoami --verbose"])
 
     if user.salt is None:
-        _die(f"User '{user.name}' has no stored salt — key was not derived. "
-             f"Please re-register: peerpedia account register --name {user.name}")
+        _die(f"User '{user.name}' has no stored salt — key was not derived.",
+             suggestion=f"Re-register: peerpedia account register --name {user.name}")
 
     password = getpass.getpass("Password: ")
     private_key_bytes, pubkey_bytes = derive_key_pair(password, user.salt)
     if pubkey_bytes.hex() != user.public_key:
-        _die("Wrong password.")
+        _die("Wrong password.",
+             suggestion="If you forgot your password, you'll need to re-register. "
+                        "The salt+password derive your key — there is no reset.",
+             see_also=["account register"])
 
     _write_session(user.id, user.name, private_key_bytes.hex())
 

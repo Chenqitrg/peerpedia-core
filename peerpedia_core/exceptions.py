@@ -1,19 +1,23 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-r"""Semantic exceptions -- no HTTP concepts, pure business logic.
+r"""Semantic exceptions — no HTTP concepts, pure business logic.
 
-Four exception classes, each with a single ``detail: str`` field.  No HTTP
-status codes, no headers -- the CLI prints the detail directly; a future
-server layer would map these to HTTP status codes.
+Each exception carries a machine-readable ``code`` so AI agents and CLI
+handlers can route errors without parsing natural-language detail strings.
+Context fields (``resource_type``, ``resource_id``, …) are optional but
+should be supplied whenever the information is available at the raise site.
 
 Exception hierarchy
 -------------------
-PeerpediaError (base)       ``detail: str``
-  ├── NotFoundError          Resource does not exist (article, user, repo)
-  ├── NotAuthorizedError     User lacks permission (not author, wrong status)
-  ├── ConflictError          State conflict (already forked, article locked)
-  └── BadRequestError        Invalid input (empty title, missing self-review)
+PeerpediaError (base)       ``code: str``  ``detail: str``  ``context: dict``
+  ├── NotFoundError          resource_type, resource_id
+  ├── NotAuthorizedError     permission, resource_type, resource_id
+  ├── ConflictError          conflicting_entity
+  ├── BadRequestError        field, bad_value
+  ├── SignatureVerificationError  reason, pubkey
+  ├── TransportError         server, status_code
+  └── ProtocolError          server, status_code
 
 Usage pattern
 -------------
@@ -22,44 +26,129 @@ All policy functions (``policies/articles.py``) and orchestration functions
 calls ``_die(msg)`` to print the error and exit.  The REPL catches them in
 ``_dispatch`` and prints without exiting.
 
-Reviewer's checklist
---------------------
-- Is every new error condition covered by one of these four types?
-  If you need a fifth, question whether it's really a new category.
-- Does every raise include a human-readable detail string?
+Backward compatibility
+----------------------
+All existing ``raise FooError("message")`` sites continue to work.
+All existing ``e.detail`` accesses continue to work.
+The new ``code``, ``context``, and named fields are additive.
 """
 
 
 class PeerpediaError(Exception):
-    """Base for all PeerPedia business-logic errors."""
+    """Base for all PeerPedia business-logic errors.
 
-    def __init__(self, detail: str):
+    Attributes:
+        detail: Human-readable description (always present).
+        code:  Machine-readable error code (default ``"ERROR"``).
+        context:  Arbitrary key-value pairs for structured error output.
+    """
+
+    code: str = "ERROR"
+
+    def __init__(self, detail: str, **context):
+        super().__init__(detail)
         self.detail = detail
+        self.context = context
+        # Expose context keys as attributes for easy access.
+        for k, v in context.items():
+            setattr(self, k, v)
 
 
 class NotFoundError(PeerpediaError):
-    """Requested resource does not exist."""
+    """Requested resource does not exist.
+
+    Optional context keys:
+        resource_type:  e.g. ``"article"``, ``"user"``, ``"repo"``
+        resource_id:    The identifier that was looked up.
+    """
+
+    code = "NOT_FOUND"
+
+    def __init__(self, detail: str, resource_type: str = "", resource_id: str = ""):
+        super().__init__(detail, resource_type=resource_type, resource_id=resource_id)
 
 
 class NotAuthorizedError(PeerpediaError):
-    """User lacks permission for the requested action."""
+    """User lacks permission for the requested action.
+
+    Optional context keys:
+        permission:      What permission was required (e.g. ``"maintainer"``).
+        resource_type:   e.g. ``"article"``
+        resource_id:     The resource the user tried to act on.
+    """
+
+    code = "NOT_AUTHORIZED"
+
+    def __init__(self, detail: str, permission: str = "",
+                 resource_type: str = "", resource_id: str = ""):
+        super().__init__(detail, permission=permission,
+                         resource_type=resource_type, resource_id=resource_id)
 
 
 class ConflictError(PeerpediaError):
-    """Request conflicts with the current state of the resource."""
+    """Request conflicts with the current state of the resource.
+
+    Optional context keys:
+        conflicting_entity:  What already exists or is in the way.
+    """
+
+    code = "CONFLICT"
+
+    def __init__(self, detail: str, conflicting_entity: str = ""):
+        super().__init__(detail, conflicting_entity=conflicting_entity)
 
 
 class BadRequestError(PeerpediaError):
-    """Input is invalid or missing required data."""
+    """Input is invalid or missing required data.
+
+    Optional context keys:
+        field:      Which field was invalid.
+        bad_value:  The value that was rejected (truncated).
+    """
+
+    code = "BAD_REQUEST"
+
+    def __init__(self, detail: str, field: str = "", bad_value: str = ""):
+        super().__init__(detail, field=field, bad_value=bad_value)
 
 
 class SignatureVerificationError(PeerpediaError):
-    """Commit signature is invalid, missing, or key mismatch (TOFU)."""
+    """Commit signature is invalid, missing, or key mismatch (TOFU).
+
+    Optional context keys:
+        reason:  Why verification failed (``"missing"``, ``"mismatch"``, ``"tofu"``).
+        pubkey:  The public key involved (truncated if needed).
+    """
+
+    code = "SIGNATURE_ERROR"
+
+    def __init__(self, detail: str, reason: str = "", pubkey: str = ""):
+        super().__init__(detail, reason=reason, pubkey=pubkey)
 
 
 class TransportError(PeerpediaError):
-    """Network-level error: unreachable, timeout, DNS, connection refused."""
+    """Network-level error: unreachable, timeout, DNS, connection refused.
+
+    Optional context keys:
+        server:       The peer server URL.
+        status_code:  HTTP status code if available.
+    """
+
+    code = "TRANSPORT_ERROR"
+
+    def __init__(self, detail: str, server: str = "", status_code: int | None = None):
+        super().__init__(detail, server=server, status_code=status_code)
 
 
 class ProtocolError(PeerpediaError):
-    """Protocol-level error: unexpected HTTP status, malformed response body."""
+    """Protocol-level error: unexpected HTTP status, malformed response body.
+
+    Optional context keys:
+        server:       The peer server URL.
+        status_code:  HTTP status code if available.
+    """
+
+    code = "PROTOCOL_ERROR"
+
+    def __init__(self, detail: str, server: str = "", status_code: int | None = None):
+        super().__init__(detail, server=server, status_code=status_code)

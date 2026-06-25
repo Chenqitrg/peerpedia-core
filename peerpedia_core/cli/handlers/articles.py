@@ -37,7 +37,10 @@ def _cmd_article_create(db, args):
     key_bytes = _get_session_key()
     user = get_user(db, user_id)
     if user is None:
-        _die(f"User '{user_id}' not found — DB inconsistency.")
+        _die(f"User '{user_id}' not found in local database.",
+             suggestion="Your session references a user that no longer exists. "
+                        "Run 'peerpedia account recover' or 'account register'.",
+             see_also=["account recover", "account register"])
     content = args.content or ""
     if not content and not args.no_editor:
         content = _open_editor("")
@@ -116,7 +119,10 @@ def _cmd_article_list(db, args):
         status = args.status or None
     elif args.status:
         if args.status == "draft":
-            _die("--status draft requires --mine")
+            _die("--status draft requires --mine",
+                 suggestion="Drafts are private. Add --mine to see your own drafts, "
+                            "or omit --status to browse published articles.",
+                 see_also=["article list --mine"])
         status = args.status
     else:
         status = {"published", "sedimentation"}
@@ -150,7 +156,9 @@ def _cmd_article_edit(db, args):
 
     args: id [positional], --content, --title, --no-editor, --json
     """
-    assert_article_integrity(db, args.id)
+    article = _resolve_article_id(db, args.id)
+    article_id = article.id
+    assert_article_integrity(db, article_id)
     import difflib
 
     user_id = _get_session_user()
@@ -158,7 +166,7 @@ def _cmd_article_edit(db, args):
     user = get_user(db, user_id)
     if user is None:
         _die(f"User '{user_id}' not found — DB inconsistency.")
-    raw = _find_article_file(args.id).read_text()
+    raw = _find_article_file(article_id).read_text()
 
     if args.content is not None:
         new_content = args.content
@@ -185,7 +193,7 @@ def _cmd_article_edit(db, args):
     message = _prompt_commit_message(diff)
 
     result = update_article_content(
-        db, args.id, content=new_content, title=args.title, user_id=user_id,
+        db, article_id, content=new_content, title=args.title, user_id=user_id,
         message=message,
         signing_key_bytes=key_bytes, pubkey_hex=user.public_key,
     )
@@ -194,8 +202,8 @@ def _cmd_article_edit(db, args):
     if args.json:
         _json_out(result)
     else:
-        _ok(f"Updated [accent]{args.id[:8]}[/] — {result['title']}")
-        article = get_article(db, args.id)
+        _ok(f"Updated [accent]{article_id[:8]}[/] — {result['title']}")
+        article = get_article(db, article_id)
         _resolve_and_display_article(db, article)
 
 
@@ -205,22 +213,24 @@ def _cmd_article_publish(db, args):
 
     args: id [positional], --scores, --json
     """
-    assert_article_integrity(db, args.id)
+    article = _resolve_article_id(db, args.id)
+    article_id = article.id
+    assert_article_integrity(db, article_id)
     user_id = _get_session_user()
     key_bytes = _get_session_key()
     user = get_user(db, user_id)
     if user is None:
         _die(f"User '{user_id}' not found — DB inconsistency.")
     scores = _parse_scores(args.scores)
-    result = publish_article(db, args.id, user_id, scores,
+    result = publish_article(db, article_id, user_id, scores,
                              signing_key_bytes=key_bytes, pubkey_hex=user.public_key)
     db.commit()
     _try_sync(db)
     if args.json:
         _json_out(result)
     else:
-        _ok(f"Published [accent]{args.id[:8]}[/] to sedimentation pool")
-        article = get_article(db, result["id"])
+        _ok(f"Published [accent]{article_id[:8]}[/] to sedimentation pool")
+        article = get_article(db, article_id)
         _resolve_and_display_article(db, article)
 
 
@@ -231,11 +241,9 @@ def _cmd_article_delete(db, args):
     args: id [positional], --json
     """
     user_id = _get_session_user()
-    article = get_article(db, args.id)
-    if not article:
-        _die(f"Article [accent]{args.id}[/] not found")
+    article = _resolve_article_id(db, args.id)
 
-    console.print(f"[warning]Delete [bold]{article.title}[/] (id: {args.id[:8]})?[/]")
+    console.print(f"[warning]Delete [bold]{article.title}[/] (id: {article.id[:8]})?[/]")
     try:
         answer = input("  [y/N] ").strip().lower()
     except (EOFError, KeyboardInterrupt):
@@ -244,8 +252,8 @@ def _cmd_article_delete(db, args):
     if answer not in ("y", "yes"):
         console.print("[muted]Cancelled.[/]")
         return
-    delete_article(db, args.id, user_id=user_id)
-    _ok(f"Deleted [accent]{args.id[:8]}[/]")
+    delete_article(db, article.id, user_id=user_id)
+    _ok(f"Deleted [accent]{article.id[:8]}[/]")
 
 
 @_with_db
@@ -268,10 +276,18 @@ def _cmd_article_diff(db, args):
 
     args: id [positional], hash1 [positional], hash2 [positional], --json
     """
+    article = _resolve_article_id(db, args.id)
     try:
-        result = diff_article(args.id, args.hash1, args.hash2)
-    except (ValueError, FileNotFoundError) as e:
-        _die(str(e))
+        result = diff_article(article.id, args.hash1, args.hash2)
+    except ValueError as e:
+        _die(str(e), code="BAD_REQUEST",
+             suggestion="Valid commit refs: a full hash, a short prefix, HEAD, or ~N "
+                        "(e.g. ~1 for the parent commit).",
+             see_also=["article show --show full"])
+    except FileNotFoundError as e:
+        _die(str(e), code="NOT_FOUND",
+             suggestion="The article's git repository is missing from disk. "
+                        "Try 'sync pull' to restore it.")
 
     if args.json:
         _json_out(result)

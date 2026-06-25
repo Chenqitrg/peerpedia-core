@@ -1,0 +1,43 @@
+QUERY PATTERNS
+  # Browse all public articles
+  peerpedia article list
+
+  # Your own work — including private drafts
+  peerpedia article list --mine
+
+  # Your drafts only
+  peerpedia article list --mine --status draft
+
+  # Articles from people you follow
+  peerpedia article list --feed
+
+  # Search by title or abstract keyword
+  peerpedia article list --search "quantum"
+
+  # Filter by status (published, sedimentation, or draft)
+  peerpedia article list --status published
+  peerpedia article list --status sedimentation
+
+  # Your bookmarked articles
+  peerpedia article list --bookmarked
+
+  # Fetch a remote user's articles from a peer server
+  peerpedia article list --user <user-id> --server https://peer.example.com
+
+COMBINING FILTERS
+  Filters are AND-ed.  Combine them to narrow results:
+
+  # My articles about quantum computing
+  peerpedia article list --mine --search "quantum"
+
+  # Published articles from people I follow, about ML
+  peerpedia article list --feed --status published --search "machine learning"
+
+Drafts are private — omit --mine to see only public articles.
+
+SEE ALSO
+  article show       Read an article by ID or title
+  article create     Write a new article
+  follow             Follow a researcher to populate your feed
+  bookmark add       Save an article for later
+  account search     Find other users

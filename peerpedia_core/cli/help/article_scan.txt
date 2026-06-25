@@ -1,0 +1,10 @@
+EXAMPLES
+  peerpedia article scan
+
+Checks all articles in the sedimentation pool.  Any article that
+has been in the pool for at least 3 days is promoted to "published".
+The scan also runs automatically on startup.
+
+SEE ALSO
+  article publish    Submit to sedimentation pool
+  article list       See article statuses

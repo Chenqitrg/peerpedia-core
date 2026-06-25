@@ -1,0 +1,11 @@
+EXAMPLES
+  # Add a co-author
+  peerpedia maintainer add abc12345 --target-user @bob
+
+The new maintainer can edit, publish, and manage the article.
+Both the adder and the target must be registered users.
+
+SEE ALSO
+  maintainer remove   Remove a maintainer
+  maintainer list     See all maintainers
+  maintainer consent  Approve publication

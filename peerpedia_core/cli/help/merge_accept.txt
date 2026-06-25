@@ -1,0 +1,10 @@
+EXAMPLES
+  # Accept a merge proposal into your article
+  peerpedia merge accept <proposal-id> --target <article-id>
+
+Only the target article's maintainers can accept.  If the merge
+has conflicts, the command reports them without applying changes.
+
+SEE ALSO
+  merge propose      Create a proposal
+  merge withdraw     Withdraw a proposal

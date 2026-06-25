@@ -1,0 +1,23 @@
+EXAMPLES
+  # Publish with self-review scores (all 5 dimensions, 1-5)
+  peerpedia article publish abc12345 \
+      --scores "orig=4,rigor=3,comp=4,ped=3,imp=3"
+
+Publishing moves your article into the 3-day sedimentation pool.
+During this period, peers can review it.  After 3 days, run
+"article scan" (or wait for the auto-scan) to promote it to published.
+
+Scoring dimensions:
+  orig    originality    – novelty of the idea
+  rigor   rigor          – methodological soundness
+  comp    completeness   – coverage of edge cases
+  ped     pedagogy       – clarity of exposition
+  imp     impact         – potential significance
+
+Prerequisites: you must be logged in, be a maintainer of the article,
+and provide self-review scores.
+
+SEE ALSO
+  article create     Write a new article
+  article scan       Trigger sedimentation → published
+  review submit      Review someone else's article

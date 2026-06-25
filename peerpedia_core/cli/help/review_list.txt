@@ -1,0 +1,11 @@
+EXAMPLES
+  # List reviews for an article (scores only)
+  peerpedia review list abc12345
+
+  # List reviews + full discussion threads
+  peerpedia review list abc12345 --show full
+
+SEE ALSO
+  review submit      Submit a review
+  review reply       Reply to a reviewer
+  article show       Read the article

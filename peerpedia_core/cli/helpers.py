@@ -18,8 +18,11 @@ import tempfile
 from pathlib import Path
 
 from peerpedia_core.cli.display import console, theme, display_article as _render_article
-from peerpedia_core.commands import db_session, get_author_ids, parse_frontmatter, resolve_username_or_alias
+from peerpedia_core.commands import db_session, get_article, get_author_ids, list_articles, parse_frontmatter, resolve_username_or_alias
 from peerpedia_core.config.paths import ARTICLES_DIR as DEFAULT_ARTICLES_DIR, DB_PATH, DB_URL, SESSION_FILE
+from peerpedia_core.exceptions import PeerpediaError
+from peerpedia_core.storage.db.models import Article
+from peerpedia_core.types.scores import SCORE_DIMENSIONS
 
 
 _data_dir_ready = False
@@ -49,10 +52,13 @@ def _with_db(func):
         try:
             with db_session(DB_URL) as db:
                 return func(db, args)
+        except PeerpediaError as e:
+            # Expected business-logic error — preserve type information.
+            _die(str(e.detail), code=e.code, **e.context)
         except Exception as e:
             import traceback
             traceback.print_exc()
-            _die(str(e))
+            _die(str(e), code="INTERNAL_ERROR")
 
     return wrapper
 
@@ -90,28 +96,54 @@ def _ok(what: str) -> None:
     console.print(f"✓ [{theme.styles['success']}]{what}[/]")
 
 
-def _die(msg: str) -> None:
-    """Error message with red cross, then exit."""
-    console.print(f"✗ [{theme.styles['error']}]{msg}[/]")
+def _die(msg: str, code: str = "ERROR", *,
+         suggestion: str = "", see_also: list[str] | None = None,
+         **context) -> None:
+    """Error message with actionable guidance, then exit.
+
+    Args:
+        msg: Human-readable error description.
+        code: Machine-readable error code (e.g. ``"NOT_FOUND"``).
+        suggestion: What the user should do next (displayed as a hint).
+        see_also: Related commands or topics the user can explore.
+        **context: Arbitrary key-value pairs for structured error output.
+    """
+    from rich.text import Text
+    console.print(Text(f"✗ {msg}", style=theme.styles['error']))
+    if suggestion:
+        console.print()
+        console.print(f"  [dim]→ {suggestion}[/]")
+    if see_also:
+        labels = " · ".join(see_also)
+        console.print(f"  [muted]See also: {labels}[/]")
     sys.exit(1)
 
 
 def _resolve_article_id(db, article_ref: str):
-    """Resolve an article ID from prefix or fuzzy title match.
+    """Resolve an article by UUID, prefix, or fuzzy title.
 
     Returns the Article object or calls _die with suggestions.
     """
-    article = get_article(db, article_ref)
+    # 1. Exact UUID match
+    article = db.get(Article, article_ref)
     if article is not None:
         return article
 
-    # Try prefix match (starts with)
+    # 2. UUID prefix match
+    candidates = db.query(Article).filter(Article.id.startswith(article_ref)).all()
+    if len(candidates) == 1:
+        return candidates[0]
+    if len(candidates) > 1:
+        names = ", ".join(f"{a.id[:8]} ({a.title})" for a in candidates)
+        _die(f"Multiple ID prefix matches for '{article_ref}': {names}")
+
+    # 3. Title search
     candidates = list_articles(db, search_query=article_ref, limit=5)
     if len(candidates) == 1:
         return candidates[0]
     if len(candidates) > 1:
         names = ", ".join(f"{a.id[:8]} ({a.title})" for a in candidates)
-        _die(f"Multiple matches for '{article_ref}': {names}")
+        _die(f"Multiple title matches for '{article_ref}': {names}")
 
     _die(f"Article '{article_ref}' not found. Try a title keyword or article ID prefix.")
 
@@ -221,14 +253,42 @@ def _get_session_key() -> bytes | None:
 
 
 def _parse_scores(scores_str: str | None) -> dict | None:
-    """Parse "orig=4,rigor=3,..." from command-line into a dict."""
+    """Parse "orig=4,rigor=3,..." from command-line into a dict.
+
+    Validates every dimension name (abbreviation or full name) and every
+    value against the 1–5 range.  Raises ``_die`` with ``code="BAD_REQUEST"``
+    on invalid input — no raw ``ValueError`` escapes.
+    """
     if not scores_str:
         return None
-    return {
-        k.strip(): int(v.strip())
-        for part in scores_str.split(",")
-        for k, v in [part.strip().split("=")]
-    }
+    # Build valid-key sets: both abbreviations ("orig") and full names ("originality").
+    _valid_abbr = set(SCORE_DIMENSIONS.keys())
+    _valid_full = set(SCORE_DIMENSIONS.values())
+    _valid = _valid_abbr | _valid_full
+    result = {}
+    for part in scores_str.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        if "=" not in part:
+            _die(f"Malformed score: '{part}' — expected key=value",
+                 code="BAD_REQUEST", field="scores", bad_value=part)
+        k, v = part.split("=", 1)
+        k, v = k.strip(), v.strip()
+        if k not in _valid:
+            abbr_list = ", ".join(sorted(_valid_abbr))
+            _die(f"Unknown score dimension: '{k}'. Valid: {abbr_list}",
+                 code="BAD_REQUEST", field="scores", bad_dimension=k)
+        try:
+            score = int(v)
+        except ValueError:
+            _die(f"Score for '{k}' must be an integer, got '{v}'",
+                 code="BAD_REQUEST", field=f"scores.{k}", bad_value=v)
+        if not 1 <= score <= 5:
+            _die(f"Score for '{k}' must be 1-5, got {score}",
+                 code="BAD_REQUEST", field=f"scores.{k}", bad_value=str(score))
+        result[k] = score
+    return result
 
 
 def _prompt_commit_message(diff: str = "") -> str:

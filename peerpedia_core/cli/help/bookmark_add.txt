@@ -1,0 +1,10 @@
+EXAMPLES
+  # Bookmark an article for later
+  peerpedia bookmark add abc12345
+
+Bookmarked articles appear in "article list --bookmarked".
+If the article is only on a peer server, metadata is pulled automatically.
+
+SEE ALSO
+  bookmark remove    Remove a bookmark
+  article list --bookmarked   See your bookmarks

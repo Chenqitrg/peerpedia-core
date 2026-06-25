@@ -1,0 +1,13 @@
+EXAMPLES
+  # Share publicly (visible to your followers)
+  peerpedia share add abc12345 --comment "Must read!"
+
+  # Share to a specific user
+  peerpedia share add abc12345 --to @bob
+
+Shares appear in your followers' feeds.  Share to a specific user
+with --to (by @name, alias, or UUID).
+
+SEE ALSO
+  share list         See your shares or your feed
+  share remove       Un-share an article

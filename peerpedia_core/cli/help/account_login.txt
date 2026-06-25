@@ -1,0 +1,11 @@
+EXAMPLES
+  peerpedia account login --name Alice
+
+Your password re-derives your Ed25519 key from the stored salt.
+If you get "wrong password", check your spelling and try again.
+If you forgot your password, you must re-register.
+
+SEE ALSO
+  account register   Create a new identity
+  account recover    Restore your key from password + salt
+  account whoami     See your current session

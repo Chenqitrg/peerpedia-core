@@ -10,6 +10,7 @@ single loop rather than 180 lines of copy-paste argparse registration.
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 
 from peerpedia_core.cli.handlers import (
     _cmd_article_create, _cmd_article_delete, _cmd_article_diff, _cmd_article_edit,
@@ -32,6 +33,8 @@ from peerpedia_core.cli.handlers import (
     _cmd_share_add, _cmd_share_list, _cmd_share_remove,
     _cmd_mother,
     _cmd_register,
+    _cmd_schema,
+    _cmd_meta_help,
     _cmd_review_invite, _cmd_review_list, _cmd_review_rate, _cmd_review_reply, _cmd_review_submit,
     _cmd_server_start,
     _cmd_sync_pull, _cmd_sync_push, _cmd_sync_status,
@@ -39,6 +42,19 @@ from peerpedia_core.cli.handlers import (
 )
 
 from peerpedia_core.types.scores import SCORE_FORMAT_EXAMPLE
+
+_HELP_DIR = Path(__file__).resolve().parent / "help"
+
+
+def _load_help(name: str) -> str:
+    """Load extended help text for a command from ``cli/help/<name>.txt``.
+
+    Returns ``""`` if the file does not exist (extended help is optional).
+    """
+    path = _HELP_DIR / f"{name}.txt"
+    if path.is_file():
+        return path.read_text()
+    return ""
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Argument spec helpers
@@ -70,11 +86,11 @@ COMMAND_GROUPS = [
         ("register", _cmd_register, [
             (("--name",), {"required": True, "help": "Your display name"}),
             (("--password",), {"help": "Password (omit for interactive prompt; or set PEERPEDIA_PASSWORD env var)"}),
-        ]),
+        ], {"epilog": _load_help("account_register")}),
         ("login", _cmd_login, [
             (("--name",), {"required": True, "help": "Your display name"}),
             (("--password",), {"help": "Password (omit for interactive prompt; or set PEERPEDIA_PASSWORD env var)"}),
-        ]),
+        ], {"epilog": _load_help("account_login")}),
         ("recover", _cmd_recover, [
             (("--name",), {"help": "Your display name"}),
             (("--user-id",), {"help": "Your user ID (UUID)"}),
@@ -86,10 +102,10 @@ COMMAND_GROUPS = [
             (("--from",), {"required": True, "dest": "from_", "metavar": "JSON",
              "help": "JSON blob from 'account whoami --verbose --json'"}),
             (("--peer",), {"help": "Peer URL for data sync after bootstrap"}),
-        ]),
+        ], {"epilog": _load_help("account_bootstrap")}),
         ("search", _cmd_account_search, [
             (("query",), {"help": "Search query (partial name, case-insensitive)"}),
-        ]),
+        ], {"epilog": _load_help("account_search")}),
     ]),
     ("article", "Article management", [
         ("create", _cmd_article_create, [
@@ -100,12 +116,12 @@ COMMAND_GROUPS = [
             (("--no-editor",), {"action": "store_true", "help": "Create empty article without opening editor"}),
             (("--publish",), {"action": "store_true", "help": "Publish immediately after creation"}),
             (("--scores",), {"help": f'Self-review scores, e.g. "{SCORE_FORMAT_EXAMPLE}"'}),
-        ]),
+        ], {"epilog": _load_help("article_create")}),
         ("show", _cmd_article_show, [
-            (("id",), {"help": "Article ID (or prefix)"}),
+            (("id",), {"metavar": "ref", "help": "Article UUID, prefix, or title keyword"}),
             (("--show",), {"choices": ["meta", "full"], "default": "meta",
                            "help": "Display: meta (default), full (+content)"}),
-        ]),
+        ], {"epilog": _load_help("article_show")}),
         ("list", _cmd_article_list, [
             (("--search",), {"help": "Fuzzy title search (case-insensitive)"}),
             (("--status",), {"choices": ["draft", "sedimentation", "published"],
@@ -115,50 +131,50 @@ COMMAND_GROUPS = [
             (("--bookmarked",), {"action": "store_true", "help": "My bookmarked articles"}),
             (("--user",), {"help": "Show articles by this user (requires --server for remote fetch)"}),
             (("--server",), {"help": "Peer server URL for remote --user query"}),
-        ]),
+        ], {"epilog": _load_help("article_list")}),
         ("edit", _cmd_article_edit, [
-            (("id",), {"help": "Article ID (or prefix)"}),
+            (("id",), {"metavar": "ref", "help": "Article UUID, prefix, or title keyword"}),
             (("--content",), {"help": "New article body (omit to open editor)"}),
             (("--title",), {"help": "New article title"}),
             (("--no-editor",), {"action": "store_true", "help": "Skip editor; only apply --title if given"}),
-        ]),
+        ], {"epilog": _load_help("article_edit")}),
         ("publish", _cmd_article_publish, [
-            (("id",), {"help": "Article ID (or prefix)"}),
+            (("id",), {"metavar": "ref", "help": "Article UUID, prefix, or title keyword"}),
             (("--scores",), {"required": True,
                              "help": f'Self-review scores, e.g. "{SCORE_FORMAT_EXAMPLE}"'}),
-        ]),
+        ], {"epilog": _load_help("article_publish")}),
         ("delete", _cmd_article_delete, [
-            (("id",), {"help": "Article ID (or prefix)"}),
-        ]),
-        ("scan", _cmd_article_scan, []),
+            (("id",), {"metavar": "ref", "help": "Article UUID, prefix, or title keyword"}),
+        ], {"epilog": _load_help("article_delete")}),
+        ("scan", _cmd_article_scan, [], {"epilog": _load_help("article_scan")}),
         ("diff", _cmd_article_diff, [
-            (("id",), {"help": "Article ID (or prefix)"}),
+            (("id",), {"metavar": "ref", "help": "Article UUID, prefix, or title keyword"}),
             (("hash1",), {"help": "Old commit (hash, HEAD, or ~N)"}),
             (("hash2",), {"help": "New commit (hash, HEAD, or ~N)"}),
-        ]),
+        ], {"epilog": _load_help("article_diff")}),
     ]),
     ("review", "Submit, invite, rate, and list peer reviews", [
         ("submit", _cmd_review_submit, [
-            (("article_id",), {"help": "Article ID (or prefix)"}),
+            (("article_id",), {"metavar": "ref", "help": "Article UUID, prefix, or title keyword"}),
             (("--scores",), {"required": True,
                              "help": f'Five-dim scores, e.g. "{SCORE_FORMAT_EXAMPLE}"'}),
             (("--comment",), {"required": True, "help": "Review comment (min 200 characters)"}),
-        ]),
+        ], {"epilog": _load_help("review_submit")}),
         ("list", _cmd_review_list, [
-            (("article_id",), {"help": "Article ID (or prefix)"}),
+            (("article_id",), {"metavar": "ref", "help": "Article UUID, prefix, or title keyword"}),
             (("--show",), {"choices": ["meta", "full"], "default": "meta",
                            "help": "Display: meta (scores, default) or full (scores + threads)"}),
-        ]),
+        ], {"epilog": _load_help("review_list")}),
         ("reply", _cmd_review_reply, [
-            (("article_id",), {"help": "Article ID (or prefix)"}),
+            (("article_id",), {"metavar": "ref", "help": "Article UUID, prefix, or title keyword"}),
             (("--to",), {"required": True, "help": "Reviewer (@name, UUID, or prefix) to reply to"}),
-        ]),
+        ], {"epilog": _load_help("review_reply")}),
         ("invite", _cmd_review_invite, [
-            (("article_id",), {"help": "Article ID (or prefix)"}),
+            (("article_id",), {"metavar": "ref", "help": "Article UUID, prefix, or title keyword"}),
             (("--user",), {"required": True, "help": "User to invite (@name, UUID, or prefix)"}),
         ]),
         ("rate", _cmd_review_rate, [
-            (("article_id",), {"help": "Article ID (or prefix)"}),
+            (("article_id",), {"metavar": "ref", "help": "Article UUID, prefix, or title keyword"}),
             (("--reviewer",), {"required": True, "help": "Reviewer to rate (@name, UUID, or prefix)"}),
             (("--helpfulness",), {"required": True, "type": int, "choices": [1, 2, 3, 4, 5],
              "help": "Helpfulness score 1-5"}),
@@ -168,14 +184,14 @@ COMMAND_GROUPS = [
         ("propose", _cmd_merge_propose, [
             (("fork_id",), {"help": "Your fork's article ID"}),
             (("--target",), {"required": True, "help": "Original article ID to merge into"}),
-        ]),
+        ], {"epilog": _load_help("merge_propose")}),
         ("accept", _cmd_merge_accept, [
             (("proposal_id",), {"help": "Merge proposal ID"}),
             (("--target",), {"required": True, "help": "Target article ID"}),
-        ]),
+        ], {"epilog": _load_help("merge_accept")}),
         ("withdraw", _cmd_merge_withdraw, [
             (("proposal_id",), {"help": "Merge proposal ID to withdraw"}),
-        ]),
+        ], {"epilog": _load_help("merge_withdraw")}),
     ]),
     ("alias", "Set or manage aliases for followed users", [
         ("set", _cmd_alias_set, [
@@ -192,7 +208,7 @@ COMMAND_GROUPS = [
             (("article_id",), {"help": "Article ID to share"}),
             (("--to",), {"help": "Target user (@name, @alias, or UUID)"}),
             (("--comment",), {"help": "Optional comment on the share"}),
-        ]),
+        ], {"epilog": _load_help("share_add")}),
         ("list", _cmd_share_list, [
             (("--mine",), {"action": "store_true", "help": "Show my shares instead of feed"}),
         ]),
@@ -202,10 +218,10 @@ COMMAND_GROUPS = [
     ]),
     ("bookmark", "Bookmark articles for later reading", [
         ("add", _cmd_bookmark_add, [
-            (("article_id",), {"help": "Article ID (or prefix)"}),
-        ]),
+            (("article_id",), {"metavar": "ref", "help": "Article UUID, prefix, or title keyword"}),
+        ], {"epilog": _load_help("bookmark_add")}),
         ("remove", _cmd_bookmark_remove, [
-            (("article_id",), {"help": "Article ID (or prefix)"}),
+            (("article_id",), {"metavar": "ref", "help": "Article UUID, prefix, or title keyword"}),
         ]),
     ]),
     ("following", "View who a user follows", [
@@ -231,7 +247,7 @@ COMMAND_GROUPS = [
     ("sync", "Push/pull articles to/from a peer server", [
         ("status", _cmd_sync_status, [
             (("--server",), {"help": "Peer server URL (or set PEERPEDIA_SERVER env var)"}),
-        ]),
+        ], {"epilog": _load_help("sync_status")}),
         ("push", _cmd_sync_push, [
             (("--server",), {"help": "Peer server URL (or set PEERPEDIA_SERVER env var)"}),
         ]),
@@ -256,7 +272,7 @@ COMMAND_GROUPS = [
         ("add", _cmd_maintainer_add, [
             (("article_id",), {"help": "Article ID"}),
             (("--target-user",), {"required": True, "help": "User ID to add as maintainer"}),
-        ]),
+        ], {"epilog": _load_help("maintainer_add")}),
         ("remove", _cmd_maintainer_remove, [
             (("article_id",), {"help": "Article ID"}),
             (("--target-user",), {"required": True, "help": "User ID to remove from maintainers"}),
@@ -266,7 +282,7 @@ COMMAND_GROUPS = [
         ]),
         ("consent", _cmd_maintainer_consent, [
             (("article_id",), {"help": "Article ID to consent to publish/merge"}),
-        ]),
+        ], {"epilog": _load_help("maintainer_consent")}),
         ("revoke", _cmd_maintainer_revoke, [
             (("article_id",), {"help": "Article ID to revoke consent"}),
         ]),
@@ -275,21 +291,27 @@ COMMAND_GROUPS = [
 
 # Top-level commands (no subparsers — just a single handler)
 TOP_LEVEL = [
+    ("schema", _cmd_schema, [
+        (("command",), {"nargs": "?", "help": "Specific command name to describe"}),
+    ]),
     ("fork", _cmd_fork, [
         (("article_id",), {"help": "Published article ID to fork"}),
-    ]),
+    ], {"epilog": _load_help("fork")}),
     ("compile", _cmd_compile, [
-        (("id",), {"help": "Article ID (or prefix)"}),
+        (("id",), {"metavar": "ref", "help": "Article UUID, prefix, or title keyword"}),
         (("--format",), {"choices": ["pdf", "svg", "png", "html"],
                          "help": "Output format (default: pdf)"}),
     ]),
     ("follow", _cmd_follow_user, [
         (("user_identifier",), {"help": "User ID, @name, or UUID prefix"}),
-    ]),
+    ], {"epilog": _load_help("follow")}),
     ("unfollow", _cmd_unfollow_user, [
         (("user_identifier",), {"help": "User ID, @name, or UUID prefix"}),
     ]),
     ("?Mother", _cmd_mother, []),
+    ("help", _cmd_meta_help, [
+        (("topic",), {"nargs": "?", "help": "Command or topic to get help about (default: meta help)"}),
+    ]),
 ]
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -305,35 +327,33 @@ def build_parser() -> argparse.ArgumentParser:
     except importlib.metadata.PackageNotFoundError:
         _version = "unknown"
 
-    # Build grouped command overview for --help
+    # Build scannable command overview for --help
     _group_lines = []
     for name, help_text, subcommands in COMMAND_GROUPS:
         subs = [s[0] for s in subcommands if s[0]]
-        label = help_text or name
-        _group_lines.append(f"  {name:<14} {label}")
-        if subs:
-            _group_lines.append(f"    {'':14} → {', '.join(subs)}")
+        _group_lines.append(f"  {name:<14} {', '.join(subs)}")
     _top_level_names = [t[0] for t in TOP_LEVEL]
-    _group_lines.append(f"\n  Direct:  {', '.join(_top_level_names)}")
+    _group_lines.append(f"\n  {'':14} {', '.join(_top_level_names)}")
 
     _examples = (
-        "\n\nExamples:\n"
+        "\nEXAMPLES\n"
         "  peerpedia account register --name Alice\n"
         "  peerpedia article create --title \"My Paper\" --content \"# Intro\\n\\n...\"\n"
         "  peerpedia article publish <id> --scores \"orig=4,rigor=3,comp=4,ped=3,imp=4\"\n"
-        "  peerpedia review submit <id> --scores \"orig=4,rigor=3,comp=4,ped=3,imp=4\" --comment \"Well-structured argument...\"\n"
-        "  peerpedia review invite <id> --user @bob\n"
-        "  peerpedia review rate <id> --reviewer @bob --helpfulness 4\n"
-        "  peerpedia article scan           # trigger auto-publish check\n"
-        "  peerpedia diff <id> HEAD ~1      # see last change\n"
+        "  peerpedia review submit <id> --scores \"...\" --comment \"...\"\n"
+        "  peerpedia article list --feed              # articles from people you follow\n"
+        "  peerpedia article list --search \"quantum\"  # search by keyword\n"
+        "  peerpedia account search Alice             # find a user\n"
+        "  peerpedia diff <id> ~1 HEAD                # see what changed\n"
         "  peerpedia sync push --server https://peer.example.com\n"
-        "\nUse --json on any command for machine-readable output."
+        "\nRun 'peerpedia <command> --help' for detailed options and more examples.\n"
+        "Run 'peerpedia help' to learn about all help systems."
     )
 
     epilog = (
-        "Command groups:\n"
+        "COMMANDS\n"
         + "\n".join(_group_lines)
-        + "\n\nRun 'peerpedia <group> --help' for subcommand details."
+        + "\n"
         + _examples
     )
 
@@ -350,15 +370,35 @@ def build_parser() -> argparse.ArgumentParser:
     for name, help_text, subcommands in COMMAND_GROUPS:
         grp = subs.add_parser(name, help=help_text)
         grp_subs = grp.add_subparsers(dest="subcommand")
-        for sub_name, handler, arg_specs in subcommands:
-            p = grp_subs.add_parser(sub_name, help=_first_line(handler))
-            _add_args(p, *arg_specs)
-            _add_common(p)
-            p.set_defaults(func=handler)
+        for entry in subcommands:
+            sub_name, handler, arg_specs = entry[0], entry[1], entry[2]
+            extra = entry[3] if len(entry) > 3 else {}
+            epilog = extra.get("epilog", "")
+            if sub_name == "":
+                # No subcommand — handler goes directly on the group parser
+                _add_args(grp, *arg_specs)
+                _add_common(grp)
+                grp.set_defaults(func=handler)
+            else:
+                p = grp_subs.add_parser(
+                    sub_name, help=_first_line(handler),
+                    epilog=epilog,
+                    formatter_class=argparse.RawDescriptionHelpFormatter,
+                )
+                _add_args(p, *arg_specs)
+                _add_common(p)
+                p.set_defaults(func=handler)
 
     # Top-level commands (e.g. ``peerpedia fork``)
-    for name, handler, arg_specs in TOP_LEVEL:
-        p = subs.add_parser(name, help=_first_line(handler))
+    for entry in TOP_LEVEL:
+        name, handler, arg_specs = entry[0], entry[1], entry[2]
+        extra = entry[3] if len(entry) > 3 else {}
+        epilog = extra.get("epilog", "")
+        p = subs.add_parser(
+            name, help=_first_line(handler),
+            epilog=epilog,
+            formatter_class=argparse.RawDescriptionHelpFormatter,
+        )
         _add_args(p, *arg_specs)
         _add_common(p)
         p.set_defaults(func=handler)
@@ -379,8 +419,10 @@ def get_cmd_map() -> dict[str, list[str]]:
     """
     result: dict[str, list[str]] = {}
     for name, _help, subcommands in COMMAND_GROUPS:
-        for sub_name, _handler, _args in subcommands:
-            result[sub_name] = [name, sub_name]
-    for name, _handler, _args in TOP_LEVEL:
-        result[name] = [name]
+        for entry in subcommands:
+            sub_name = entry[0]
+            if sub_name:
+                result[sub_name] = [name, sub_name]
+    for entry in TOP_LEVEL:
+        result[entry[0]] = [entry[0]]
     return result

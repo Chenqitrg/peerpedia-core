@@ -1,0 +1,25 @@
+SCORING DIMENSIONS
+  orig     originality    – novelty of the idea or approach
+  rigor    rigor          – methodological soundness
+  comp     completeness   – coverage of edge cases and limitations
+  ped      pedagogy       – clarity of exposition
+  imp      impact         – potential significance to the field
+
+Each dimension is scored 1 (poor) through 5 (exceptional).
+
+EXAMPLES
+  # Review a paper in the sedimentation pool
+  peerpedia review submit abc12345 \
+      --scores "orig=4,rigor=3,comp=4,ped=3,imp=5" \
+      --comment "This paper presents a compelling argument..."
+
+  # List reviews you've received
+  peerpedia review list abc12345
+
+  # Reply to a reviewer's comment
+  peerpedia review reply abc12345 --to @reviewer_name
+
+SEE ALSO
+  article list       Find articles to review
+  review list        See reviews on an article
+  review reply       Respond to a review

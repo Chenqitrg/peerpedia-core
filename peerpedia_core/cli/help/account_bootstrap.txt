@@ -1,0 +1,17 @@
+EXAMPLES
+  # On your original device, export your identity:
+  peerpedia account whoami --verbose --json
+
+  # Copy the JSON blob to your new device, then:
+  peerpedia account bootstrap --from '<paste JSON here>'
+
+  # Verify your password and load the session:
+  peerpedia account recover --user-id <your-id>
+
+Bootstrap creates a minimal user stub on a new device so you can
+recover your signing key with your password.  After bootstrap,
+run "account recover" to verify.
+
+SEE ALSO
+  account whoami --verbose    Export your identity
+  account recover             Re-derive your key after bootstrap

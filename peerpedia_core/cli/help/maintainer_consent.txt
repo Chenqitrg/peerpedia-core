@@ -1,0 +1,10 @@
+EXAMPLES
+  # Consent to publish a co-authored article
+  peerpedia maintainer consent abc12345
+
+When multiple maintainers exist, ALL must consent before the article
+can be published.  Use "maintainer revoke" to withdraw consent.
+
+SEE ALSO
+  maintainer revoke   Withdraw your consent
+  article publish     Publish when all have consented

@@ -1,0 +1,22 @@
+EXAMPLES
+  # Search by partial name
+  peerpedia account search Alice
+
+  # Search case-insensitive
+  peerpedia account search alice     # same result as Alice
+
+  # Search with a fragment
+  peerpedia account search Chen      # matches "Chenqi Meng", "Chen Li", ...
+
+  # JSON output (machine-readable)
+  peerpedia account search Alice --json
+  # → [{"id": "abc12345-...", "name": "Alice Wang"}, ...]
+
+Use this to discover users before following them, inviting them as
+reviewers, or adding them as co-authors.
+
+SEE ALSO
+  follow             Follow a user after finding them
+  maintainer add     Add a user as co-author
+  review invite      Invite a user to review your article
+  whoami             See your own account

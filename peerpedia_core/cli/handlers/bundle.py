@@ -75,7 +75,11 @@ def _cmd_sync_push(db, args):
     """
     server = _sync_server(args)
     if not is_online(server):
-        _die("Server unreachable")
+        _die("Server unreachable",
+             suggestion=f"Cannot connect to {server}. Check: (1) is the server "
+                        "running? (2) is PEERPEDIA_SERVER set correctly? "
+                        "(3) is your network up?",
+             see_also=["sync status"])
     _sync_loop(db, server, list_all(), "Push", on_success=lambda op: pop_pending(op["id"]))
 
 
@@ -87,5 +91,9 @@ def _cmd_sync_pull(db, args):
     """
     server = _sync_server(args)
     if not is_online(server):
-        _die("Server unreachable")
+        _die("Server unreachable",
+             suggestion=f"Cannot connect to {server}. Check: (1) is the server "
+                        "running? (2) is PEERPEDIA_SERVER set correctly? "
+                        "(3) is your network up?",
+             see_also=["sync status"])
     _sync_loop(db, server, [{"id": a.id} for a in list_articles(db)], "Pull")

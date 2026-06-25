@@ -1,0 +1,18 @@
+EXAMPLES
+  # Open your editor to write interactively
+  peerpedia article create --title "Quantum Error Correction"
+
+  # Create with inline content (skip the editor)
+  peerpedia article create --title "Introduction" --content "# Hello\n\nWorld." --no-editor
+
+  # Create and publish immediately (with self-review scores)
+  peerpedia article create --title "My Paper" --content "# Abstract" \
+      --publish --scores "orig=4,rigor=3,comp=4,ped=3,imp=3"
+
+Your article starts as a draft.  Use "article edit" to revise,
+then "article publish" to submit to the sedimentation pool.
+
+SEE ALSO
+  article edit       Revise a draft
+  article publish    Submit to sedimentation pool
+  article list       Browse articles

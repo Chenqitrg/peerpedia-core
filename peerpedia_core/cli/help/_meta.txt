@@ -1,0 +1,26 @@
+PeerPedia has four built-in help systems.  Pick the one that fits:
+
+  peerpedia --help             Top-level overview, grouped by workflow
+  peerpedia <command> --help   Detailed options + examples for one command
+  peerpedia schema [command]   Machine-readable JSON (for AI agents and scripts)
+  peerpedia ?Mother            Interactive user guide and tutorial
+
+EXAMPLES
+  # What can I do?
+  peerpedia --help
+
+  # How do I review a paper?
+  peerpedia review submit --help
+
+  # What commands does the AI see?
+  peerpedia schema
+
+  # What does a specific command look like to an AI?
+  peerpedia schema article_publish
+
+  # I'm lost — help me get started
+  peerpedia ?Mother
+
+TIP
+  Every error message includes a suggestion and related commands.
+  If a command fails, read the output — it tells you what to do next.

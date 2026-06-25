@@ -1,0 +1,8 @@
+EXAMPLES
+  peerpedia article delete abc12345
+
+Prompts for confirmation.  Only the article's maintainers can delete.
+Deletion removes the DB record and the git repository on disk.
+
+SEE ALSO
+  article list --mine    Find your articles

@@ -1,0 +1,11 @@
+EXAMPLES
+  peerpedia account register --name Alice
+
+PeerPedia derives an Ed25519 signing key from your password.
+This key signs every commit you make.  Keep your password safe —
+there is no password reset.  If you lose it, you must re-register.
+
+SEE ALSO
+  account login      Sign in on this device
+  account whoami     See your current identity
+  account bootstrap  Set up the same identity on another device

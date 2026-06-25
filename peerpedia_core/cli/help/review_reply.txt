@@ -1,0 +1,11 @@
+EXAMPLES
+  # Reply to reviewer @bob
+  peerpedia review reply abc12345 --to @bob
+
+Opens your editor to write the reply.  Only article maintainers
+can reply.  The reviewer will receive a notification.
+
+SEE ALSO
+  review submit      Submit a review
+  review list        See all reviews
+  notifications      Check for replies to your reviews

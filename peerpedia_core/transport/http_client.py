@@ -474,6 +474,28 @@ def fetch_peers(server: str) -> list[str]:
     )
 
 
+def push_peer_registration(server: str, own_url: str) -> bool:
+    """POST /api/v1/peers to announce this server to *server*.
+
+    Returns True on success.  Idempotent — calling with an already-known
+    URL is a no-op on the server.
+    """
+    try:
+        resp = _get_client().post(
+            f"{server}/api/v1/peers",
+            json={"url": own_url},
+        )
+    except httpx.HTTPError as e:
+        raise TransportError(
+            f"Failed to register with peer {server}: {e}"
+        ) from e
+    if resp.status_code == 200:
+        return True
+    raise ProtocolError(
+        f"push_peer_registration: unexpected status {resp.status_code} from {server}"
+    )
+
+
 def fetch_user(server: str, user_id: str) -> dict | None:
     """GET /api/v1/users/{user_id} → user metadata dict, or None if 404."""
     try:

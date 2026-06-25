@@ -270,6 +270,40 @@ def test_user_articles_empty(client):
     assert resp.status_code == 200
 
 
+# ── Peer Discovery Endpoints ──────────────────────────────────────────────────
+
+
+def test_peers_get_returns_list(client):
+    """GET /api/v1/peers returns known peer URLs."""
+    resp = client.get("/api/v1/peers")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "peers" in data
+    assert isinstance(data["peers"], list)
+
+
+def test_peers_post_registers_peer(client):
+    """POST /api/v1/peers with a valid URL registers it."""
+    resp = client.post("/api/v1/peers", json={"url": "https://new-peer.example.com"})
+    assert resp.status_code == 200
+    assert resp.json() == {"status": "registered"}
+
+
+def test_peers_post_missing_url_returns_400(client):
+    """POST /api/v1/peers without url field returns 400."""
+    resp = client.post("/api/v1/peers", json={})
+    assert resp.status_code == 400
+    assert "error" in resp.json()
+
+
+def test_peers_post_duplicate_is_idempotent(client):
+    """POST /api/v1/peers with an already-known URL is idempotent."""
+    resp1 = client.post("/api/v1/peers", json={"url": "https://dup.example.com"})
+    resp2 = client.post("/api/v1/peers", json={"url": "https://dup.example.com"})
+    assert resp1.status_code == 200
+    assert resp2.status_code == 200
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Error handlers — verify JSON error shape
 # ═══════════════════════════════════════════════════════════════════════════════

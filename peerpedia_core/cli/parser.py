@@ -39,7 +39,7 @@ from peerpedia_core.cli.handlers import (
     _cmd_meta_help,
     _cmd_review_invite, _cmd_review_list, _cmd_review_rate, _cmd_review_reply, _cmd_review_submit,
     _cmd_server_start,
-    _cmd_sync_pull, _cmd_sync_push, _cmd_sync_status,
+    _cmd_sync_discover, _cmd_sync_pull, _cmd_sync_push, _cmd_sync_status,
     _cmd_whoami,
 )
 
@@ -248,6 +248,7 @@ COMMAND_GROUPS = [
         ("start", _cmd_server_start, [
             (("--host",), {"default": "127.0.0.1", "help": "Bind address"}),
             (("--port",), {"default": 8080, "type": int, "help": "Listen port"}),
+            (("--public-url",), {"default": "", "help": "Public URL for peer registration (e.g. https://peer.example.com)"}),
         ]),
     ]),
     ("sync", "Push/pull articles to/from a peer server", [
@@ -260,11 +261,13 @@ COMMAND_GROUPS = [
         ("pull", _cmd_sync_pull, [
             (("--server",), {"help": "Peer server URL (or set PEERPEDIA_SERVER env var)"}),
         ]),
-        # TODO(social-graph): ``sync discover`` — P2P social graph discovery
-        # (traverse followers-of-followers to find new peers and articles).
-        # Follow/unfollow/bookmark are pushed to the server immediately after
-        # local commit via _push_social(); a future ``sync social push`` command
-        # would batch offline social changes.
+        ("discover", _cmd_sync_discover, [
+            (("--depth",), {"type": int, "default": 1, "help": "Follow graph depth (default 1)"}),
+            (("--max-users",), {"type": int, "default": 100, "help": "Max users to traverse"}),
+        ], {"epilog": _load_help("sync_discover")}),
+        # Walks the follow graph to find new articles — fetch user's follows,
+        # then their follows, up to depth N (default 1).  For each discovered
+        # user, calls discover_articles().  See commands/bundle.py for details.
     ]),
     ("notifications", "View and manage notifications", [
         ("", _cmd_notifications, [

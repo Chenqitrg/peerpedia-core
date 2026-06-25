@@ -227,11 +227,20 @@ def apply_sync_bundle(
     # this bounds the commit's true creation window.
     update_witnessed_at(db, article_id)
 
-    # TODO(social-graph): ``sync discover`` — traverse the social graph to
-    # find new peers and articles.  Follows, unfollows, and bookmarks are
-    # pushed to the server via _push_social() after local commit.  What's
-    # missing is the discovery side: given a seed peer, walk the graph
-    # (who follows whom, who bookmarks what) to surface new content.
+    # TODO(social-graph): Implement social graph traversal for content discovery.
+    # Given a peer, walk the follow graph to find new articles.  Three steps:
+    #
+    #   1. ``sync discover --depth N`` CLI command: starting from the current
+    #      user, fetch their follows, then those users' follows, up to depth N.
+    #      For each discovered user, call discover_articles() to pull their
+    #      articles.  File: cli/handlers/bundle.py (_cmd_sync_discover).
+    #
+    #   2. ``discover_network()`` in social/exchange.py: orchestrates the graph
+    #      walk — fetch_following → for each followed → fetch_following (recursive,
+    #      bounded by depth + max_users).  Dedup by user_id.
+    #
+    #   3. Auto-discovery on sync: after _cmd_sync_pull, walk depth=1 for
+    #      each followed user to pre-fetch their articles.  File: bundle.py.
 
     # Full integrity check — DB cross-validation + auto-repair after sync.
     assert_article_integrity(db, article_id, level="full")
@@ -288,19 +297,21 @@ def _verify_new_commits(db: Session, repo_path: Path, *, since_hash: str) -> Non
         if user.public_key is None:
             update_user_public_key(db, user_id, pubkey_hex)
         elif user.public_key != pubkey_hex:
-            # Key rotation: the commit is signed with a different key than
-            # what we have stored.  The key owner must call push_key_rotation
-            # BEFORE pushing commits signed with the new key so peers update
-            # their stored public_key.  If the rotation already happened
-            # (DB updated), the pubkeys would match — so this is a genuine
-            # mismatch or a rotation that hasn't propagated yet.
-            raise SignatureVerificationError(
-                f"Pubkey mismatch for {user_id}: "
-                f"stored {user.public_key[:16]}..., "
-                f"commit has {pubkey_hex[:16]}... "
-                f"— if you rotated your key, push the rotation first: "
-                f"POST /api/v1/users/{user_id}/rotate-key"
+            # Key rotation: the commit is signed with a new key.  The
+            # signature already passed verify_commit_signature above, so
+            # the new key is cryptographically valid.  Auto-update the
+            # stored public_key — same as the auth middleware (TOFU).
+            # In a P2P network you can't guarantee every peer received
+            # a key-rotation notification before seeing a commit signed
+            # with the new key.  Rejecting here would permanently break
+            # sync for every peer that missed the rotation event.
+            logger.warning(
+                "Key rotation for %s: pubkey %s... → %s... — auto-updated.",
+                user_id,
+                user.public_key[:16] if user.public_key else "None",
+                pubkey_hex[:16],
             )
+            update_user_public_key(db, user_id, pubkey_hex)
 
 
 # Re-export integrity helpers and functions used by this module.

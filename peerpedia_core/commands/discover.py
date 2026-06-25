@@ -8,7 +8,8 @@ Each function takes a list of dicts from a remote peer and merges them
 into the local DB — inserting new rows, skipping duplicates::
 
     merge_users             — create User rows for newly discovered peers
-    merge_follows           — insert Follow rows for a user's social graph
+    merge_follows           — insert Follow rows for a user's social graph (following)
+    merge_followers         — insert Follow rows for a user's followers (reverse direction)
     merge_article_meta      — insert Article rows for discovered articles
     merge_bookmarks         — insert Bookmark rows (deprecated, kept for compat)
     merge_script_maintainers— insert maintainer rows from sync
@@ -72,6 +73,75 @@ def merge_users(db: Session, entries: list[dict]) -> int:
     return added
 
 
+def _merge_follow_edges(
+    db: Session,
+    source_id: str,
+    entries: list[dict],
+    *,
+    direction: str,
+    authoritative: bool,
+) -> int:
+    """Merge follow edges in either direction — shared by merge_follows and merge_followers.
+
+    *direction* is ``"following"`` (source_id follows the users in entries)
+    or ``"followers"`` (the users in entries follow source_id).
+    """
+    label = "follows" if direction == "following" else "followers"
+    _require_keys(entries, "id", label=label)
+
+    remote_ids = {e["id"] for e in entries}
+    for other_id in remote_ids:
+        if other_id == source_id:
+            raise ValueError(
+                f"merge_{label}: self-follow detected for user {source_id}"
+            )
+
+    added = 0
+    for other_id in remote_ids:
+        if direction == "following":
+            if is_following(db, source_id, other_id):
+                continue
+            follow_user(db, follower_id=source_id, followed_id=other_id)
+        else:
+            if is_following(db, other_id, source_id):
+                continue
+            follow_user(db, follower_id=other_id, followed_id=source_id)
+        added += 1
+
+    if authoritative:
+        if remote_ids:
+            filter_col = (
+                Follow.follower_id if direction == "following"
+                else Follow.followed_id
+            )
+            check_attr = (
+                "followed_id" if direction == "following"
+                else "follower_id"
+            )
+            local_rows = (
+                db.query(Follow)
+                .filter(filter_col == source_id, Follow.deleted_at.is_(None))
+                .all()
+            )
+            removed = 0
+            for row in local_rows:
+                if getattr(row, check_attr) not in remote_ids:
+                    row.deleted_at = datetime.now(timezone.utc)
+                    removed += 1
+            if removed:
+                logger.info(
+                    "merge_%s: authoritative — soft-deleted %d row(s) for %s",
+                    label, removed, source_id,
+                )
+        else:
+            logger.warning(
+                "merge_%s: authoritative server returned empty list for %s — skipped",
+                label, source_id,
+            )
+
+    return added
+
+
 def merge_follows(
     db: Session, follower_id: str, entries: list[dict], *,
     authoritative: bool = False,
@@ -88,51 +158,35 @@ def merge_follows(
     Raises ValueError if any entry is missing *id*, or if a self-follow
     is detected.
     """
-    _require_keys(entries, "id", label="follows")
+    return _merge_follow_edges(
+        db, follower_id, entries,
+        direction="following", authoritative=authoritative,
+    )
 
-    remote_ids = {e["id"] for e in entries}
-    for followed_id in remote_ids:
-        if followed_id == follower_id:
-            raise ValueError(
-                f"merge_follows: self-follow detected for user {follower_id}"
-            )
 
-    added = 0
-    for followed_id in remote_ids:
-        if is_following(db, follower_id, followed_id):
-            continue
-        follow_user(db, follower_id=follower_id, followed_id=followed_id)
-        added += 1
+def merge_followers(
+    db: Session, followed_id: str, entries: list[dict], *,
+    authoritative: bool = False,
+) -> int:
+    """Merge followers discovered from a peer — lazy social discovery.
 
-    if authoritative:
-        if remote_ids:
-            # Soft-delete local follows not present in the authoritative list.
-            local_follows = (
-                db.query(Follow)
-                .filter(
-                    Follow.follower_id == follower_id,
-                    Follow.deleted_at.is_(None),
-                )
-                .all()
-            )
-            removed = 0
-            for f in local_follows:
-                if f.followed_id not in remote_ids:
-                    f.deleted_at = datetime.now(timezone.utc)
-                    removed += 1
-            if removed:
-                logger.info(
-                    "merge_follows: authoritative — soft-deleted %d follow(s) for %s",
-                    removed, follower_id,
-                )
-        else:
-            logger.warning(
-                "merge_follows: authoritative server returned empty following "
-                "list for %s — soft-deletes skipped to prevent data loss.",
-                follower_id,
-            )
+    Creates or restores ``follow`` rows for users in *entries* who follow
+    *followed_id*.  This is the reverse direction of ``merge_follows``:
+    the remote list is "who follows me", not "who I follow".
 
-    return added
+    When *authoritative* is True (home-server pull), the remote list is
+    treated as the complete followers set: local Follow rows where
+    ``followed_id`` matches but ``follower_id`` is not in *entries* are
+    soft-deleted.  When False (peer discovery), only adds/restores, never
+    deletes.
+
+    Raises ValueError if any entry is missing *id*, or if a self-follow
+    is detected.
+    """
+    return _merge_follow_edges(
+        db, followed_id, entries,
+        direction="followers", authoritative=authoritative,
+    )
 
 
 def merge_article_meta(db: Session, entries: list[dict]) -> int:

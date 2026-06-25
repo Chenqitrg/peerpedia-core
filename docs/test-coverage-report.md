@@ -1,5 +1,7 @@
 # Test Coverage Report
 
+> **Note:** Numbers updated 2026-06-25. Coverage percentages may have shifted since original report.
+
 **Date:** 2026-06-25
 **Branch:** main
 **Tool:** pytest 9.1.0 + pytest-cov 7.1.0
@@ -11,7 +13,7 @@
 |--------|-------|
 | **Line coverage** | **69%** (4693 statements) |
 | **Test files** | 39 |
-| **Test cases** | 570 (all passing) |
+| **Test cases** | 617 (all passing) |
 | **100% coverage files** | 32 |
 | **Below 50% coverage** | 15 (transport + CLI handlers + REPL) |
 

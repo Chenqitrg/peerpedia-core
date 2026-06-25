@@ -199,10 +199,8 @@ def pull_new_article(db: Session, server: str, article_id: str) -> str | None:
     Downloads the full repo as base64 tar.gz via ``fetch_article_repo`` and
     unpacks it — the mirror of ``upload_article`` → ``push_article_repo``.
 
-    TODO(v1-content-sync): not yet wired into the discovery flow.  After
-    ``merge_article_meta`` creates a stub, the caller must invoke this to
-    fetch the actual git content.  Currently ``article show`` fails with
-    "No source file found" for discovered articles.
+    Wired into the discovery flow via ``_cmd_sync_pull`` (eager pull during
+    explicit sync) and ``_find_article_file`` (lazy pull on first access).
     """
     repo_b64 = fetch_article_repo(server, article_id)
     if not repo_b64:

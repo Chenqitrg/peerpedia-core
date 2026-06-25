@@ -51,4 +51,4 @@ from peerpedia_core.cli.handlers.notifications import (
 from peerpedia_core.cli.handlers.help import _cmd_meta_help
 from peerpedia_core.cli.handlers.schema import _cmd_schema
 from peerpedia_core.cli.handlers.server import _cmd_server_start
-from peerpedia_core.cli.handlers.bundle import _cmd_sync_pull, _cmd_sync_push, _cmd_sync_status
+from peerpedia_core.cli.handlers.bundle import _cmd_sync_discover, _cmd_sync_pull, _cmd_sync_push, _cmd_sync_status

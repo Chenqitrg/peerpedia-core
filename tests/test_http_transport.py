@@ -112,3 +112,32 @@ class TestPushKeyRotation:
                     "http://peer:8080", "alice", "aa" * 32,
                     private_key_bytes=b"\x00" * 32,
                 )
+
+
+# ── push_peer_registration ──────────────────────────────────────────────────
+
+
+class TestPushPeerRegistration:
+    def test_returns_true_on_200(self):
+        mock_resp = httpx.Response(200)
+        client = _mock_client(post=MagicMock(return_value=mock_resp))
+        with patch("peerpedia_core.transport.http_client._get_client", return_value=client):
+            from peerpedia_core.transport.http_client import push_peer_registration
+            result = push_peer_registration("http://peer:8080", "https://me.example.com")
+            assert result is True
+
+    def test_non_200_raises_protocol_error(self):
+        mock_resp = httpx.Response(500)
+        client = _mock_client(post=MagicMock(return_value=mock_resp))
+        with patch("peerpedia_core.transport.http_client._get_client", return_value=client):
+            from peerpedia_core.transport.http_client import push_peer_registration
+            from peerpedia_core.exceptions import ProtocolError
+            with pytest.raises(ProtocolError):
+                push_peer_registration("http://peer:8080", "https://me.example.com")
+
+    def test_network_error_raises_transport_error(self):
+        client = _mock_client(post=MagicMock(side_effect=httpx.ConnectError("down")))
+        with patch("peerpedia_core.transport.http_client._get_client", return_value=client):
+            from peerpedia_core.transport.http_client import push_peer_registration
+            with pytest.raises(TransportError):
+                push_peer_registration("http://peer:8080", "https://me.example.com")

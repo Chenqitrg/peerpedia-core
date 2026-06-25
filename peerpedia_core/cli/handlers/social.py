@@ -77,9 +77,9 @@ def _push_social(action: str, **kwargs) -> None:
 
     *action* is one of ``"follow"``, ``"unfollow"``.
 
-    TODO(v1-follow-sync): push succeeds via TOFU, but the followed user
-    does not receive a notification on the server side.  Also, pull_social
-    after follow may fail to merge the followed user's graph data.
+    Server-side notifications are created by ``commands/users.py:follow_user``
+    which the server route calls.  The followed user pulls notifications via
+    ``_pull_social`` → ``discover_notifications``.
     """
     key = _get_session_key()
     pubkey = _get_session_pubkey()
@@ -248,9 +248,6 @@ def _cmd_follow_user(db, args):
     follow_user(db, follower_id, followed_id)
     db.commit()
     _try_sync(db)
-    # TODO(P2P-sync): social graph push/pull requires Ed25519 auth.
-    # Currently best-effort — warns and skips if PEERPEDIA_SERVER is not
-    # set or if the server rejects the unsigned request (401).
     _push_social("follow", follower_id=follower_id, followed_id=followed_id)
     _pull_social(db, followed_id)
     if args.json:

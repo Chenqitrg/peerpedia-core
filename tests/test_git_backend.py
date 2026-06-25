@@ -769,3 +769,129 @@ class TestCommitStatusMarker:
 
         with pytest.raises(ValueError, match="Invalid status"):
             commit_status_marker(rp, "garbaggio")
+
+
+# ── Branch Protection ───────────────────────────────────────────────────────
+
+
+class TestBranchProtection:
+    """Branch protection: all operations assert HEAD is on refs/heads/main."""
+
+    def test_init_creates_on_main(self, articles_dir):
+        """init_article_repo creates initial commit on main, not init.defaultBranch."""
+        import git as _git
+        from peerpedia_core.storage.git_backend import init_article_repo
+
+        rp = init_article_repo(articles_dir / "test-init-main")
+        repo = _git.Repo(rp)
+        assert not repo.head.is_detached
+        assert repo.head.reference.path == "refs/heads/main"
+
+    def test_empty_repo_guard_noop(self, articles_dir):
+        """_assert_on_main returns early (no-op) on empty repo with no commits."""
+        import git as _git
+        from peerpedia_core.storage.git_backend import _assert_on_main
+
+        # Create empty repo with main branch but no commits
+        rp = articles_dir / "test-empty"
+        rp.mkdir()
+        repo = _git.Repo.init(rp, initial_branch="main")
+        # Should NOT raise — early return for empty repos
+        _assert_on_main(repo)  # no exception
+
+    def test_commit_on_wrong_branch_raises(self, articles_dir):
+        """commit_article raises when HEAD is not on main."""
+        import git as _git
+        from peerpedia_core.storage.git_backend import init_article_repo
+
+        rp = init_article_repo(articles_dir / "test-wrong-commit")
+        repo = _git.Repo(rp)
+        new_branch = repo.create_head("trunk")
+        new_branch.checkout()
+        (rp / "article.md").write_text("# Content\n")
+        repo.git.add(A=True)
+
+        # commit_article_signed calls commit_article internally; the guard
+        # fires before signing, so the key derivation is irrelevant.
+        with pytest.raises(RuntimeError, match="refs/heads/trunk"):
+            commit_article_signed(rp, "commit on wrong branch", "Author", "a@b.com")
+
+    def test_get_head_hash_on_wrong_branch_raises(self, articles_dir):
+        """get_head_hash raises when HEAD is not on main."""
+        import git as _git
+        from peerpedia_core.storage.git_backend import get_head_hash, init_article_repo
+
+        rp = init_article_repo(articles_dir / "test-wrong-head")
+        repo = _git.Repo(rp)
+        new_branch = repo.create_head("trunk")
+        new_branch.checkout()
+
+        with pytest.raises(RuntimeError, match="refs/heads/trunk"):
+            get_head_hash(rp)
+
+    def test_get_commit_history_on_wrong_branch_raises(self, articles_dir):
+        """get_commit_history raises when HEAD is not on main."""
+        import git as _git
+        from peerpedia_core.storage.git_backend import get_commit_history, init_article_repo
+
+        rp = init_article_repo(articles_dir / "test-wrong-history")
+        repo = _git.Repo(rp)
+        new_branch = repo.create_head("trunk")
+        new_branch.checkout()
+
+        with pytest.raises(RuntimeError, match="refs/heads/trunk"):
+            get_commit_history(rp, max_count=5)
+
+    def test_get_commit_authors_on_wrong_branch_raises(self, articles_dir):
+        """get_commit_authors raises when HEAD is not on main."""
+        import git as _git
+        from peerpedia_core.storage.git_backend import get_commit_authors, init_article_repo
+
+        rp = init_article_repo(articles_dir / "test-wrong-authors")
+        repo = _git.Repo(rp)
+        new_branch = repo.create_head("trunk")
+        new_branch.checkout()
+
+        with pytest.raises(RuntimeError, match="refs/heads/trunk"):
+            get_commit_authors(rp)
+
+    def test_detached_head_raises(self, articles_dir):
+        """_assert_on_main raises RuntimeError on detached HEAD."""
+        import git as _git
+        from peerpedia_core.storage.git_backend import _assert_on_main, init_article_repo
+
+        rp = init_article_repo(articles_dir / "test-detached")
+        (rp / "article.md").write_text("# Content\n")
+        commit_article_signed(rp, "commit", "Author", "a@b.com")
+
+        repo = _git.Repo(rp)
+        # Detach HEAD to the initial commit
+        repo.head.reference = repo.head.commit
+        # Now HEAD is detached — commit is the hexsha
+
+        with pytest.raises(RuntimeError, match="detached"):
+            _assert_on_main(repo)
+
+    def test_merge_git_repos_target_wrong_branch_raises(self, articles_dir):
+        """merge_git_repos raises when target is not on main."""
+        import git as _git
+        from peerpedia_core.storage.git_backend import (
+            commit_article, init_article_repo, merge_git_repos,
+        )
+
+        # Target repo on "trunk" branch
+        target_rp = articles_dir / "test-merge-target"
+        target_rp.mkdir(parents=True)
+        target_repo = _git.Repo.init(target_rp, initial_branch="trunk")
+        (target_rp / "reviews").mkdir(exist_ok=True)
+        (target_rp / "article.md").write_text("# Target\n")
+        target_repo.git.add(A=True)
+        target_repo.git.commit(m="target commit")
+
+        # Fork repo on main
+        fork_rp = init_article_repo(articles_dir / "test-merge-fork")
+        (fork_rp / "article.md").write_text("# Fork\n")
+        commit_article_signed(fork_rp, "fork commit", "Author", "a@b.com")
+
+        with pytest.raises(RuntimeError, match="refs/heads/trunk"):
+            merge_git_repos(target_rp, fork_rp, "Author")

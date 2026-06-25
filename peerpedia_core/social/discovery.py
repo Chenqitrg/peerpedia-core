@@ -5,11 +5,15 @@
 
 Uses the transport facade so switching from HTTP to P2P only requires
 changing ``transport/__init__.py``.
+
+This module is the single source of truth for ``~/.peerpedia/peers.json``.
+``transport/routes/peers.py`` imports from here for the HTTP endpoint.
 """
 
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 
 from peerpedia_core.config.params import params
@@ -17,22 +21,131 @@ from peerpedia_core.transport import fetch_peers
 
 _PEERS_FILE = Path.home() / ".peerpedia" / "peers.json"
 
+# ── Backoff state ────────────────────────────────────────────────────────────
 
-def get_known_peers() -> list[str]:
-    """Return known peer URLs: user-configured + seed list + discovered."""
-    peers: list[str] = []
+# In-memory cache of per-peer failure state: {url: {"fail_count": N, "last_failed_at": ts}}.
+# Persisted to peers.json alongside the URL list.
+_backoff: dict[str, dict] = {}
+
+
+def _load_peers_raw() -> list:
+    """Load the raw peer list from disk (list of urls or list of dicts)."""
     if _PEERS_FILE.is_file():
         try:
-            peers = json.loads(_PEERS_FILE.read_text())
+            with open(_PEERS_FILE) as f:
+                data = json.load(f)
+                if isinstance(data, list):
+                    return data
         except (json.JSONDecodeError, OSError):
             pass
+    return list(params.discovery.seed_peers)
 
-    # Merge with seed peers (seed peers always at the end)
+
+def _save_peers_raw(peers: list) -> None:
+    """Persist peers to disk, capped at max_known_peers."""
+    _PEERS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(_PEERS_FILE, "w") as f:
+        json.dump(peers[: params.discovery.max_known_peers], f)
+
+
+def _is_peer_backoff(url: str) -> bool:
+    """Return True if *url* is in exponential backoff and should be skipped."""
+    if url not in _backoff:
+        return False
+    state = _backoff[url]
+    fail_count = state.get("fail_count", 0)
+    if fail_count == 0:
+        return False
+    # Exponential backoff: 1m, 2m, 4m, 8m, 16m (max 5 failures)
+    delay = min(60 * (2 ** (fail_count - 1)), 960)
+    elapsed = time.time() - state.get("last_failed_at", 0)
+    return elapsed < delay
+
+
+def _peer_failed(url: str) -> None:
+    """Record a failure for *url*, incrementing backoff."""
+    now = time.time()
+    if url not in _backoff:
+        _backoff[url] = {"fail_count": 1, "last_failed_at": now}
+    else:
+        _backoff[url]["fail_count"] = min(_backoff[url].get("fail_count", 0) + 1, 5)
+        _backoff[url]["last_failed_at"] = now
+    # Persist backoff state
+    _persist_backoff()
+
+
+def _peer_succeeded(url: str) -> None:
+    """Reset backoff for *url* after a successful connection."""
+    if url in _backoff:
+        del _backoff[url]
+        _persist_backoff()
+
+
+def _persist_backoff() -> None:
+    """Write backoff state into peers.json alongside URLs."""
+    entries = []
+    for url in get_known_peers():
+        entry: dict = {"url": url}
+        if url in _backoff:
+            entry["fail_count"] = _backoff[url].get("fail_count", 0)
+            entry["last_failed_at"] = _backoff[url].get("last_failed_at", 0)
+        entries.append(entry)
+    _save_peers_raw(entries)
+
+
+def _hydrate_backoff() -> None:
+    """Load backoff state from peers.json on module init."""
+    if not _PEERS_FILE.is_file():
+        return
+    try:
+        with open(_PEERS_FILE) as f:
+            data = json.load(f)
+            if isinstance(data, list):
+                for entry in data:
+                    if isinstance(entry, dict) and "fail_count" in entry:
+                        _backoff[entry["url"]] = {
+                            "fail_count": entry.get("fail_count", 0),
+                            "last_failed_at": entry.get("last_failed_at", 0),
+                        }
+    except (json.JSONDecodeError, OSError):
+        pass
+
+
+# ── Public API ───────────────────────────────────────────────────────────────
+
+
+def get_known_peers(*, skip_backoff: bool = True) -> list[str]:
+    """Return known peer URLs: discovered + seed list.
+
+    When *skip_backoff* is True (default), peers in exponential backoff
+    are excluded from the returned list.
+    """
+    raw = _load_peers_raw()
+    urls: list[str] = []
+    for item in raw:
+        url = item["url"] if isinstance(item, dict) else item
+        if url not in urls:
+            urls.append(url)
+
+    if skip_backoff:
+        urls = [u for u in urls if not _is_peer_backoff(u)]
+
+    # Merge with seed peers (always at the end, never skipped by backoff)
     for sp in params.discovery.seed_peers:
-        if sp not in peers:
-            peers.append(sp)
+        if sp not in urls:
+            urls.append(sp)
 
-    return peers
+    return urls
+
+
+def add_peer(url: str) -> None:
+    """Register a new peer URL (idempotent). Inserts at front of list."""
+    raw = _load_peers_raw()
+    # Extract existing URLs
+    existing = {item["url"] if isinstance(item, dict) else item for item in raw}
+    if url not in existing:
+        raw.insert(0, {"url": url})
+        _save_peers_raw(raw)
 
 
 def merge_peers(server_url: str) -> int:
@@ -45,17 +158,24 @@ def merge_peers(server_url: str) -> int:
     except Exception:
         return 0
 
-    local = get_known_peers()
+    local_urls = set(get_known_peers(skip_backoff=False))
     new_count = 0
     for url in remote:
-        if url not in local:
-            local.insert(0, url)
+        if url not in local_urls:
+            add_peer(url)
+            local_urls.add(url)
             new_count += 1
 
-    if new_count:
-        _PEERS_FILE.parent.mkdir(parents=True, exist_ok=True)
-        _PEERS_FILE.write_text(json.dumps(
-            local[: params.discovery.max_known_peers],
-        ))
-
     return new_count
+
+
+def record_peer_result(url: str, success: bool) -> None:
+    """Record success/failure for *url* to update backoff state."""
+    if success:
+        _peer_succeeded(url)
+    else:
+        _peer_failed(url)
+
+
+# Hydrate backoff state on module load.
+_hydrate_backoff()

@@ -1,274 +1,338 @@
 # PeerPedia Core
 
-同行评审基础设施 — 命令行工具 + Python 库，用于写论文、互相评审、公开发布。
+同行评审基础设施 -- 命令行工具 + Python 库，用于写论文、互相评审、公开发布。
 
-**Git 存内容，数据库存状态。** 每篇文章是一个独立的 Git 仓库 — 正文和评审有完整历史、可 diff/fork/merge；元数据（状态、评分、关系）通过 SQLite 查询和聚合。
+**Git stores content; SQLite stores state.** Every article is an independent Git repository -- body text and reviews have full history, can be diffed/forked/merged. Metadata (status, scores, relationships) lives in SQLite for fast queries and aggregation.
 
 [![Tests](https://github.com/Chenqitrg/peerpedia-core/actions/workflows/test.yml/badge.svg)](https://github.com/Chenqitrg/peerpedia-core/actions/workflows/test.yml)
-570 tests | 69% coverage | Python 3.11+
+617 tests | 69% coverage | Python 3.11+
 
-## 安装
+## Installation
 
 ```bash
 pip install peerpedia-core
 ```
 
-依赖：Python 3.11+，Git。SQLite 自动创建在 `~/.peerpedia/`。
+Dependencies: Python 3.11+, Git. SQLite database is created automatically at `~/.peerpedia/`.
 
-### Tab 补全
+### Tab completion
 
 ```bash
-# zsh（加到 ~/.zshrc）
+# zsh (add to ~/.zshrc)
 autoload -U bashcompinit && bashcompinit
 eval "$(register-python-argcomplete peerpedia)"
 ```
 
-## 5 分钟上手
+## 5-minute quickstart
 
-### 1. 注册账号
+### 1. Register an account
 
 ```bash
 peerpedia account register --name "Alice"
-# → ✓ Registered Alice (id: eef0e359)
+# -> Registered Alice (id: eef0e359)
 ```
 
-所有数据存本地 `~/.peerpedia/peerpedia.db`。不需要服务器。密钥由密码 + scrypt 派生，可跨设备恢复。
+All data lives locally in `~/.peerpedia/peerpedia.db`. No server required. Keys are derived from password + scrypt, recoverable across devices.
 
-### 2. 写文章
+### 2. Write an article
 
 ```bash
 peerpedia article create --title "A Note on Tensor Networks" --content "# Intro\n\n..."
 ```
 
-不传 `--content` 打开 `$EDITOR`。
+Omit `--content` to open `$EDITOR`.
 
-### 3. 发布到沉淀池
+### 3. Publish to the sedimentation pool
 
 ```bash
 peerpedia article publish <id> --scores "originality=4,rigor=3,completeness=4,pedagogy=3,impact=4"
 ```
 
-沉淀池（sedimentation）是 PeerPedia 的评审机制：文章进入限时公开评审期（首次 7 天），到期自动发布。
+Sedimentation is PeerPedia's review mechanism: articles enter a timed public review period (7 days first time), then auto-publish when the timer expires.
 
-### 4. 评审
-
-```bash
-peerpedia review submit <id> --scores "originality=5,rigor=4,completeness=3,pedagogy=4,impact=5" --comment "Well-structured."
-```
-
-作者可以回复评审：
+### 4. Review
 
 ```bash
+peerpedia review submit <id> --scores "..." --comment "Well-structured."
 peerpedia review reply <id> --to @reviewer
+peerpedia review invite <id> --user <reviewer-id>
+peerpedia review rate <id> --reviewer <reviewer-id> --helpfulness 4
 ```
 
 ### 5. Fork & Merge
 
 ```bash
-peerpedia fork <id>                 # Fork 已发表文章
-# 编辑 fork...
+peerpedia fork <id>                 # Fork a published article
 peerpedia merge propose <fork-id> --target <original-id>
 peerpedia merge accept <proposal-id> --target <article-id>
 ```
 
-### 6. 多设备
+### 6. Multi-device setup
 
 ```bash
-# 设备 A：导出身份
+# Device A: export identity
 peerpedia account whoami --verbose --json
-# → {"user_id":"...","name":"Alice","public_key":"...","salt":"..."}
+# -> {"user_id":"...","name":"Alice","public_key":"...","salt":"..."}
 
-# 设备 B：导入并恢复
-peerpedia account bootstrap --from '<json>'
+# Device B: import identity and recover
+peerpedia account bootstrap --from '<json>' --peer https://peer.example.com
 peerpedia account recover --user-id <id>
 ```
 
-### 7. Diff 历史版本
+On device B, `account login --peer <url> --user-id <uuid>` remotely fetches the user stub from the peer server and sets up credentials without the original device:
 
 ```bash
-peerpedia article diff <id> HEAD ~1    # 最近一次修改的 diff
-peerpedia article diff <id> <hash1> <hash2>
+peerpedia account login --name "Alice" --peer https://peer.example.com --user-id eef0e359
 ```
 
-## 状态机
+After bootstrapping, `peerpedia sync pull --server <url>` pulls articles from the peer automatically.
 
-```
-draft ──publish()──► sedimentation ──到期自动──► published
-                          ▲                          │
-                          │   edit / merge           │
-                          └──────────────────────────┘
-                              (自动 3 天沉淀)
+### 7. Delete your account
+
+```bash
+peerpedia account delete
 ```
 
-## 命令参考
+This performs a soft delete -- user data is preserved locally for others' references, but the account is deactivated and the session file removed.
 
-### account — 账户管理
+### 8. Diff & discover
 
-| 命令 | 说明 |
-|------|------|
-| `account register --name <name>` | 注册新用户 |
-| `account login --name <name>` | 登录 |
-| `account recover [--name <n>\|--user-id <id>]` | 从密码恢复密钥 |
-| `account bootstrap --from '<json>' [--peer <url>]` | 新设备导入身份 |
-| `account whoami [--verbose]` | 显示当前用户（--verbose 显示公钥和 salt） |
-| `account search <query>` | 搜索用户 |
+```bash
+peerpedia article diff <id> HEAD ~1         # diff most recent change
+peerpedia article list --server <url> --user <id>  # discover remote articles
+```
 
-### article — 文章管理
+## State machine
 
-| 命令 | 说明 |
-|------|------|
-| `article create --title <t> [--content <c>] [--no-editor]` | 创建草稿 |
-| `article create ... --publish --scores <s>` | 创建并直接发布 |
-| `article show <id> [--show meta\|full]` | 查看文章 |
-| `article list [--status <s>] [--mine] [--feed] [--bookmarked]` | 列出文章 |
-| `article list --user <id> [--server <url>]` | 查看远程用户的文章 |
-| `article edit <id> [--content <c>] [--title <t>]` | 编辑文章 |
-| `article publish <id> --scores <s>` | 发布到沉淀池 |
-| `article delete <id>` | 删除草稿 |
-| `article diff <id> <hash1> <hash2>` | Diff 两个版本 |
-| `article scan` | 触发自动发布 |
+```
+draft --publish()--> sedimentation --auto-expire--> published
+                          ^                             |
+                          |    edit / merge              |
+                          +-----------------------------+
+                              (auto 3-day sedimentation)
+```
 
-### review — 评审
+## Command reference
 
-| 命令 | 说明 |
-|------|------|
-| `review submit <id> --scores <s> [--comment <c>]` | 提交评审 |
-| `review list <id> [--show meta\|full]` | 列出评审（full 显示 threads） |
-| `review reply <id> --to <reviewer>` | 回复评审（双向对话） |
+### account -- Account management
 
-### maintainer — 合著管理
+| Command | Description |
+|---------|-------------|
+| `account register --name <name>` | Register a new user |
+| `account login --name <name>` | Login (local) |
+| `account login --name <name> --peer <url> --user-id <uuid>` | Login with remote bootstrap (new device) |
+| `account delete` | Soft-delete the current account |
+| `account recover [--name <n>\|--user-id <id>]` | Recover keys from password |
+| `account bootstrap --from '<json>' [--peer <url>]` | Import identity on a new device |
+| `account whoami [--verbose]` | Show current user (--verbose shows public key and salt) |
+| `account search <query>` | Search users |
 
-| 命令 | 说明 |
-|------|------|
-| `maintainer add <id> --target-user <uid>` | 添加合著者 |
-| `maintainer remove <id> --target-user <uid>` | 移除合著者 |
-| `maintainer list <id>` | 列出合著者 |
-| `maintainer consent <id>` | 同意发布/合并（多作者一致同意） |
-| `maintainer revoke <id>` | 撤销同意 |
+### article -- Article management
 
-### notifications — 通知
+| Command | Description |
+|---------|-------------|
+| `article create --title <t> [--content <c>] [--no-editor]` | Create a draft |
+| `article create ... --publish --scores <s>` | Create and immediately publish |
+| `article show <id> [--show meta\|full]` | View an article |
+| `article list [--status <s>] [--mine] [--feed] [--bookmarked]` | List articles (local) |
+| `article list --user <id> [--server <url>]` | Discover articles from a remote user |
+| `article edit <id> [--content <c>] [--title <t>]` | Edit an article |
+| `article publish <id> --scores <s>` | Publish to the sedimentation pool |
+| `article delete <id>` | Delete a draft |
+| `article diff <id> <hash1> <hash2>` | Diff two versions |
+| `article scan` | Trigger auto-publish for expired sedimentation articles |
 
-| 命令 | 说明 |
-|------|------|
-| `notifications [--all]` | 查看通知（默认未读） |
-| `notifications read <id>` | 标记已读 |
+### review -- Reviews
 
-### social — 社交
+| Command | Description |
+|---------|-------------|
+| `review submit <id> --scores <s> [--comment <c>]` | Submit a review |
+| `review invite <id> --user <user-id>` | Invite a specific user to review |
+| `review rate <id> --reviewer <user-id> --helpfulness <1-5>` | Rate a review's helpfulness |
+| `review list <id> [--show meta\|full]` | List reviews (full shows threads) |
+| `review reply <id> --to <reviewer>` | Reply to a review (bidirectional conversation) |
 
-| 命令 | 说明 |
-|------|------|
-| `follow <user>` | 关注用户 |
-| `unfollow <user>` | 取消关注 |
-| `following --user <id> [--server <url>]` | 查看关注列表 |
-| `followers --user <id> [--server <url>]` | 查看粉丝列表 |
-| `bookmark add <id>` | 收藏文章 |
-| `bookmark remove <id>` | 取消收藏 |
-| `share add <id> [--to <user>] [--comment <c>]` | 分享文章 |
-| `share list [--mine]` | 列出分享 |
-| `share remove <id>` | 取消分享 |
-| `alias set <user> <alias>` | 设置别名 |
-| `alias remove <user>` | 删除别名 |
-| `alias list` | 列出别名 |
+### maintainer -- Co-authorship
+
+| Command | Description |
+|---------|-------------|
+| `maintainer add <id> --target-user <uid>` | Add a co-author |
+| `maintainer remove <id> --target-user <uid>` | Remove a co-author |
+| `maintainer list <id>` | List co-authors |
+| `maintainer consent <id>` | Consent to publish/merge (unanimous required) |
+| `maintainer revoke <id>` | Revoke consent |
+
+### notifications
+
+| Command | Description |
+|---------|-------------|
+| `notifications [--all]` | View notifications (default: unread only) |
+| `notifications read <id>` | Mark a notification as read |
+
+### social -- Social graph
+
+| Command | Description |
+|---------|-------------|
+| `follow <user>` | Follow a user |
+| `unfollow <user>` | Unfollow a user |
+| `following --user <id> [--server <url>]` | View who a user follows |
+| `followers --user <id> [--server <url>]` | View a user's followers |
+| `school [--limit <n>] [--server <url>] [--local]` | Top users by follower count (default: 20) |
+| `bookmark add <id>` | Bookmark an article |
+| `bookmark remove <id>` | Remove a bookmark |
+| `share add <id> [--to <user>] [--comment <c>]` | Share an article |
+| `share list [--mine]` | List shares |
+| `share remove <id>` | Remove a share |
+| `alias set <user> <alias>` | Set a local alias for a user |
+| `alias remove <user>` | Remove an alias |
+| `alias list` | List all aliases |
 
 ### merge / fork
 
-| 命令 | 说明 |
-|------|------|
-| `fork <id>` | Fork 已发表文章 |
-| `merge propose <fork-id> --target <target-id>` | 提合并请求 |
-| `merge accept <proposal-id> --target <id>` | 接受合并 |
-| `merge withdraw <proposal-id>` | 撤回合并请求 |
+| Command | Description |
+|---------|-------------|
+| `fork <id>` | Fork a published article into a new draft |
+| `merge propose <fork-id> --target <target-id>` | Propose a merge from a fork |
+| `merge accept <proposal-id> --target <id>` | Accept a merge proposal |
+| `merge withdraw <proposal-id>` | Withdraw a merge proposal |
 
-### sync — 同步
+### sync -- Peer-to-peer synchronization
 
-| 命令 | 说明 |
-|------|------|
-| `sync status [--server <url>]` | 查看同步状态 |
-| `sync push [--server <url>]` | 推送离线操作 |
-| `sync pull [--server <url>]` | 拉取文章更新 |
+| Command | Description |
+|---------|-------------|
+| `sync status [--server <url>]` | Show synchronization status between local and peer |
+| `sync push [--server <url>]` | Push local offline operations to the peer server |
+| `sync pull [--server <url>]` | Pull article updates from the peer server |
 
-### 其他
+Syncing uses a k-exponential probe protocol to find a common git ancestor, then exchanges incremental git bundles. Clock skew exceeding 30 seconds is hard-blocked. Each sync records a `witnessed_at` timestamp on the server for priority dispute resolution.
 
-| 命令 | 说明 |
-|------|------|
-| `compile <id> [--format pdf\|svg\|png\|html]` | 编译文章 |
-| `server start [--host <h>] [--port <p>]` | 启动 HTTP 服务器 |
+### Others
 
-### 通用选项
+| Command | Description |
+|---------|-------------|
+| `compile <id> [--format pdf\|svg\|png\|html]` | Compile an article to a rendered format |
+| `server start [--host <h>] [--port <p>]` | Start the HTTP peer server |
 
-| 选项 | 说明 |
-|------|------|
-| `--json` | JSON 输出 |
-| `--version` | 显示版本 |
+### General flags
 
-## 评分维度
+| Flag | Description |
+|------|-------------|
+| `--json` | JSON output |
+| `--version` | Show version |
 
-| 维度 | 含义 |
-|------|------|
-| originality（原创性） | 想法有多新颖 |
-| rigor（严谨性） | 论证有多严密 |
-| completeness（完整性） | 工作有多完整 |
-| pedagogy（教学性） | 写得有多清楚 |
-| impact（影响力） | 有多大潜在影响 |
+## Scoring dimensions
 
-## 通知事件
+| Dimension | Meaning |
+|-----------|---------|
+| originality (原创性) | How novel is the idea? |
+| rigor (严谨性) | How sound is the argument? |
+| completeness (完整性) | How thorough is the work? |
+| pedagogy (教学性) | How clearly is it written? |
+| impact (影响力) | How much potential impact? |
 
-评审提交、合并提议、新关注者、文章发布、评审回复——这些事件都会产生本地通知，通过 `peerpedia notifications` 查看。
+## Notification events
 
-## 架构
+All events generate local notifications viewable via `peerpedia notifications`:
+
+| Event | When it fires |
+|-------|---------------|
+| `article_published` | An article you follow or reviewed is published |
+| `review_submitted` | Your article receives a review |
+| `review_reply` | The author replies to your review |
+| `review_invitation` | You are invited to review an article |
+| `merge_proposed` | Someone proposes a merge to your article |
+| `merge_accepted` | Your proposed merge was accepted |
+| `new_follower` | Someone follows you |
+
+## Architecture
 
 ```
-cli/ + repl.py          ← 入口层：解析参数 → 调编排函数 → commit()
-    │
-commands/               ← 编排层：唯一同时接触 git 和 db
-    │
-    ├── storage/        ← git_backend（内容）+ db（元数据），互不知晓
-    ├── workflow/       ← 纯计算：评分、声誉、沉淀逻辑
-    ├── policies/       ← 权限检查
-    ├── bundle/         ← P2P 同步：git bundle 协议
-    ├── transport/      ← HTTP 客户端 + 服务器
-    └── social/         ← 社交图谱交换
+cli/ + repl.py          -- Entry layer: parse args, dispatch, commit()
+    |
+commands/               -- Orchestration: the only layer touching both git and DB
+    |
+    +-- storage/        -- git_backend (content) + db/ (metadata), not aware of each other
+    +-- workflow/       -- Pure compute: scoring, reputation, sedimentation logic
+    +-- policies/       -- Authorization checks (maintainer-only, ownership, etc.)
+    +-- bundle/         -- P2P sync: git bundle protocol (probe, incremental bundles)
+    +-- transport/      -- HTTP client + server (httpx + starlette)
+    +-- social/         -- Social graph exchange (follow/unfollow propagation)
 ```
 
-## 数据目录
+Each layer has a single responsibility. **cli/** handles argument parsing and delegates to `commands/` -- never imports from storage or transport. **commands/** is the orchestration hub: the only layer that touches both git and the database. **storage/db/** is pure SQLAlchemy data access (only directory that may `import sqlalchemy`). **storage/git_backend.py** handles raw git operations (only file that may `import git`). **transport/** is HTTP (httpx + starlette), translating requests into `commands/` calls. **bundle/** implements the git bundle sync protocol (probe, incremental bundles). **workflow/** contains stateless pure functions for scoring and sedimentation -- no I/O. **social/** handles follow propagation, alias resolution, and school ranking. Foundation modules (`config/`, `policies/`, `types/`, `exceptions.py`, `crypto.py`, `frontmatter.py`) must not import from `bundle/`, `social/`, or `transport/`. These import rules are enforced by `tests/test_architecture.py`.
+
+## Data directory
 
 ```
 ~/.peerpedia/
-├── peerpedia.db          ← SQLite（元数据、通知、关系）
-├── session.json          ← 当前会话（私钥，chmod 600）
-├── pending_ops.json      ← 离线操作队列
-└── articles/
-    └── {article_id}/
-        ├── .git/          ← Git 仓库
-        ├── article.md     ← 正文
-        └── reviews/
-            └── {reviewer}/
-                ├── scores.json
-                └── threads/
-                    ├── 001.md
-                    ├── 002.md   ← 作者回复 [reply]
-                    └── ...
++-- peerpedia.db          -- SQLite (metadata, notifications, relationships)
++-- session.json          -- Current session (private key, chmod 600)
++-- pending_ops.json      -- Offline operation queue
++-- articles/
+    +-- {article_id}/
+        +-- .git/          -- Git repository
+        +-- article.md     -- Article body
+        +-- reviews/
+            +-- {reviewer}/
+                +-- scores.json
+                +-- threads/
+                    +-- 001.md
+                    +-- 002.md   -- Author reply
+                    +-- ...
 ```
 
-## 作为 Python 库使用
+## Design principles
+
+1. **Local-first** -- Everything works offline. Git operations and metadata queries never require a network. The peer server is optional, for sync and discovery.
+
+2. **Git-first** -- Content lives in Git repositories. Every change has full version history. Git is the source of truth for article content and review threads.
+
+3. **TOFU auth** -- Trust on first use. When syncing with a peer for the first time, the peer's public key is stored. Subsequent connections verify the same key. No central certificate authority.
+
+4. **Single-mainline** -- Each article has one authoritative `.git` history. Forks create separate repositories; merge proposals are the only way to bring changes back into the mainline.
+
+5. **Hash-based sync** -- Sync finds a common ancestor via k-exponential probe of commit hashes, then exchanges incremental git bundles. No central index, no global state.
+
+6. **Explicit over implicit** -- No auto-discovery of peers, no ambient sharing. All follows, shares, and sync operations are explicit user actions. Notifications are local only; you opt in to every relationship.
+
+## Using as a Python library
 
 ```python
 from peerpedia_core.commands import (
-    create_article_with_content, publish_article, submit_review,
-    submit_reply, create_user_stub, create_notification,
+    create_article_with_content,
+    publish_article,
+    submit_review,
+    submit_reply,
+    invite_reviewer,
+    rate_review_helpfulness,
+    create_user_stub,
+    create_notification,
+    create_merge_proposal,
+    accept_merge,
+    fork_article,
+    follow_user,
+    unfollow_user,
 )
+from peerpedia_core.crypto import derive_keypair, sign_message, verify_signature
+from peerpedia_core.types import UserStub, ArticleRecord, ReviewRecord
+from peerpedia_core.exceptions import NotFoundError, NotAuthorizedError, BadRequestError
 ```
 
-## 开发
+All commands take an SQLAlchemy `Session` as the first parameter, making them testable and embeddable.
+
+## Development
 
 ```bash
 git clone https://github.com/Chenqitrg/peerpedia-core.git
 cd peerpedia-core
 pip install -e ".[dev]"
-pytest tests/ -v
+pytest tests/ -v           # 617 tests
+pytest tests/ -x --lf      # Re-run failures only (fast feedback)
 ```
 
-## 许可证
+Architecture import rules are verified by `tests/test_architecture.py` -- run it before opening a PR.
+
+## License
 
 CC BY-NC-SA 4.0 with Anti-AI Training Addendum. See [LICENSE](LICENSE).
 Copyright (c) 2024-2026 Chenqi Meng and PeerPedia contributors.

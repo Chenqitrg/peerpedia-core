@@ -8,7 +8,7 @@ from unittest.mock import patch
 import pytest
 from sqlalchemy.orm import Session
 
-from peerpedia_core.commands.discover import merge_article_meta, merge_follows, merge_users
+from peerpedia_core.commands.discover import merge_article_meta, merge_followers, merge_follows, merge_users
 from peerpedia_core.exceptions import ProtocolError, TransportError
 from peerpedia_core.storage.db.crud_article import create_article, get_article
 from peerpedia_core.storage.db.crud_user import get_user, is_following
@@ -144,6 +144,71 @@ class TestMergeFollows:
         assert is_following(db, "alice", "carol"), "carol should be added"
 
 
+# ── merge_followers ──────────────────────────────────────────────────────────
+
+
+class TestMergeFollowers:
+    """Mirrors TestMergeFollows for the reverse direction (who follows me)."""
+
+    def test_adds_new_follower(self, db):
+        _make_user(db, "alice", "Alice")
+        _make_user(db, "bob", "Bob")
+        n = merge_followers(db, "bob", [{"id": "alice"}])
+        assert n == 1
+        assert is_following(db, "alice", "bob")
+
+    def test_skips_duplicate(self, db):
+        _make_user(db, "alice", "Alice")
+        _make_user(db, "bob", "Bob")
+        merge_followers(db, "bob", [{"id": "alice"}])
+        n = merge_followers(db, "bob", [{"id": "alice"}])
+        assert n == 0
+
+    def test_raises_on_self_follow(self, db):
+        _make_user(db, "alice", "Alice")
+        with pytest.raises(ValueError, match="self-follow"):
+            merge_followers(db, "alice", [{"id": "alice"}])
+
+    def test_mixed_new_and_existing(self, db):
+        _make_user(db, "alice", "Alice")
+        _make_user(db, "bob", "Bob")
+        _make_user(db, "carol", "Carol")
+        merge_followers(db, "carol", [{"id": "alice"}])
+        n = merge_followers(db, "carol", [{"id": "alice"}, {"id": "bob"}])
+        assert n == 1
+        assert is_following(db, "bob", "carol")
+
+    def test_authoritative_deletes_missing(self, db):
+        """authoritative=True soft-deletes local followers not in remote list."""
+        _make_user(db, "alice", "Alice")
+        _make_user(db, "bob", "Bob")
+        _make_user(db, "carol", "Carol")
+        _make_user(db, "dave", "Dave")
+        # Local: alice, bob, dave all follow carol
+        merge_followers(db, "carol", [{"id": "alice"}, {"id": "bob"}, {"id": "dave"}])
+
+        # Authoritative pull: remote only has alice and bob — dave unfollowed.
+        merge_followers(db, "carol", [{"id": "alice"}, {"id": "bob"}], authoritative=True)
+
+        assert is_following(db, "alice", "carol")
+        assert is_following(db, "bob", "carol")
+        assert not is_following(db, "dave", "carol"), "dave should be soft-deleted"
+
+    def test_non_authoritative_only_adds(self, db):
+        """authoritative=False never deletes local followers."""
+        _make_user(db, "alice", "Alice")
+        _make_user(db, "bob", "Bob")
+        _make_user(db, "carol", "Carol")
+        # Local: alice follows carol
+        merge_followers(db, "carol", [{"id": "alice"}])
+
+        # Non-authoritative pull: remote has bob but NOT alice.
+        merge_followers(db, "carol", [{"id": "bob"}], authoritative=False)
+
+        assert is_following(db, "alice", "carol"), "alice should still be a follower"
+        assert is_following(db, "bob", "carol"), "bob should be added"
+
+
 # ── merge_article_meta ───────────────────────────────────────────────────────
 
 
@@ -224,3 +289,242 @@ class TestDiscoverOrchestration:
                    side_effect=TransportError("timeout")):
             with pytest.raises(ConnectionError, match="Failed to fetch articles"):
                 discover_articles(db, "http://peer:8080", "alice")
+
+
+# ── Peer Backoff ────────────────────────────────────────────────────────────
+
+
+class TestPeerBackoff:
+    """Backoff state management: exponential backoff for dead peers."""
+
+    def test_no_backoff_for_unknown_peer(self):
+        from peerpedia_core.social.discovery import _is_peer_backoff
+        assert not _is_peer_backoff("https://unknown.example.com")
+
+    def test_backoff_after_failure(self):
+        from peerpedia_core.social.discovery import (
+            _is_peer_backoff, _peer_failed, _peer_succeeded,
+        )
+
+        url = "https://fail.example.com"
+        _peer_failed(url)
+        assert _is_peer_backoff(url)
+        _peer_succeeded(url)
+
+    def test_backoff_increments(self):
+        from peerpedia_core.social.discovery import (
+            _is_peer_backoff, _peer_failed, _peer_succeeded,
+        )
+
+        url = "https://multi-fail.example.com"
+        _peer_failed(url)
+        _peer_failed(url)
+        _peer_failed(url)
+        assert _is_peer_backoff(url)
+        _peer_failed(url)
+        _peer_failed(url)
+        assert _is_peer_backoff(url)
+        _peer_succeeded(url)
+
+    def test_success_resets_backoff(self):
+        from peerpedia_core.social.discovery import (
+            _is_peer_backoff, _peer_failed, _peer_succeeded,
+        )
+
+        url = "https://recover.example.com"
+        _peer_failed(url)
+        _peer_failed(url)
+        assert _is_peer_backoff(url)
+        _peer_succeeded(url)
+        assert not _is_peer_backoff(url)
+
+    def test_record_peer_result(self):
+        from peerpedia_core.social.discovery import (
+            _is_peer_backoff, record_peer_result,
+        )
+
+        url = "https://record.example.com"
+        record_peer_result(url, success=False)
+        assert _is_peer_backoff(url)
+        record_peer_result(url, success=True)
+        assert not _is_peer_backoff(url)
+
+    def test_backoff_expired(self):
+        """Backoff expires after the delay window passes."""
+        import time
+        from peerpedia_core.social.discovery import (
+            _is_peer_backoff, _backoff, _peer_succeeded,
+        )
+
+        url = "https://expire.example.com"
+        _backoff[url] = {"fail_count": 1, "last_failed_at": time.time() - 61}
+        assert not _is_peer_backoff(url)
+        _peer_succeeded(url)
+
+    def test_seed_peers_never_skipped(self):
+        """Seed peers are always included even if in backoff."""
+        from peerpedia_core.social.discovery import get_known_peers, _peer_failed, _peer_succeeded
+        from peerpedia_core.config.params import params
+
+        seeds = list(params.discovery.seed_peers)
+        if not seeds:
+            return
+        _peer_failed(seeds[0])
+        peers = get_known_peers()
+        assert seeds[0] in peers
+        _peer_succeeded(seeds[0])
+
+
+# ── discover_network ────────────────────────────────────────────────────────
+
+
+class TestDiscoverNetwork:
+    """BFS network discovery orchestration."""
+
+    def test_empty_following_returns_zero(self, db):
+        """User follows nobody → zero results."""
+        _make_user(db, "alice", "Alice")
+        with patch("peerpedia_core.social.exchange.fetch_following", return_value=[]):
+            from peerpedia_core.social.exchange import discover_network
+            result = discover_network(db, "http://peer:8080", "alice", depth=1)
+            assert result["users_discovered"] == 0
+            assert result["articles_discovered"] == 0
+            assert result["follows_added"] == 0
+
+    def test_depth_1_discovers_follows(self, db):
+        """Single-level BFS finds followed users and their articles."""
+        _make_user(db, "alice", "Alice")
+        following = [{"id": "bob", "name": "Bob"}, {"id": "carol", "name": "Carol"}]
+        with patch("peerpedia_core.social.exchange.fetch_following",
+                   return_value=following):
+            with patch("peerpedia_core.social.exchange.discover_articles",
+                       return_value=1):
+                from peerpedia_core.social.exchange import discover_network
+                result = discover_network(db, "http://peer:8080", "alice", depth=1)
+                assert result["users_discovered"] == 2
+                assert result["follows_added"] == 2
+
+    def test_visited_dedup(self, db):
+        """Cyclic follow graph — dedup by user_id."""
+        _make_user(db, "alice", "Alice")
+        with patch("peerpedia_core.social.exchange.fetch_following",
+                   side_effect=[
+                       [{"id": "bob", "name": "Bob"}],
+                       [{"id": "alice", "name": "Alice"}],
+                   ]):
+            with patch("peerpedia_core.social.exchange.discover_articles",
+                       return_value=1):
+                from peerpedia_core.social.exchange import discover_network
+                result = discover_network(db, "http://peer:8080", "alice", depth=2)
+                assert result["users_discovered"] == 1  # only bob
+
+    def test_max_users_cap(self, db):
+        """max_users=2 stops after 2 users discovered."""
+        _make_user(db, "alice", "Alice")
+        following = [{"id": f"user{i}", "name": f"U{i}"} for i in range(10)]
+        with patch("peerpedia_core.social.exchange.fetch_following",
+                   return_value=following):
+            with patch("peerpedia_core.social.exchange.discover_articles",
+                       return_value=1):
+                from peerpedia_core.social.exchange import discover_network
+                result = discover_network(db, "http://peer:8080", "alice",
+                                          depth=1, max_users=2)
+                assert result["users_discovered"] <= 2
+
+    def test_fetch_failure_skips_user(self, db):
+        """One user's fetch fails → skip that user, continue BFS."""
+        _make_user(db, "alice", "Alice")
+        _make_user(db, "bob", "Bob")
+        with patch("peerpedia_core.social.exchange.fetch_following",
+                   return_value=[{"id": "bob", "name": "Bob"}]):
+            with patch("peerpedia_core.social.exchange.discover_articles",
+                       return_value=0):
+                from peerpedia_core.social.exchange import discover_network
+                result = discover_network(db, "http://peer:8080", "alice", depth=1)
+                assert result["users_discovered"] == 1
+
+    def test_depth_2_multi_level(self, db):
+        """Two-level BFS discovers transitive follows."""
+        _make_user(db, "alice", "Alice")
+        with patch("peerpedia_core.social.exchange.fetch_following",
+                   side_effect=[
+                       [{"id": "bob", "name": "Bob"}, {"id": "carol", "name": "Carol"}],
+                       [{"id": "dave", "name": "Dave"}],
+                       [],
+                   ]):
+            with patch("peerpedia_core.social.exchange.discover_articles",
+                       return_value=1):
+                from peerpedia_core.social.exchange import discover_network
+                result = discover_network(db, "http://peer:8080", "alice", depth=2)
+                assert result["users_discovered"] == 3
+
+    def test_returns_stats_dict(self, db):
+        """Returns well-formed stats dict."""
+        _make_user(db, "alice", "Alice")
+        with patch("peerpedia_core.social.exchange.fetch_following", return_value=[]):
+            from peerpedia_core.social.exchange import discover_network
+            result = discover_network(db, "http://peer:8080", "alice")
+            assert set(result.keys()) == {"users_discovered", "articles_discovered",
+                                          "follows_added", "depth_reached"}
+
+
+# ── _try_fetch_with_fallback ────────────────────────────────────────────────
+
+
+class TestTryFetchWithFallback:
+    """Auth fallback: unauthenticated → Ed25519 on 401/403."""
+
+    def test_returns_data_without_auth(self):
+        """Successful unauthenticated fetch returns data immediately."""
+        expected = [{"id": "u1"}]
+        fetch_fn = lambda s, uid, **kw: expected
+        from peerpedia_core.social.exchange import _try_fetch_with_fallback
+        result = _try_fetch_with_fallback(fetch_fn, "http://s", "u1", "test")
+        assert result == expected
+
+    def test_retries_with_auth_on_401(self):
+        """401 triggers Ed25519 auth retry."""
+        from peerpedia_core.exceptions import TransportError
+
+        call_count = [0]
+
+        def fetch_fn(server, user_id, **kw):
+            call_count[0] += 1
+            if "private_key_bytes" not in kw:
+                raise TransportError("unauthorized", status_code=401)
+            return [{"id": "u1"}]
+
+        from peerpedia_core.social.exchange import _try_fetch_with_fallback
+        result = _try_fetch_with_fallback(
+            fetch_fn, "http://s", "u1", "test",
+            private_key_bytes=b"\x00" * 32,
+            pubkey_hex="00" * 32,
+        )
+        assert result == [{"id": "u1"}]
+        assert call_count[0] == 2
+
+    def test_returns_none_when_both_fail(self):
+        """Both unauthenticated and auth fetch fail → None."""
+        from peerpedia_core.exceptions import TransportError
+
+        def fetch_fn(server, user_id, **kw):
+            raise TransportError("down", status_code=500)
+
+        from peerpedia_core.social.exchange import _try_fetch_with_fallback
+        result = _try_fetch_with_fallback(
+            fetch_fn, "http://s", "u1", "test",
+            private_key_bytes=b"\x00" * 32,
+            pubkey_hex="00" * 32,
+        )
+        assert result is None
+
+    def test_no_auth_kwargs_returns_none_on_failure(self):
+        """No auth kwargs available → returns None after first failure."""
+        from peerpedia_core.exceptions import TransportError
+
+        def fetch_fn(server, user_id, **kw):
+            raise TransportError("unauthorized", status_code=401)
+
+        from peerpedia_core.social.exchange import _try_fetch_with_fallback
+        result = _try_fetch_with_fallback(fetch_fn, "http://s", "u1", "test")
+        assert result is None

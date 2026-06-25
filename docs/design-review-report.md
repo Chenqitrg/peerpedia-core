@@ -1,5 +1,9 @@
 # CLI 设计审查报告
 
+> **Status: HISTORICAL (2026-06-24).** This was a one-time code review snapshot.
+> Some findings have been addressed since (tab completion wired, help handler added,
+> _ok messages in create paths). A new review would be needed for current state.
+
 **日期:** 2026-06-24
 **分支:** main
 **审查范围:** peerpedia-core CLI 工具（命令结构、交互设计、错误处理、帮助文档、REPL 体验）

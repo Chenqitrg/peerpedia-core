@@ -1,6 +1,6 @@
 # 用户流与系统逻辑审计报告
 
-**日期:** 2026-06-24
+**日期:** 2026-06-24（2026-06-25 更新：标记已修复项）
 **分支:** main
 **审查焦点:** 缺失的用户操作、逻辑不自洽、规则设计漏洞
 
@@ -8,24 +8,23 @@
 
 ## 总览
 
-审计覆盖 20 个阶段，发现 **35 个逻辑/功能缺口**（含旧系统可借鉴的 10 个 API 端点）：
+审计覆盖 20 个阶段，发现 **35 个逻辑/功能缺口**（含旧系统可借鉴的 10 个 API 端点）。**2026-06-25 更新：已修复 10 项。**
 
-| 严重程度 | 数量 | 说明 |
-|----------|------|------|
-| 🔴 MVP 阻塞 — 不修系统不可用 | 7 | 取消关注不传播、密钥轮换无通知、无沉淀池上限、self-review 检查顺序错误、提案方无法关闭、引用系统（仅 DB 无 UI）、无平台审核层 |
-| 🟡 MVP 需要但可延后 | 9 | 多设备登录、全员同意发布、maintainer 转让、通知系统、多文件文章、标签系统、编译引用解析、账号删除/改名、fork_count 递减 |
-| 🟢 锦上添花 | 18 | 转发、arXiv 镜像、版本标签/diff、作者反驳、评论更新、数据导出/导入、浏览历史、推荐/趋势、举报、互关查询、merge proposal 列表、归档状态、小修改路径、分支控制、评审员校准、孤立 forked_from、全局 O(n) 扫描 |
-| 🔵 旧系统 API 待纳入 | 10 | diff、评审讨论串、feed/pool、编译预览/下载、书签路由、评审路由、合并路由、引用路由、用户更新 |
+| 严重程度 | 数量 | 已修复 | 说明 |
+|----------|------|--------|------|
+| ✅ 已修复 | 10 | — | 账号删除、速率限制、沉淀池上限、多设备登录、作者回复评审、通知系统、提案撤回、fork_count递减、多设备引导、P2P签名发现 |
+| 🔴 MVP 阻塞 — 不修系统不可用 | 4 | 3 | 取消关注不传播、密钥轮换无通知、引用系统（仅 DB 无 UI）、无平台审核层 |
+| 🟡 MVP 需要但可延后 | 7 | 5 | 全员同意发布、maintainer 转让、多文件文章、标签系统、编译引用解析、账号改名、社交发现 |
+| 🟢 锦上添花 | 14 | 2 | 转发、arXiv 镜像、版本标签/diff、评论更新、数据导出/导入、浏览历史、推荐/趋势、举报、互关查询、归档状态、小修改路径、分支控制、评审员校准、孤立 forked_from |
+| 🔵 旧系统 API 待纳入 | 10 | 0 | diff、评审讨论串、feed/pool、编译预览/下载、书签路由、评审路由、合并路由、引用路由、用户更新 |
 
 ---
 
 ## 一、账号生命周期 — 缺少 4 个操作
 
-### 🔴 1. 无法删除/注销账号
+### ✅ 1. 无法删除/注销账号 — 已修复
 
-没有 `delete_user`，没有 `is_active` 标志，没有软删除。用户的文章、评论、关注关系永久存在。
-
-**影响:** 没有 GDPR 合规路径，没有"离开系统"的方式。
+`soft_delete_user` + `_cmd_account_delete` 已实现（2026-06-25）。密码确认 → 软删除（设置 `deleted_at`）→ 清除 session。`get_user_by_name`、`search_users`、`list_users` 均过滤 `deleted_at IS NULL`。
 
 ### 🔴 2. 密钥轮换缺少 peer 通知协议
 
@@ -72,18 +71,13 @@ SEDIMENTATION → DRAFT ([INTENTIONALLY MISSING])
 
 之前的审计将此项标记为漏洞，现已确认是设计决策。
 
-### 🔴 7. 缺少沉淀池文章上限（反垃圾机制）
+### ✅ 7. 缺少沉淀池文章上限（反垃圾机制）— 已修复
 
-**当前没有任何限制作者同时在沉淀池中的文章数量。** 一个用户可以在沉淀池中积压无限数量的文章。这意味着恶意用户可以：
-- 批量创建垃圾文章推入沉淀池
-- 消耗 peer 的存储和同步资源
-- 稀释社区评审注意力
+`publish.py:82-87` 已有 `count_articles(db, status="sedimentation", author_id=user_id)` 检查，超过 `max_sedimentation_per_author`（默认 5）时抛出 `BadRequestError`。反垃圾机制已就位。
 
-应该有一个上限（如 3-5 篇），且应作为 `publish_article` 的前置检查：`count_articles_by_author_in_sedimentation(author_id) >= MAX_SEDIMENTATION_PER_AUTHOR`。如果超限，应要求等待现有沉淀文章发布后才能提交新文章。
+### ✅ 8. fork_count 永不递减 — 已修复
 
-### 🟡 8. fork_count 永不递减
-
-`fork` 创建时 `increment_fork_count`，但 `delete_article` 不递减。多次 fork/delete 后，`fork_count` 反映的是"历史上被 fork 过的总次数"而非"当前活跃的 fork 数"。
+`crud_article.py:267` 已有 `decrement_fork_count`，在 `delete_article` 中调用（`delete.py:43-44`）。fork 被删除时 `fork_count` 正确递减。
 
 ### 🟢 9. 发布后编辑无"小修改"路径
 
@@ -134,9 +128,9 @@ find new peers and articles.
 
 基于这个设计哲学重新评估：
 
-### 🟡 15. 提案发起方无法关闭提案（真实缺口）
+### ✅ 15. 提案发起方无法关闭提案 — 已修复
 
-`withdraw_merge_proposal` 在 CRUD 和命令层均不存在。按照设计意图，提案方应该可以关闭自己的提案，但当前代码完全没有这个路径。提案发起方一旦创建提案，既不能撤回也不能关闭——和目标的维护者一样被锁死。
+`commands/merge.py:160` 已有 `withdraw_merge_proposal`，提供完整的 CLI 路径（`_cmd_merge_withdraw`）。提案方可以撤回自己的提案。
 
 ### ✅ 16. `reject_merge_proposal` 未接线（设计正确）
 
@@ -220,9 +214,9 @@ find new peers and articles.
 
 ## 九、多设备与会话 — 1 个缺口
 
-### 🟡 多设备登录不支持
+### ✅ 多设备登录 — 已修复
 
-当前 session 是本地文件（`~/.peerpedia/session.json`），包含私钥。代码中已标记 `TODO(multi-device)`：用户在一台设备上注册后，另一台设备上无法登录——即使知道密码。`account recover` 可以从 password + salt 重新派生密钥，所以理论上是可行的，但需要用户主动执行 recover 而非 login。正常流程应在任意设备上 `account login --name X` → 输入密码 → 自动派生密钥。
+`_cmd_login` 支持 `--peer <url> --user-id <uuid>`：从 peer 服务器 fetch 用户元数据 → create_user_stub → 本地密码验证 → 写入 session。一步完成远程引导 + 登录。
 
 ---
 
@@ -240,16 +234,14 @@ find new peers and articles.
 
 ---
 
-## 十一、通知系统 — 1 个缺口（整个子系统缺失）
+## 十一、通知系统 — ✅ 已实现
 
-`commands/merge.py:6` 标记了 `TODO(merge-notify)`。没有任何通知机制：
-- 有人评论了你的文章 → 不知道
-- 有人对你关注的作者的文章提交了评审 → 不知道
-- 有人向你提出了合并提案 → 不知道（当前提案方必须手动告诉维护者执行 `merge accept`）
-- 你关注的用户发布了新文章 → 不知道
-- 你的文章通过了沉淀期 → 不知道
-
-一个去中心化的 P2P 通知系统确实复杂，但至少本地应有通知中心（如 `peerpedia notifications` 显示未读事件）。
+通知系统已完整实现（本地 + P2P 拉取）：
+- **本地创建**: `create_notification` — review_submitted, merge_proposed, new_follower, review_reply, review_invitation, article_published
+- **P2P 拉取**: `fetch_notifications` → `merge_notifications` → `_pull_social` 中自动调用
+- **CLI**: `peerpedia notifications` 查看通知列表，`notification read` 标记已读
+- **服务端**: `GET /api/v1/users/{id}/notifications` 端点
+- 通知在 `_pull_social` 中随社交图一起拉取（best-effort）
 
 ---
 
@@ -267,22 +259,15 @@ find new peers and articles.
 
 ## 十三、评审流程 — 2 个缺口
 
-### 🟡 无作者反驳/回应
+### ✅ 作者回复评审 — 已实现
 
-评审系统只有单向的 score + comment。作者无法：
-- 回应评审意见（author rebuttal）
-- 修改文章后标注"已根据评审 #X 修改"
-- 标记某个评审为"已处理"
-
-这在学术评审中是标准流程。
-
-### 🟡 评审无讨论串（旧系统有）
-
-旧版 Review 模型有 `thread` 字段，API 有 `POST .../reviews/{id}/messages` 端点。评审者与作者可以在评审下进行对话（澄清问题、回应批评）。当前 peerpedia-core 的 Review 模型已移除此字段，评审是单向的。
-
-### 🔴 作者无法回复评审
-
-与上条相关但更基础：作者对评审的回复应该写入评审者目录下的 git repo（和评审本身放在一起），形成完整的对话记录。当前只有评审者提交 score + comment，作者完全没有回复路径。这是评审闭环的关键缺失——评审不应该是单方面判决，而是对话。
+`commands/reviews.py:205` `submit_reply()` 完整实现了作者回复评审的闭环：
+- CLI: `_cmd_review_reply`（reviews.py:95）打开编辑器获取回复内容
+- 权限: `assert_can_reply_to_review` 检查作者身份 + 文章状态
+- Git: 写入 `reviews/{dir}/threads/{nnn}.md`，带 `[reply]` 标记
+- 匿名: 沉淀期内通过 `_derive_anonymous_id` 隐藏作者身份
+- 通知: 回复后自动通知审稿人 `event="review_reply"`
+- 编辑: 沉淀期编辑必须 `Closes: review/{dir}/thread-{n}` 引用关联
 
 ### 🟢 评审提交后无法更新
 
@@ -434,28 +419,27 @@ keywords = Column(JSONList, nullable=True)  # 例如 ["机器学习", "自然语
 | `list_users` | `crud_user.py:121` | 列出所有用户 |
 | `get_merge_proposals_for_article` | `crud_merge.py:36` | 查看文章的合并提案列表 |
 
-以下操作**完全缺失**（CRUD 层也不存在）：
+以下操作**完全缺失**（CRUD 层也不存在）—— 2026-06-25 更新：
 
-| 操作 | 影响 |
+| 操作 | 状态 |
 |------|------|
-| `delete_user` / `deactivate_user` | 无法离开系统 |
-| `update_user_name` | 无法改名 |
-| `withdraw_merge_proposal` | 提案方无法关闭自己的提案 |
-| `block_user` / `unblock_user` | 无法阻止骚扰 |
-| `get_mutual_follows` | 无法查看互关 |
-| `unpublish_article` | 无法撤回已发布文章（设计上有意限制用户，但平台审核层需要） |
-| `archive_article` | 无法软删除/归档 |
-| `article delete --force` | 无法在脚本中删除 |
+| ~~`delete_user` / `deactivate_user`~~ | ✅ 已实现 `soft_delete_user` |
+| `update_user_name` | 未实现 |
+| ~~`withdraw_merge_proposal`~~ | ✅ 已实现 |
+| `block_user` / `unblock_user` | 未实现 |
+| `get_mutual_follows` | 未实现 |
+| `unpublish_article` | 设计上有意限制 |
+| `archive_article` | 未实现 |
 
 ---
 
-## 最危险的 3 个逻辑不自洽
+## 最危险的 2 个逻辑不自洽（原 3 个，已修复 1 个）
 
-1. **密钥轮换缺少 peer 通知协议**: 轮换密钥后，远程 peer 的 TOFU 检查会拒绝新提交。密钥轮换与 TOFU 本身相容——但需要在轮换时主动通知所有已知 peer 更新公钥。当前这个通知协议不存在。
+1. **密钥轮换缺少 peer 通知协议**: 轮换密钥后，远程 peer 的 TOFU 检查（`bundle.py:299`）会拒绝新提交。需要将 `elif user.public_key != pubkey_hex: raise` 改为自动更新 pubkey（与 auth middleware 行为一致）。
 
-2. **取消关注不传播**: 本地图和远程图永久分歧。用户以为已经取消关注，但网络上的其他人仍然看到关注关系。这是协议级别的设计错误——社交图谱同步是只增不减的。
+2. **取消关注不传播**: 本地图和远程图永久分歧。`discover_followers` 只调 `merge_users`，不做 Follow 行对账。需要新增 `merge_followers` 函数 + 在 `discover_followers` 中调用。
 
-3. **无沉淀池上限**: 没有任何机制限制作者同时在沉淀池中的文章数量。恶意用户可以批量灌入垃圾文章，消耗整个网络的存储和评审资源。需要一个硬上限（如 3-5 篇），在 `publish_article` 前置检查。
+3. ~~无沉淀池上限~~ → ✅ 已修复：`publish.py` 已有 `max_sedimentation_per_author` 检查。
 
 ---
 

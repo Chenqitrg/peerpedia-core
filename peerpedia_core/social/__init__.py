@@ -11,6 +11,7 @@ from peerpedia_core.social.exchange import (
     discover_articles,
     discover_followers,
     discover_following,
+    discover_network,
     discover_notifications,
     discover_shares,
 )
@@ -19,6 +20,7 @@ __all__ = [
     "discover_following",
     "discover_followers",
     "discover_articles",
+    "discover_network",
     "discover_notifications",
     "discover_shares",
 ]

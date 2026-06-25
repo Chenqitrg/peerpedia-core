@@ -126,6 +126,7 @@ from peerpedia_core.commands.views import (
 from peerpedia_core.commands.discover import (
     merge_article_meta,
     merge_bookmarks,
+    merge_followers,
     merge_follows,
     merge_notifications,
     merge_script_maintainers,
@@ -254,6 +255,7 @@ __all__ = [
     "list_maintainers",
     "merge_article_meta",
     "merge_bookmarks",
+    "merge_followers",
     "merge_follows",
     "merge_script_maintainers",
     "merge_shares",

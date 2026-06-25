@@ -1,5 +1,11 @@
 # Layer Audit — local/network separation
 
+> **Status: PROPOSED REFACTORING — NEVER IMPLEMENTED (2026-06-25).**
+> This document describes a planned directory restructuring (sync/ → server/ split)
+> that was never executed. The actual codebase uses `bundle/` for protocol and
+> `transport/` for HTTP, not the `sync/` and `server/` directories proposed here.
+> This document is kept for historical reference only.
+
 ## Principle
 
 **Local operations must work offline.** `peerpedia article create` must not

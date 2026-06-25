@@ -64,7 +64,15 @@ def get_user_by_name(db: Session, name: str) -> list:
 
 def update_user_public_key(db: Session, user_id: str, pubkey_hex: str):
     """Set the public key for a user."""
-    # TODO(social-recovery): see docs/social-recovery-design.md
+    # TODO(social-recovery): Implement key recovery via trusted contacts.
+    # When a user loses their private key (new device, lost password), they
+    # need a way to prove identity without the old key.  Approach:
+    #   1. User designates N "recovery contacts" (N ≥ 3) from their follows.
+    #   2. Recovery contacts store encrypted shards of the user's salt.
+    #   3. On recovery, user contacts M-of-N contacts to reassemble the salt.
+    #   4. Then re-derives key from password + reassembled salt.
+    # Files: commands/users.py, cli/handlers/account.py, storage/db/models.py
+    # Design: docs/social-recovery-design.md
     return _update_pubkey(db, user_id, pubkey_hex)
 
 

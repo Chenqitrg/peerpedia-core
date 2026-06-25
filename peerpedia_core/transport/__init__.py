@@ -19,6 +19,7 @@ from peerpedia_core.transport.http_client import (
     fetch_head,
     fetch_notifications,
     fetch_peers,
+    push_peer_registration,
     fetch_school,
     fetch_search,
     fetch_shares,

@@ -65,6 +65,42 @@ from peerpedia_core.config.params import PLATFORM_EMAIL
 from peerpedia_core.config.paths import ARTICLES_DIR as DEFAULT_ARTICLES_DIR
 from peerpedia_core.types.status import VALID_ARTICLE_STATUSES
 
+_EXPECTED_BRANCH = "refs/heads/main"
+
+
+def _assert_on_main(repo: git.Repo) -> None:
+    """Raise RuntimeError if HEAD is not on refs/heads/main.
+
+    Article repos use a single-mainline model — all git operations
+    expect HEAD to point to ``refs/heads/main``.  This guard prevents
+    silent data corruption when a checkout or branch switch moves
+    HEAD to a different ref.
+
+    Returns early (no-op) for empty repos with no commits.
+    """
+    if not repo.head.is_valid():
+        return  # empty repo, no commits yet
+    if repo.head.is_detached:
+        raise RuntimeError(
+            "HEAD is detached — expected refs/heads/main; "
+            "article repos use a single-mainline model"
+        )
+    branch_path = repo.head.reference.path
+    if branch_path != _EXPECTED_BRANCH:
+        raise RuntimeError(
+            f"HEAD is on {branch_path}, expected {_EXPECTED_BRANCH} — "
+            "article repos use a single-mainline model"
+        )
+
+
+def assert_repo_on_main(repo_path: Path) -> None:
+    """Open the repo at *repo_path* and assert HEAD is on refs/heads/main.
+
+    Path-based convenience wrapper for callers that don't already have
+    a ``git.Repo`` object.
+    """
+    _assert_on_main(git.Repo(repo_path))
+
 
 def init_article_repo(repo_path: Path) -> Path:
     """Initialize a new git repository for an article.
@@ -79,10 +115,11 @@ def init_article_repo(repo_path: Path) -> Path:
     TODO(branch-protection): article repos use a single-mainline model —
     collaboration is via fork + merge proposal, not branches.  Sync protocol
     operates on commit hashes (no branch refs).  ``merge_git_repos`` pins to
-    ``refs/heads/main`` on the fork remote.  No git hook needed.
+    ``refs/heads/main`` on the fork remote.  Branch protection is enforced by
+    ``_assert_on_main`` at every git operation entry point.
     """
     repo_path.mkdir(parents=True, exist_ok=True)
-    repo = git.Repo.init(repo_path)
+    repo = git.Repo.init(repo_path, initial_branch="main")
     (repo_path / "reviews").mkdir(exist_ok=True)
     (repo_path / ".gitignore").write_text(make_article_gitignore())
     if not repo.head.is_valid():
@@ -134,6 +171,7 @@ def commit_article(
     import os
 
     repo = git.Repo(repo_path)
+    _assert_on_main(repo)
     repo.git.add(A=True)
 
     # Fail fast: refuse to create an empty commit unless explicitly allowed.
@@ -264,6 +302,7 @@ def get_commit_history(
     commit before asking for history.
     """
     repo = git.Repo(repo_path)
+    _assert_on_main(repo)
     if not repo.head.is_valid():
         raise ValueError(f"Repo has no commits: {repo_path}")
 
@@ -315,6 +354,7 @@ def get_commit_authors(
     system git config.
     """
     repo = git.Repo(repo_path)
+    _assert_on_main(repo)
     rev = f"{since_hash}..HEAD" if since_hash else None
     return {
         c.author.email.split("@", 1)[0]
@@ -398,6 +438,7 @@ def merge_git_repos(target: Path, fork: Path, author_name: str) -> str:
     import os
 
     target_repo = git.Repo(target)
+    _assert_on_main(target_repo)
 
     remote_name = f"fork-{fork.name}"
     try:
@@ -493,6 +534,7 @@ def get_head_hash(repo_path: Path) -> str:
     Raises ValueError if the repo has no commits.
     """
     repo = git.Repo(repo_path)
+    _assert_on_main(repo)
     if not repo.head.is_valid():
         raise ValueError(f"Repo has no commits: {repo_path}")
     return repo.head.commit.hexsha
@@ -505,6 +547,7 @@ def merge_fetch_head(repo_path: Path, *, ff_only: bool = True) -> str:
     when *ff_only* is True).
     """
     repo = git.Repo(repo_path)
+    _assert_on_main(repo)
     merge_args = ["FETCH_HEAD", "--ff-only"] if ff_only else ["FETCH_HEAD"]
     try:
         repo.git.merge(*merge_args)

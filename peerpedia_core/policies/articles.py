@@ -17,8 +17,15 @@ Moderation model (reputation-weighted, no roles):
     get_reviewer_weight() — no special admin override.
   - Articles with score < fold_score_threshold are frozen (no reviews,
     edits, forks, or publishing).  See also assert_not_folded() below.
-  - Discovery path: share/forward to high-reputation users (TODO).
-    No separate report table — forwarding is the signal.
+  - Discovery path: share/forward to high-reputation users.
+    TODO(forward-routing): When a user shares an article, also forward it to
+    the top-K highest-reputation users in their follow graph.  This creates
+    a gravity well — quality content naturally flows toward high-rep nodes.
+    Implementation: add ``_forward_to_top_reputation()`` in social/exchange.py
+    that queries get_top_users_by_followers, then calls push_share for each.
+    Gate on ``params.discovery.enable_forward_routing`` (default False) until
+    the network effect is proven.  No separate report table — forwarding IS
+    the moderation signal.
 
 Permission matrix
 -----------------

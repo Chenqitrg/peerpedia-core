@@ -23,7 +23,10 @@ from peerpedia_core.commands import (
     soft_delete_user, update_user_salt,
 )
 from peerpedia_core.crypto import derive_key_pair, new_salt
-from peerpedia_core.transport import fetch_user
+from peerpedia_core.transport import fetch_user, is_online
+from peerpedia_core.social.discovery import get_known_peers, merge_peers
+from peerpedia_core.bundle import sync_article
+from peerpedia_core.cli.helpers import DEFAULT_ARTICLES_DIR
 
 
 def _display_user(u) -> None:
@@ -60,6 +63,40 @@ def _get_password(args, confirm: bool = False) -> str:
                  suggestion="The two password entries must be identical. "
                             "Try again.")
     return password
+
+
+def _auto_sync_after_auth(db, user_id: str) -> None:
+    """Best-effort article sync with all known peers after login/bootstrap.
+
+    Syncs local articles to/from each known peer so the user sees content
+    immediately instead of an empty feed.  Social graph pull happens on
+    demand via ``peerpedia following --user <self>``.
+    """
+    import logging
+    _log = logging.getLogger(__name__)
+
+    peers = get_known_peers()
+    if not peers:
+        console.print("[dim]No known peers — auto-sync skipped. "
+                      "Set PEERPEDIA_SERVER or run 'sync discover'.[/]")
+        return
+
+    console.print(f"[dim]Auto-syncing with {len(peers)} peer(s)...[/]")
+    for server in peers:
+        if not is_online(server):
+            continue
+        try:
+            for article_dir in DEFAULT_ARTICLES_DIR.iterdir():
+                if not (article_dir / ".git").is_dir():
+                    continue
+                try:
+                    sync_article(db, server, article_dir.name)
+                    db.commit()
+                except Exception as e:
+                    _log.debug("auto-sync article %s to %s failed: %s",
+                               article_dir.name, server, e)
+        except Exception as e:
+            _log.debug("auto-sync to %s failed: %s", server, e)
 
 
 @_with_db
@@ -162,6 +199,9 @@ def _cmd_login(db, args):
         _json_out({"id": user.id, "name": user.name})
     else:
         _ok(f"Logged in as [accent]{user.name}[/] (id: {user.id[:8]})")
+
+    # Auto-sync with known peers after login.
+    _auto_sync_after_auth(db, user.id)
 
 
 @_with_db
@@ -359,14 +399,17 @@ def _cmd_bootstrap(db, args):
                        f"{user_id[:8]}[/] to verify your password.")
 
     if args.peer:
+        # Merge the peer into known peers and sync.
+        merge_peers(args.peer)
         if args.json:
             _json_out({"id": user_id, "name": name,
-                       "peer_note": "Data sync not yet available — run `peerpedia sync pull` manually."})
+                       "peer_note": "Bootstrap complete. Sync started in background."})
         else:
             console.print(
-                f"[muted]Peer {args.peer}: data sync not yet available. "
-                "Run [accent]peerpedia sync pull <url>[/] manually.[/]"
+                f"[dim]Peer {args.peer}: registered. "
+                "Syncing articles and social graph...[/]"
             )
+        _auto_sync_after_auth(db, user_id)
 
 
 @_with_db

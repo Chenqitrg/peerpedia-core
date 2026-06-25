@@ -724,3 +724,20 @@ class TestPolicyErrorPaths:
         a = Article(id="test", title="T", status="draft")
         with pytest.raises(BadRequestError, match="Article must have a score"):
             assert_article_has_score(a)
+
+    def test_assert_valid_review_normalizes_abbreviation_keys(self):
+        """assert_valid_review should normalize abbreviation keys to full names."""
+        from peerpedia_core.commands.reviews import assert_valid_review
+        scores = {"orig": 4, "rigor": 3, "comp": 4, "ped": 3, "imp": 3}
+        assert_valid_review(scores, comment="A" * 200)
+        assert "originality" in scores
+        assert scores["originality"] == 4
+        assert "orig" not in scores
+
+    def test_assert_valid_review_normalize_idempotent(self):
+        """Normalization should be idempotent — full-name keys pass through."""
+        from peerpedia_core.commands.reviews import assert_valid_review
+        scores = {"originality": 4, "rigor": 3, "completeness": 4, "pedagogy": 3, "impact": 3}
+        assert_valid_review(scores, comment="A" * 200)
+        assert scores["originality"] == 4
+        assert "orig" not in scores

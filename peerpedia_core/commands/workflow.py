@@ -109,7 +109,7 @@ def publish_ready_articles(db: Session) -> int:
         # Count approvals: each reviewer's latest score avg ≥ threshold
         approval_count = 0
         for r in community_reviews:
-            if r.scores and isinstance(r.scores, dict):
+            if r.status == "submitted" and isinstance(r.scores, dict):
                 vals = [v for v in r.scores.values() if isinstance(v, (int, float))]
                 if vals and sum(vals) / len(vals) >= params.sink.approval_score_threshold:
                     approval_count += 1
@@ -180,6 +180,8 @@ def recompute_article_score(db: Session, article_id: str) -> dict | None:
     review_dicts = []
     reviewer_weights: dict[str, float] = {}
     for r in all_reviews:
+        if not r.scores or r.status != "submitted":
+            continue  # no scores or not yet submitted — skip
         review_dicts.append({
             "scores": r.scores,
             "is_self": r.reviewer_id in authors,
@@ -237,8 +239,10 @@ def extract_state(db: Session, user_id: str) -> ReputationState:
                 scores=r.scores,
                 is_self=r.reviewer_id in authors,
                 scope=r.scope,
+                status=r.status,
             )
             for r in all_reviews
+            if r.status == "submitted"
         )
 
     # Gather user snapshots (author + reviewer reputations for weighting).

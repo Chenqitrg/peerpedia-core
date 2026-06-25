@@ -19,12 +19,12 @@ from peerpedia_core.types.scores import SCORE_DIMENSIONS
 # ── Rich console with theme ──────────────────────────────────────────────
 
 theme = Theme({
-    "success": "bold green",
-    "error": "bold red",
-    "warning": "bold yellow",
-    "info": "bold blue",
-    "accent": "bold cyan",
-    "muted": "dim",
+    "success": "#777C5C bold",    # olive
+    "error": "#B84040 bold",      # brick red
+    "warning": "#D4893C bold",    # amber
+    "info": "#A85F3B bold",       # primary terracotta
+    "accent": "#B08A57 bold",     # gold-brown
+    "muted": "#6F665E dim",       # warm gray
 })
 console = Console(theme=theme)
 

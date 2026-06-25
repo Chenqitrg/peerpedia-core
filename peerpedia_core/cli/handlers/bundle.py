@@ -91,7 +91,13 @@ def _cmd_sync_pull(db, args):
     server = _require_online_server(args)
 
     # Discover new articles from the server.
-    server_articles = fetch_search(server)
+    user_id = _get_session_user()
+    key = _get_session_key()
+    pubkey = _get_session_pubkey()
+    server_articles = fetch_search(
+        server, user_id,
+        private_key_bytes=key, pubkey_hex=pubkey,
+    )
     if server_articles:
         local_ids = set(get_all_article_ids(db))
         for entry in server_articles:

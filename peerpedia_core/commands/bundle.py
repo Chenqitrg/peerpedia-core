@@ -72,6 +72,10 @@ from peerpedia_core.commands.articles import rebuild_article_authors
 from peerpedia_core.commands.workflow import publish_ready_articles, recompute_article_score
 
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 _PLATFORM_EMAIL = PLATFORM_EMAIL
 _VALID_STATUSES = set(VALID_ARTICLE_STATUSES)
 

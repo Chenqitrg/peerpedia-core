@@ -85,7 +85,7 @@ from peerpedia_core.commands.maintainers import (
     revoke_publish_consent,
 )
 from peerpedia_core.commands.merge import accept_merge, create_merge_proposal, withdraw_merge_proposal
-from peerpedia_core.commands.reviews import get_reviews_for_article, invite_reviewer, rate_review_helpfulness, submit_reply, submit_review
+from peerpedia_core.commands.reviews import accept_invitation, decline_invitation, get_reviews_for_article, invite_reviewer, rate_review_helpfulness, submit_reply, submit_review
 from peerpedia_core.commands.shares import (
     add_share, get_feed_shares, get_shares_for_user, remove_share,
 )

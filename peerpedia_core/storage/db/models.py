@@ -125,6 +125,7 @@ class Review(Base):
     commit_hash = Column(String, nullable=False)
     reviewer_id = Column(String, ForeignKey("users.id"), nullable=False)
     scope = Column(String, nullable=False)  # "sedimentation" | "published" — matches article.status
+    status = Column(String, nullable=False, default="submitted", server_default="'submitted'")  # "invited" | "accepted" | "declined" | "submitted"
     scores = Column(JSONDict, nullable=False)  # FiveDimScores as dict
     invited_by = Column(String, nullable=True)  # user_id of inviter (P0-3.5)
     invited_at = Column(DateTime, nullable=True)  # when invitation was sent

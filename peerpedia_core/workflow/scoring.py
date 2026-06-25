@@ -46,9 +46,19 @@ def aggregate_review_scores(
 
     When *scope_weights* is given, each review's contribution is additionally
     multiplied by ``scope_weights.get(review.scope, 1.0)``.
+
+    Raises ValueError if any review has empty or invalid scores.
     """
     if not reviews:
         return None
+
+    # Guard: every review in the input list MUST have valid non-empty scores.
+    # Fail FAST and LOUD — silently skipping malformed input hides bugs.
+    for r in reviews:
+        if not r.get("scores") or not isinstance(r["scores"], dict):
+            raise ValueError(
+                "aggregate_review_scores received review with empty or invalid scores"
+            )
 
     self_reviews = [r for r in reviews if r.get("is_self")]
     community_reviews = [r for r in reviews if not r.get("is_self")]

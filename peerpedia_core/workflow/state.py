@@ -96,6 +96,7 @@ class ReviewSnapshot:
     scores: dict  # FiveDimScores as dict
     is_self: bool
     scope: str  # "sedimentation" | "published"
+    status: str  # "invited" | "accepted" | "declined" | "submitted"
 
 
 @dataclass(frozen=True)

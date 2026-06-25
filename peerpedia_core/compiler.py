@@ -187,7 +187,21 @@ def compile_article(source_path: Path, fmt: str | None = None) -> CompileResult:
     *fmt*: output format (pdf, svg, png, html).  Defaults to pdf for Typst,
     html for Markdown.
     """
-    detected = fmt or detect_format(source_path)
+    actual_format = detect_format(source_path)
+
+    # Markdown backend only supports HTML output.  Validate upfront so the
+    # user gets a clear error instead of silent HTML output.
+    if actual_format == "markdown" and fmt and fmt != "html":
+        return CompileResult(
+            success=False,
+            format=fmt,
+            error=(
+                f"Markdown articles only support HTML output "
+                f"(requested: {fmt}). Use Typst for PDF/SVG/PNG."
+            ),
+        )
+
+    detected = fmt or actual_format
     out_dir = source_path.parent / "compiled"
     out_dir.mkdir(exist_ok=True)
 

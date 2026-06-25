@@ -325,3 +325,25 @@ class TestCompileArticle:
 
             assert result.success is False
             assert "not found" in result.error.lower()
+
+    def test_compile_markdown_rejects_non_html_format(self):
+        """--format pdf on a Markdown article should error, not silently produce HTML."""
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "paper.md"
+            src.write_text("# Hello\n\nWorld.\n")
+
+            result = compile_article(src, fmt="pdf")
+
+            assert result.success is False
+            assert "only support html" in result.error.lower()
+            assert result.format == "pdf"
+
+    def test_compile_markdown_accepts_html_format(self):
+        """--format html on a Markdown article should succeed."""
+        with tempfile.TemporaryDirectory() as tmp:
+            src = Path(tmp) / "paper.md"
+            src.write_text("# Hello\n\nWorld.\n")
+
+            result = compile_article(src, fmt="html")
+
+            assert result.success is True

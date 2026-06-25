@@ -57,13 +57,20 @@ from pathlib import Path
 from peerpedia_core.storage.db import Session
 
 from peerpedia_core.config.params import make_peerpedia_email, params
-from peerpedia_core.exceptions import BadRequestError, ConflictError, NotFoundError
+from peerpedia_core.exceptions import BadRequestError, ConflictError, NotFoundError, NotAuthorizedError
 from peerpedia_core.policies.articles import (
     assert_can_reply_to_review, assert_can_submit_review, assert_not_folded,
 )
 from peerpedia_core.storage.db.crud_article import get_author_ids
 from peerpedia_core.storage.db.crud_maintainer import get_maintainer_ids
-from peerpedia_core.storage.db.crud_review import get_reviews_for_article as _get, upsert_review
+from peerpedia_core.storage.db.models import Review
+from peerpedia_core.storage.db.crud_review import (
+    get_reviews_for_article as _get,
+    get_accepted_invitation,
+    get_pending_invitation,
+    update_review_status,
+    upsert_review,
+)
 from peerpedia_core.names import derive_anonymous_name
 from peerpedia_core.crypto import temp_signing_key
 from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, commit_article
@@ -110,6 +117,13 @@ def submit_review(
     author_ids = get_author_ids(db, article_id)
 
     if article.status == "sedimentation":
+        # Sedimentation reviews REQUIRE an accepted invitation.
+        accepted_inv = get_accepted_invitation(db, article_id, reviewer_id)
+        if accepted_inv is None:
+            raise NotAuthorizedError(
+                "Must accept a review invitation before submitting a review "
+                "during sedimentation"
+            )
         anon_id = _derive_anonymous_id(article_id, signing_key=signing_key_bytes)
         display_name = derive_anonymous_name(anon_id)
         email = make_peerpedia_email(f"anon-{anon_id}")
@@ -117,18 +131,24 @@ def submit_review(
             article_id, anon_id, scores, comment, display_name, email,
             signing_key_bytes=signing_key_bytes, pubkey_hex=pubkey_hex,
         )
+        # Update the accepted row in-place — state transition, not cache upsert.
+        update_review_status(db, accepted_inv, "submitted")
+        accepted_inv.scores = scores
+        accepted_inv.commit_hash = commit_hash
+        db.flush()
+        r = accepted_inv
     else:
+        # Published articles: open reviews, no invitation needed.
         display_name = user.name
         email = make_peerpedia_email(reviewer_id)
         commit_hash = write_review_to_git(
             article_id, reviewer_id, scores, comment, display_name, email,
             signing_key_bytes=signing_key_bytes, pubkey_hex=pubkey_hex,
         )
-
-    r = upsert_review(
-        db, article_id=article_id, commit_hash=commit_hash,
-        reviewer_id=reviewer_id, scores=scores,
-    )
+        r = upsert_review(
+            db, article_id=article_id, commit_hash=commit_hash,
+            reviewer_id=reviewer_id, scores=scores,
+        )
 
     recompute_article_score(db, article_id)
 
@@ -156,17 +176,21 @@ def invite_reviewer(
     """Invite a user to review an article during sedimentation.
 
     Only a maintainer of the article can send invitations.  The invitation
-    is recorded as a pending Review row so publish_ready_articles can track it.
+    is recorded as a Review row with ``status='invited'``.
 
     Raises NotFoundError if the article or invited user is not found.
-    Raises BadRequestError if the article is not in sedimentation.
+    Raises BadRequestError if the article is not in sedimentation or inviter == invited.
     Raises NotAuthorizedError if the inviter is not a maintainer.
-    Raises ConflictError if the user has already been invited.
+    Raises ConflictError if the user has a pending/accepted invitation, or
+        has already submitted a review and the author has not yet replied.
     """
-    from datetime import datetime, timezone
     article = require_article(db, article_id)
     if article.status != "sedimentation":
         raise BadRequestError("Can only invite reviewers to articles in sedimentation")
+
+    # Self-invite: authors review their own articles via publish, not invite.
+    if inviter_id == invited_id:
+        raise BadRequestError("Cannot invite yourself to review")
 
     mids = get_maintainer_ids(db, article_id)
     if inviter_id not in mids:
@@ -174,18 +198,31 @@ def invite_reviewer(
 
     invited_user = require_user(db, invited_id)
 
-    # Check for duplicate invitation
-    existing = _get(db, article_id)
-    for r in existing:
-        if r.reviewer_id == invited_id and r.invited_by is not None:
-            raise ConflictError("User has already been invited to review this article")
+    # Guard: no pending or accepted invitation may already exist.
+    pending = get_pending_invitation(db, article_id, invited_id)
+    if pending is not None:
+        raise ConflictError("User already has a pending invitation for this article")
+    accepted = get_accepted_invitation(db, article_id, invited_id)
+    if accepted is not None:
+        raise ConflictError("User has already accepted an invitation for this article")
 
-    # Create a pending invitation row
+    # Guard: if the reviewer already submitted a review, require author reply
+    # before re-invitation.
+    for r in _get(db, article_id):
+        if r.reviewer_id == invited_id and r.status == "submitted":
+            if not _author_has_replied(article_id):
+                raise ConflictError(
+                    "Reviewer has already submitted a review. "
+                    "Author must reply to the review before re-inviting."
+                )
+
+    # Create a pending invitation row.
     inv = Review(
         article_id=article_id,
         commit_hash="pending",
         reviewer_id=invited_id,
         scope="sedimentation",
+        status="invited",
         scores={},
         invited_by=inviter_id,
         invited_at=datetime.now(timezone.utc),
@@ -200,6 +237,85 @@ def invite_reviewer(
     )
 
     return {"invitation_id": inv.id, "article_id": article_id, "reviewer_id": invited_id}
+
+
+def _author_has_replied(article_id: str) -> bool:
+    """Check if any review directory for *article_id* has author replies.
+
+    A reply exists when a review thread has more than one message file
+    (the first is the review, subsequent ones are replies).
+    """
+    rp = require_article_repo(article_id)
+    reviews_dir = rp / "reviews"
+    if not reviews_dir.is_dir():
+        return False
+    for reviewer_dir in reviews_dir.iterdir():
+        if not reviewer_dir.is_dir():
+            continue
+        threads_dir = reviewer_dir / "threads"
+        if threads_dir.is_dir():
+            md_files = sorted(threads_dir.glob("*.md"))
+            if len(md_files) > 1:
+                return True
+    return False
+
+
+def accept_invitation(
+    db: Session,
+    article_id: str,
+    reviewer_id: str,
+) -> dict:
+    """Accept a pending review invitation.
+
+    Transitions the Review row from ``status='invited'`` to ``status='accepted'``.
+
+    Raises NotFoundError if no pending invitation exists.
+    Raises BadRequestError if the invitation was already declined.
+    """
+    inv = get_pending_invitation(db, article_id, reviewer_id)
+    if inv is None:
+        declined = (
+            db.query(Review)
+            .filter(
+                Review.article_id == article_id,
+                Review.reviewer_id == reviewer_id,
+                Review.status == "declined",
+            )
+            .first()
+        )
+        if declined is not None:
+            raise BadRequestError("Cannot accept a declined invitation")
+        raise NotFoundError("No pending invitation found for this article")
+
+    update_review_status(db, inv, "accepted")
+    db.flush()
+
+    return {"invitation_id": inv.id, "article_id": article_id, "status": "accepted"}
+
+
+def decline_invitation(
+    db: Session,
+    article_id: str,
+    reviewer_id: str,
+) -> dict:
+    """Decline a pending review invitation.
+
+    Transitions the Review row from ``status='invited'`` to ``status='declined'``.
+
+    Raises NotFoundError if no pending invitation exists.
+    Raises BadRequestError if the invitation was already accepted.
+    """
+    inv = get_pending_invitation(db, article_id, reviewer_id)
+    if inv is None:
+        acc = get_accepted_invitation(db, article_id, reviewer_id)
+        if acc is not None:
+            raise BadRequestError("Cannot decline an already accepted invitation")
+        raise NotFoundError("No pending invitation found for this article")
+
+    update_review_status(db, inv, "declined")
+    db.flush()
+
+    return {"invitation_id": inv.id, "article_id": article_id, "status": "declined"}
 
 
 def submit_reply(
@@ -307,6 +423,14 @@ def assert_valid_review(scores: dict, comment: str | None = None, *, check_comme
             raise BadRequestError(
                 f"score dimension '{dim}' must be a number between 1 and 5, got {val!r}"
             )
+
+    # Normalize abbreviation keys to full names for downstream consistency.
+    # aggregate_review_scores accesses only full-name keys (DIMS =
+    # SCORE_DIMENSIONS.values()).  accept both but store full names.
+    _dim_map = dict(SCORE_DIMENSIONS)
+    for abbr, full in _dim_map.items():
+        if abbr in scores and full not in scores:
+            scores[full] = scores.pop(abbr)
 
 
 def _write_thread_message(

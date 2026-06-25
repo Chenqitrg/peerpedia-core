@@ -5,20 +5,32 @@
 
 from __future__ import annotations
 
-from peerpedia_core.cli.helpers import _find_article_file, _page, _open_file, _ok, _die
+from peerpedia_core.cli.helpers import _find_article_file, _page, _open_file, _ok, _die, _json_out, _with_db, _resolve_article_id
 from peerpedia_core.cli.display import console
 from peerpedia_core.compiler import compile_article
 
 
-def _cmd_compile(args):
+@_with_db
+def _cmd_compile(db, args):
     """Compile an article to PDF/SVG/PNG/HTML.
 
     args: id [positional], --format [pdf|svg|png|html], --json
     """
-    source = _find_article_file(args.id)
+    article = _resolve_article_id(db, args.id)
+    source = _find_article_file(article.id)
 
     with console.status(f"[info]Compiling...[/]", spinner="dots"):
         result = compile_article(source, args.format)
+
+    if getattr(args, "json", False):
+        _json_out({
+            "success": result.success,
+            "output_path": str(result.output_path) if result.output_path else None,
+            "format": result.format,
+            "error": result.error,
+            "html_content": result.html_content[:200] if result.html_content else None,
+        })
+        return
 
     if result.success:
         if result.output_path:

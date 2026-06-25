@@ -84,6 +84,7 @@ def upsert_review(
         commit_hash=commit_hash,
         reviewer_id=reviewer_id,
         scope=article.status,
+        status="submitted",
         scores=scores,
     )
     session.add(r)
@@ -102,6 +103,54 @@ def get_reviews_for_article(
         .order_by(Review.created_at.desc())
         .all()
     )
+
+
+def get_pending_invitation(
+    session: Session,
+    article_id: str,
+    reviewer_id: str,
+) -> Review | None:
+    """Return the pending invitation for (article, reviewer), or None."""
+    return (
+        session.query(Review)
+        .filter(
+            Review.article_id == article_id,
+            Review.reviewer_id == reviewer_id,
+            Review.status == "invited",
+        )
+        .first()
+    )
+
+
+def get_accepted_invitation(
+    session: Session,
+    article_id: str,
+    reviewer_id: str,
+) -> Review | None:
+    """Return the accepted invitation for (article, reviewer), or None."""
+    return (
+        session.query(Review)
+        .filter(
+            Review.article_id == article_id,
+            Review.reviewer_id == reviewer_id,
+            Review.status == "accepted",
+        )
+        .first()
+    )
+
+
+def update_review_status(
+    session: Session,
+    review: Review,
+    status: str,
+) -> None:
+    """Update the status of a Review row and flush.
+
+    Used by accept_invitation, decline_invitation, and submit_review
+    to transition reviews through the invitation lifecycle state machine.
+    """
+    review.status = status
+    session.flush()
 
 
 def get_review(

@@ -37,7 +37,7 @@ from peerpedia_core.cli.handlers import (
     _cmd_schema,
     _cmd_school,
     _cmd_meta_help,
-    _cmd_review_invite, _cmd_review_list, _cmd_review_rate, _cmd_review_reply, _cmd_review_submit,
+    _cmd_review_accept, _cmd_review_decline, _cmd_review_invite, _cmd_review_list, _cmd_review_rate, _cmd_review_reply, _cmd_review_submit,
     _cmd_server_start,
     _cmd_sync_discover, _cmd_sync_pull, _cmd_sync_push, _cmd_sync_status,
     _cmd_whoami,
@@ -178,6 +178,12 @@ COMMAND_GROUPS = [
         ("invite", _cmd_review_invite, [
             (("article_id",), {"metavar": "ref", "help": "Article UUID, prefix, or title keyword"}),
             (("--user",), {"required": True, "help": "User to invite (@name, UUID, or prefix)"}),
+        ]),
+        ("accept", _cmd_review_accept, [
+            (("article_id",), {"metavar": "ref", "help": "Article UUID, prefix, or title keyword"}),
+        ]),
+        ("decline", _cmd_review_decline, [
+            (("article_id",), {"metavar": "ref", "help": "Article UUID, prefix, or title keyword"}),
         ]),
         ("rate", _cmd_review_rate, [
             (("article_id",), {"metavar": "ref", "help": "Article UUID, prefix, or title keyword"}),

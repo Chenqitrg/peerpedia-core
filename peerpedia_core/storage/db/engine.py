@@ -136,6 +136,7 @@ def migrate_db(engine: Engine) -> None:
         "  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP"
         ")",
         "CREATE INDEX IF NOT EXISTS ix_notifications_user_id ON notifications(user_id)",
+        "ALTER TABLE reviews ADD COLUMN status VARCHAR NOT NULL DEFAULT 'submitted'",
     ]
     with engine.connect() as conn:
         for sql in _migrations:

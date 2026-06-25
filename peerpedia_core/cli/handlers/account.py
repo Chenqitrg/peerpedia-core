@@ -10,6 +10,13 @@ fetching user metadata from a peer, then verifies the password locally.
 from __future__ import annotations
 
 import getpass
+import sys
+import warnings
+
+# Suppress GetPassWarning on macOS + non-TTY.  _get_password() guards
+# against non-TTY with an explicit isatty() check; this filter catches
+# any remaining edge paths where getpass might be called indirectly.
+warnings.filterwarnings("ignore", category=getpass.GetPassWarning)
 
 from peerpedia_core.cli.helpers import (
     _with_db, _read_session, _write_session, _ok, _die, _json_out,
@@ -51,6 +58,11 @@ def _get_password(args, confirm: bool = False) -> str:
     pw = _os.environ.get("PEERPEDIA_PASSWORD")
     if pw is not None:
         return pw
+    if not sys.stdin.isatty():
+        _die(
+            "No TTY available for password input.",
+            suggestion="Use --password '<pwd>' or set PEERPEDIA_PASSWORD env variable.",
+        )
     password = getpass.getpass("Password: ")
     if not password:
         _die("Password must not be empty.",
@@ -105,6 +117,13 @@ def _cmd_register(db, args):
 
     args: --name, --password (optional), --json
     """
+    existing = _read_session()
+    if existing:
+        console.print(
+            f"[warning]⚠ Already logged in as [accent]{existing.get('name', '?')}[/] "
+            f"(id: {existing.get('user_id', '?')[:8]}). "
+            "Registering will switch to the new user.[/]"
+        )
 
     password = _get_password(args, confirm=True)
 

@@ -22,10 +22,8 @@ import sys
 from peerpedia_core.cli.parser import build_parser
 from peerpedia_core.config.paths import DB_PATH, DB_URL
 from peerpedia_core.cli.display import console
-from peerpedia_core.commands import db_session, list_users, publish_ready_articles
-from peerpedia_core.repl import run
-
-
+from peerpedia_core.commands import db_session, count_articles, get_user, list_users, publish_ready_articles
+from peerpedia_core.cli.helpers import _read_session
 def _count_users() -> int:
     """Return the number of users in the local DB.  Returns 0 on fresh install."""
     try:
@@ -34,6 +32,40 @@ def _count_users() -> int:
             return len(list_users(session))
     except OSError:
         return 0
+
+
+def _show_dashboard() -> None:
+    """Show a compact status dashboard for returning users."""
+    session = _read_session()
+    console.print()
+    console.print("  [accent]PeerPedia[/] — peer review from the terminal.")
+    console.print()
+
+    if session:
+        user_id = session.get("user_id", "")
+        user_name = session.get("name", "?")
+        console.print(f"  Currently: [accent]{user_name}[/] ({user_id[:8] if user_id else '?'})")
+
+        try:
+            with db_session(DB_URL) as db:
+                drafts = count_articles(db, status="draft", author_id=user_id)
+                in_review = count_articles(db, status="sedimentation", author_id=user_id)
+                published = count_articles(db, status="published", author_id=user_id)
+                console.print(f"    Drafts:      {drafts}")
+                console.print(f"    In review:   {in_review}")
+                console.print(f"    Published:   {published}")
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).debug("dashboard stats failed: %s", e)
+    else:
+        console.print("  [dim]Not logged in.[/]")
+
+    console.print()
+    console.print("  Get started:")
+    console.print("    [accent]peerpedia article create --title \"My Paper\"[/]")
+    console.print("    [accent]peerpedia article list[/]")
+    console.print("    [accent]peerpedia ?Mother[/]                   ← full guide")
+    console.print()
 
 
 def _show_welcome() -> None:
@@ -60,12 +92,10 @@ def main():
     with db_session(DB_URL) as session:
         publish_ready_articles(session)
 
-    # If no arguments, enter REPL or show welcome on fresh install
+    # If no arguments, enter the REPL (it has its own startup banner).
     if len(sys.argv) == 1:
-        if _count_users() == 0:
-            _show_welcome()
-        else:
-            run()
+        from peerpedia_core.repl import run
+        run()
         return
 
     parser = build_parser()
@@ -75,6 +105,12 @@ def main():
     except ImportError:
         pass
     args = parser.parse_args()
+    # Default to JSON output for AI consumption; --rich enables human-readable.
+    if hasattr(args, "rich"):
+        if args.rich:
+            args.json = False  # --rich takes precedence
+        else:
+            args.json = True   # default: JSON for AI
     if hasattr(args, "func"):
         args.func(args)
     else:

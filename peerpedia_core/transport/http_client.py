@@ -244,24 +244,24 @@ def fetch_article_source(server: str, article_id: str) -> tuple[str, str] | None
 
 
 def fetch_search(
-    server: str, q: str | None = None, status: str | None = None,
-    limit: int = 20, offset: int = 0,
+    server: str, user_id: str = "", q: str | None = None, status: str | None = None,
+    limit: int = 20, offset: int = 0, *,
+    private_key_bytes: bytes | None = None, pubkey_hex: str = "",
 ) -> list[dict] | None:
-    """GET /api/v1/search?q=&status=&limit=&offset= → article list."""
-    try:
-        resp = _get_client().get(
-            f"{server}/api/v1/search",
-            params={"q": q, "status": status, "limit": limit, "offset": offset},
-        )
-    except httpx.HTTPError as e:
-        raise TransportError(f"fetch_search failed at {server}: {e}") from e
+    """GET /api/v1/search?q=&status=&limit=&offset= → article list.
 
-    if resp.status_code == 200:
-        try:
-            return resp.json()
-        except json.JSONDecodeError as e:
-            raise ProtocolError(f"Malformed JSON from {server}/search") from e
-    raise ProtocolError(f"fetch_search: unexpected status {resp.status_code} from {server}")
+    When *private_key_bytes* is provided, signs the request with Ed25519.
+    Without auth, the server returns 401 — callers should pass session
+    credentials when available.
+    """
+    params: dict[str, str | int | None] = {
+        "q": q, "status": status, "limit": limit, "offset": offset,
+    }
+    return _signed_get(
+        server, "/api/v1/search", user_id,
+        private_key_bytes=private_key_bytes, pubkey_hex=pubkey_hex,
+        label="fetch_search", params=params,
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

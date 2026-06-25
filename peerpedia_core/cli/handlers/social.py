@@ -132,7 +132,8 @@ def _cmd_fork(db, args):
 
     args: article_id [positional], --json
     """
-    result = fork_article(db, args.article_id, _get_session_user())
+    article = _resolve_article_id(db, args.article_id)
+    result = fork_article(db, article.id, _get_session_user())
     db.commit()
     _try_sync(db)
     if args.json:
@@ -147,12 +148,13 @@ def _cmd_merge_propose(db, args):
 
     args: fork_id [positional], --target, --json
     """
-    mp = create_merge_proposal(db, args.fork_id, args.target, _get_session_user())
+    target = _resolve_article_id(db, args.target)
+    mp = create_merge_proposal(db, args.fork_id, target.id, _get_session_user())
     db.commit()
     if args.json:
         _json_out({"id": mp.id, "status": mp.status})
     else:
-        _ok(f"Merge proposed [accent]{mp.id[:8]}[/] → target {args.target[:8]}")
+        _ok(f"Merge proposed [accent]{mp.id[:8]}[/] → target {target.id[:8]}")
 
 
 @_with_db
@@ -193,7 +195,8 @@ def _cmd_bookmark_add(db, args):
     args: article_id [positional], --json
     """
     user_id = _get_session_user()
-    article_id = args.article_id
+    article = _resolve_article_id(db, args.article_id)
+    article_id = article.id
     add_bookmark(db, user_id, article_id)
     db.commit()
 
@@ -228,13 +231,14 @@ def _cmd_bookmark_remove(db, args):
 
     args: article_id [positional], --json
     """
-    remove_bookmark(db, _get_session_user(), args.article_id)
+    article = _resolve_article_id(db, args.article_id)
+    remove_bookmark(db, _get_session_user(), article.id)
     db.commit()
     _try_sync(db)
     if args.json:
         _json_out({"removed": True})
     else:
-        _ok(f"Removed bookmark for [accent]{args.article_id[:8]}[/]")
+        _ok(f"Removed bookmark for [accent]{article.id[:8]}[/]")
 
 
 @_with_db
@@ -280,14 +284,15 @@ def _cmd_following(db, args):
 
     args: --user, --server, --local, --json
     """
+    user_id = _resolve_user(db, args.user)
     if not args.local:
         server = _resolve_server_url(args)
-        discover_following(db, server, args.user)
+        discover_following(db, server, user_id)
         db.commit()
     if args.json:
-        _json_out(get_following_views(db, args.user))
+        _json_out(get_following_views(db, user_id))
     else:
-        users = get_following(db, args.user)
+        users = get_following(db, user_id)
         _ok(f"Following {len(users)} user(s)")
 
 
@@ -297,14 +302,15 @@ def _cmd_followers(db, args):
 
     args: --user, --server, --local, --json
     """
+    user_id = _resolve_user(db, args.user)
     if not args.local:
         server = _resolve_server_url(args)
-        discover_followers(db, server, args.user)
+        discover_followers(db, server, user_id)
         db.commit()
     if args.json:
-        _json_out(get_follower_views(db, args.user))
+        _json_out(get_follower_views(db, user_id))
     else:
-        users = get_followers(db, args.user)
+        users = get_followers(db, user_id)
         _ok(f"Followers {len(users)} user(s)")
 
 

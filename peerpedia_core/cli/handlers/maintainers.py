@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from peerpedia_core.cli.helpers import _with_db, _get_session_user, _ok, _json_out, _output_result
+from peerpedia_core.cli.helpers import _with_db, _get_session_user, _ok, _json_out, _output_result, _resolve_article_id, _require_resolved_article
 from peerpedia_core.cli.display import _print_table, console
 from peerpedia_core.commands import (
     add_maintainer_to_article,
@@ -22,11 +22,12 @@ def _cmd_maintainer_add(db, args):
 
     args: article_id [positional], --target-user, --json
     """
+    article, article_id = _require_resolved_article(db, args.article_id)
     caller_id = _get_session_user()
-    result = add_maintainer_to_article(db, args.article_id, args.target_user, caller_id)
+    result = add_maintainer_to_article(db, article_id, args.target_user, caller_id)
     db.commit()
     _output_result(args, result,
-                   f"Maintainer [accent]{args.target_user[:8]}[/] added to article [accent]{args.article_id[:8]}[/]")
+                   f"Maintainer [accent]{args.target_user[:8]}[/] added to article [accent]{article_id[:8]}[/]")
 
 
 @_with_db
@@ -35,11 +36,12 @@ def _cmd_maintainer_remove(db, args):
 
     args: article_id [positional], --target-user, --json
     """
+    article, article_id = _require_resolved_article(db, args.article_id)
     caller_id = _get_session_user()
-    result = remove_maintainer_from_article(db, args.article_id, args.target_user, caller_id)
+    result = remove_maintainer_from_article(db, article_id, args.target_user, caller_id)
     db.commit()
     _output_result(args, result,
-                   f"Maintainer [accent]{args.target_user[:8]}[/] removed from article [accent]{args.article_id[:8]}[/]")
+                   f"Maintainer [accent]{args.target_user[:8]}[/] removed from article [accent]{article_id[:8]}[/]")
 
 
 @_with_db
@@ -48,9 +50,10 @@ def _cmd_maintainer_list(db, args):
 
     args: article_id [positional], --json
     """
-    ids = list_maintainers(db, args.article_id)
+    article = _resolve_article_id(db, args.article_id)
+    ids = list_maintainers(db, article.id)
     if args.json:
-        _json_out({"article_id": args.article_id, "maintainers": ids})
+        _json_out({"article_id": article.id, "maintainers": ids})
         return
     if not ids:
         console.print("[muted]No maintainers.[/]")
@@ -65,11 +68,12 @@ def _cmd_maintainer_consent(db, args):
 
     args: article_id [positional], --json
     """
+    article, article_id = _require_resolved_article(db, args.article_id)
     user_id = _get_session_user()
-    result = consent_to_publish(db, args.article_id, user_id)
+    result = consent_to_publish(db, article_id, user_id)
     db.commit()
     _output_result(args, result,
-                   f"Consent recorded for article [accent]{args.article_id[:8]}[/]")
+                   f"Consent recorded for article [accent]{article_id[:8]}[/]")
 
 
 @_with_db
@@ -78,8 +82,9 @@ def _cmd_maintainer_revoke(db, args):
 
     args: article_id [positional], --json
     """
+    article, article_id = _require_resolved_article(db, args.article_id)
     user_id = _get_session_user()
-    result = revoke_publish_consent(db, args.article_id, user_id)
+    result = revoke_publish_consent(db, article_id, user_id)
     db.commit()
     _output_result(args, result,
-                   f"Consent revoked for article [accent]{args.article_id[:8]}[/]")
+                   f"Consent revoked for article [accent]{article_id[:8]}[/]")

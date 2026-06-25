@@ -5,10 +5,14 @@
 
 from __future__ import annotations
 
-from peerpedia_core.policies.articles import PUBLIC_READABLE_STATUSES
+from datetime import timedelta
+
+from peerpedia_core.config.params import params
+from peerpedia_core.policies.articles import visible_statuses_for_user
 
 from peerpedia_core.cli.helpers import (
-    _with_db, _get_session_user, _get_session_key, _resolve_and_display_article, _resolve_article_id,
+    _with_db, _get_session_user, _get_session_key, _resolve_and_display_article,
+    _resolve_article_id, _resolve_user,
     _find_article_file, _open_editor,
     _prompt_commit_message, _parse_scores, _page, _ok, _die, _json_out,
     _empty_state, _require_resolved_article,
@@ -22,7 +26,7 @@ from peerpedia_core.social import discover_articles
 from peerpedia_core.transport import is_online
 from peerpedia_core.commands import (
     assert_article_integrity, create_article_with_content,
-    diff_article, get_article, get_article_view, get_author_ids_batch,
+    diff_article, get_article, get_article_view, get_author_ids_batch, get_user,
     list_article_views, list_articles, publish_article,
     publish_ready_articles, delete_article, update_article_content,
 )
@@ -46,6 +50,10 @@ def _cmd_article_create(db, args):
     user = require_user(db, user_id)
     content = args.content or ""
     if not content and not args.no_editor:
+        import sys
+        if not sys.stdout.isatty():
+            _die("No --content provided and no terminal for editor.",
+                 suggestion="Use --content '<text>' or --no-editor to create an empty article.")
         content = _open_editor("")
     result = create_article_with_content(
         db, title=args.title, content=content, format=args.format,
@@ -67,6 +75,14 @@ def _cmd_article_create(db, args):
     else:
         article = get_article(db, result["id"])
         _resolve_and_display_article(db, article)
+        console.print(
+            f"[dim]Created [accent]{result['id'][:8]}[/] \"{result['title']}\" (draft)[/]"
+        )
+        if not args.publish:
+            console.print(
+                f"[dim]Next: [accent]peerpedia article publish {result['id'][:8]}[/] "
+                "--scores \"orig=4,rigor=3,comp=4,ped=3,imp=4\"[/]"
+            )
 
 
 @_with_db
@@ -76,10 +92,10 @@ def _cmd_article_show(db, args):
     args: id [positional], --show [full|meta|content], --json
 
     """
-    assert_article_integrity(db, args.id)
     article = _resolve_article_id(db, args.id)
+    assert_article_integrity(db, article.id)
     if args.json:
-        _json_out(get_article_view(db, args.id))
+        _json_out(get_article_view(db, article.id))
         return
 
     show_mode = getattr(args, "show", "meta")
@@ -96,11 +112,16 @@ def _cmd_article_list(db, args):
 
     args: --search, --status, --feed, --mine, --bookmarked, --user, --server, --json
     """
+    # Resolve --user ref early — both server and local listing need full UUID.
+    resolved_user_id = None
+    if args.user:
+        resolved_user_id = _resolve_user(db, args.user)
+
     # Remote fetch: pull article metadata or bookmarks from a peer.
     if args.server:
         server = _resolve_server_url(args)
-        if args.user:
-            n = discover_articles(db, server, args.user)
+        if resolved_user_id:
+            n = discover_articles(db, server, resolved_user_id)
             db.commit()
             if n > 0:
                 console.print(f"[dim]Discovered {n} new article(s) from {server}[/]")
@@ -113,10 +134,10 @@ def _cmd_article_list(db, args):
         viewer_id = me
     if args.mine:
         author_id = me
-    if args.user:
-        author_id = args.user
+    if resolved_user_id:
+        author_id = resolved_user_id
     if args.bookmarked:
-        bookmarked_by = args.user or me
+        bookmarked_by = resolved_user_id or me
 
     # Default: only publicly readable articles.  Drafts require --mine.
     if args.mine:
@@ -129,7 +150,12 @@ def _cmd_article_list(db, args):
                  see_also=["article list --mine"])
         status = args.status
     else:
-        status = PUBLIC_READABLE_STATUSES
+        user_obj = get_user(db, me) if me else None
+        status = visible_statuses_for_user(user_obj)
+
+    # Feed view must not leak drafts from followed authors.
+    if args.feed and not args.mine:
+        status = status - {"draft"}
 
     if args.json:
         _json_out(list_article_views(
@@ -149,7 +175,15 @@ def _cmd_article_list(db, args):
         limit=20,
     )
     if not articles:
-        _empty_state("No articles.")
+        if args.feed:
+            console.print("[muted]Your feed is empty — you're not following anyone yet.[/]")
+            console.print("\n  [accent]peerpedia school[/]              ← discover users")
+            console.print("  [accent]peerpedia follow @username[/]   ← follow someone")
+        elif args.mine:
+            console.print("[muted]No articles yet.[/]")
+            console.print(f"\n  [accent]peerpedia article create --title \"My Paper\"[/]")
+        else:
+            _empty_state("No articles.")
         return
     author_map = get_author_ids_batch(db, [a.id for a in articles])
     for a in articles:
@@ -229,9 +263,19 @@ def _cmd_article_publish(db, args):
     if args.json:
         _json_out(result)
     else:
-        _ok(f"Published [accent]{article_id[:8]}[/] to sedimentation pool")
         article = get_article(db, article_id)
+        sink_end = ""
+        if article.sink_start:
+            end_date = article.sink_start + timedelta(days=params.sink.new_article_default_days)
+            sink_end = end_date.strftime("%Y-%m-%d")
+        _ok(f"Published [accent]{article_id[:8]}[/] to sedimentation pool")
+        if sink_end:
+            console.print(f"[dim]Review window: auto-publishes after {sink_end}.[/]")
         _resolve_and_display_article(db, article)
+        console.print(
+            f"[dim]Next: [accent]peerpedia share add {article_id[:8]}[/] "
+            f"  [accent]peerpedia review invite {article_id[:8]} --user <id>[/][/]"
+        )
 
 
 @_with_db
@@ -241,9 +285,14 @@ def _cmd_article_delete(db, args):
     args: id [positional], --json
     """
     user_id = _get_session_user()
-    article = _resolve_article_id(db, args.id)
+    article, article_id = _require_resolved_article(db, args.id)
 
-    console.print(f"[warning]Delete [bold]{article.title}[/] (id: {article.id[:8]})?[/]")
+    if args.json:
+        delete_article(db, article_id, user_id=user_id)
+        _json_out({"id": article_id, "deleted": True})
+        return
+
+    console.print(f"[warning]Delete [bold]{article.title}[/] (id: {article_id[:8]})?[/]")
     try:
         answer = input("  [y/N] ").strip().lower()
     except (EOFError, KeyboardInterrupt):
@@ -252,8 +301,8 @@ def _cmd_article_delete(db, args):
     if answer not in ("y", "yes"):
         console.print("[muted]Cancelled.[/]")
         return
-    delete_article(db, article.id, user_id=user_id)
-    _ok(f"Deleted [accent]{article.id[:8]}[/]")
+    delete_article(db, article_id, user_id=user_id)
+    _ok(f"Deleted [accent]{article_id[:8]}[/]")
 
 
 @_with_db

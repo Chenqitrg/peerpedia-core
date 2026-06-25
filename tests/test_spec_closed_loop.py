@@ -13,6 +13,14 @@ from pathlib import Path
 
 import pytest
 
+
+@pytest.fixture(autouse=True)
+def _auto_patch_isatty(monkeypatch):
+    """Patch sys.stdin.isatty() → True so editor/password TTY guards pass in CI."""
+    import sys as _sys
+    monkeypatch.setattr(_sys.stdin, "isatty", lambda: True)
+
+
 # ── Helpers ──────────────────────────────────────────────────────────────
 
 def _setup():
@@ -109,6 +117,12 @@ def _call_handler(handler, capsys, **kwargs):
     return (captured.out + captured.err).lower()
 
 
+def _patch_isatty(monkeypatch):
+    """Make sys.stdin.isatty() return True so editor/password guards pass in tests."""
+    import sys
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+
+
 def _set_editor(monkeypatch, content: str = "test-commit"):
     """Set EDITOR to a script that writes *content* to the temp file.
 
@@ -185,6 +199,14 @@ class TestSpecReviewCycle:
 
         rid, rname, rpriv, *_ = _register("NotifReviewer")
         _session(rid, rname, rpriv)
+        # Author invites reviewer
+        _session(aid, aname, apriv)
+        from peerpedia_core.cli.handlers.reviews import _cmd_review_invite, _cmd_review_accept
+        _call_json(_cmd_review_invite, capsys, article_id=art["id"], user=rid)
+        # Reviewer accepts invitation
+        _session(rid, rname, rpriv)
+        _call_json(_cmd_review_accept, capsys, article_id=art["id"])
+        # Reviewer submits review
         _call_json(_cmd_review_submit, capsys, article_id=art["id"],
             scores="originality=4,rigor=4,completeness=4,pedagogy=4,impact=4",
             comment="This paper presents a novel and rigorous approach to the problem. "
@@ -459,8 +481,14 @@ class TestSpecReviewReply:
         _call_json(_cmd_article_publish, capsys, id=art["id"],
             scores="originality=3,rigor=3,completeness=3,pedagogy=3,impact=3")
 
-        # Reviewer submits review
+        # Author invites reviewer
+        _session(author_id, author_name, author_priv)
+        from peerpedia_core.cli.handlers.reviews import _cmd_review_invite, _cmd_review_accept
+        _call_json(_cmd_review_invite, capsys, article_id=art["id"], user=reviewer_id)
+        # Reviewer accepts invitation
         _session(reviewer_id, reviewer_name, reviewer_priv)
+        _call_json(_cmd_review_accept, capsys, article_id=art["id"])
+        # Reviewer submits review
         _call_json(_cmd_review_submit, capsys, article_id=art["id"],
             scores="originality=4,rigor=4,completeness=4,pedagogy=4,impact=4",
             comment="This paper presents a well-argued and carefully researched contribution. "

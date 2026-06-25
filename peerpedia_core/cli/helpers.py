@@ -200,8 +200,22 @@ def _resolve_and_display_article(db, article, *, author_ids: list[str] | None = 
 
     If *author_ids* is passed, it is used directly (allows batch preloading
     in list handlers).  Otherwise ``get_author_ids`` queries the DB.
+
+    Skips articles without a local source file (discovered stubs) rather
+    than crashing — the user sees title/status only.
     """
-    raw = _find_article_file(article.id, db=db).read_text()
+    try:
+        raw = _find_article_file(article.id, db=db).read_text()
+    except SystemExit:
+        # Article stub without local source — display metadata only.
+        _render_article(
+            title=article.title,
+            status=article.status,
+            authors=author_ids if author_ids is not None else [],
+            score=article.score,
+            abstract=article.abstract,
+        )
+        return
     fm = parse_frontmatter(raw)
     _render_article(
         title=fm.get("title", article.title),
@@ -363,6 +377,11 @@ def _prompt_commit_message(diff: str = "") -> str:
     user can review what changed before writing the message.
     Empty messages are rejected.
     """
+    if not sys.stdin.isatty():
+        _die(
+            "No TTY available for commit message editor.",
+            suggestion="Use --message '<text>' to provide a commit message non-interactively.",
+        )
     header = (
         "\n# Please enter a commit message for your changes.\n"
         "# Lines starting with '#' will be ignored.\n"
@@ -392,6 +411,11 @@ def _open_editor(initial: str) -> str:
       export EDITOR=nano    # add to ~/.zshrc or ~/.bashrc
       EDITOR=code peerpedia article create --title "Hello"  # one-off
     """
+    if not sys.stdin.isatty():
+        _die(
+            "No TTY available for editor.",
+            suggestion="Use --content '<text>' or pipe input to provide content non-interactively.",
+        )
     editor = os.environ.get("EDITOR", "vim")
     with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
         f.write(initial)

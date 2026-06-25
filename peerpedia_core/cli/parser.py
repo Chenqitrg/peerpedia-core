@@ -69,9 +69,11 @@ COMMAND_GROUPS = [
     ("account", "Account management", [
         ("register", _cmd_register, [
             (("--name",), {"required": True, "help": "Your display name"}),
+            (("--password",), {"help": "Password (omit for interactive prompt; or set PEERPEDIA_PASSWORD env var)"}),
         ]),
         ("login", _cmd_login, [
             (("--name",), {"required": True, "help": "Your display name"}),
+            (("--password",), {"help": "Password (omit for interactive prompt; or set PEERPEDIA_PASSWORD env var)"}),
         ]),
         ("recover", _cmd_recover, [
             (("--name",), {"help": "Your display name"}),
@@ -135,7 +137,7 @@ COMMAND_GROUPS = [
             (("hash2",), {"help": "New commit (hash, HEAD, or ~N)"}),
         ]),
     ]),
-    ("review", "Submit and list peer reviews", [
+    ("review", "Submit, invite, rate, and list peer reviews", [
         ("submit", _cmd_review_submit, [
             (("article_id",), {"help": "Article ID (or prefix)"}),
             (("--scores",), {"required": True,
@@ -314,10 +316,25 @@ def build_parser() -> argparse.ArgumentParser:
     _top_level_names = [t[0] for t in TOP_LEVEL]
     _group_lines.append(f"\n  Direct:  {', '.join(_top_level_names)}")
 
+    _examples = (
+        "\n\nExamples:\n"
+        "  peerpedia account register --name Alice\n"
+        "  peerpedia article create --title \"My Paper\" --content \"# Intro\\n\\n...\"\n"
+        "  peerpedia article publish <id> --scores \"orig=4,rigor=3,comp=4,ped=3,imp=4\"\n"
+        "  peerpedia review submit <id> --scores \"orig=4,rigor=3,comp=4,ped=3,imp=4\" --comment \"Well-structured argument...\"\n"
+        "  peerpedia review invite <id> --user @bob\n"
+        "  peerpedia review rate <id> --reviewer @bob --helpfulness 4\n"
+        "  peerpedia article scan           # trigger auto-publish check\n"
+        "  peerpedia diff <id> HEAD ~1      # see last change\n"
+        "  peerpedia sync push --server https://peer.example.com\n"
+        "\nUse --json on any command for machine-readable output."
+    )
+
     epilog = (
         "Command groups:\n"
         + "\n".join(_group_lines)
         + "\n\nRun 'peerpedia <group> --help' for subcommand details."
+        + _examples
     )
 
     parser = argparse.ArgumentParser(

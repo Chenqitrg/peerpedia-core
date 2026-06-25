@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from peerpedia_core.cli.helpers import (
-    _with_db, _get_session_user, _get_session_key, _resolve_and_display_article,
+    _with_db, _get_session_user, _get_session_key, _resolve_and_display_article, _resolve_article_id,
     _find_article_file, _open_editor,
     _prompt_commit_message, _parse_scores, _page, _ok, _die, _json_out,
 )
@@ -70,9 +70,7 @@ def _cmd_article_show(db, args):
 
     """
     assert_article_integrity(db, args.id)
-    article = get_article(db, args.id)
-    if not article:
-        _die(f"Article [accent]{args.id}[/] not found")
+    article = _resolve_article_id(db, args.id)
     if args.json:
         _json_out(get_article_view(db, args.id))
         return

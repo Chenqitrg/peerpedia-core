@@ -96,6 +96,26 @@ def _die(msg: str) -> None:
     sys.exit(1)
 
 
+def _resolve_article_id(db, article_ref: str):
+    """Resolve an article ID from prefix or fuzzy title match.
+
+    Returns the Article object or calls _die with suggestions.
+    """
+    article = get_article(db, article_ref)
+    if article is not None:
+        return article
+
+    # Try prefix match (starts with)
+    candidates = list_articles(db, search_query=article_ref, limit=5)
+    if len(candidates) == 1:
+        return candidates[0]
+    if len(candidates) > 1:
+        names = ", ".join(f"{a.id[:8]} ({a.title})" for a in candidates)
+        _die(f"Multiple matches for '{article_ref}': {names}")
+
+    _die(f"Article '{article_ref}' not found. Try a title keyword or article ID prefix.")
+
+
 def _json_out(data: dict | list) -> None:
     """Machine-readable output, used when --json is passed."""
     print(json.dumps(data, indent=2, default=str))

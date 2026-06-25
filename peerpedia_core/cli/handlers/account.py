@@ -33,19 +33,35 @@ def _display_user(u) -> None:
     )
 
 
+import os as _os
+
+
+def _get_password(args, confirm: bool = False) -> str:
+    """Get password from --password flag, env var, or interactive prompt."""
+    pw = getattr(args, "password", None)
+    if pw is not None:
+        return pw
+    pw = _os.environ.get("PEERPEDIA_PASSWORD")
+    if pw is not None:
+        return pw
+    password = getpass.getpass("Password: ")
+    if not password:
+        _die("Password must not be empty.")
+    if confirm:
+        c = getpass.getpass("Confirm password: ")
+        if password != c:
+            _die("Passwords do not match.")
+    return password
+
+
 @_with_db
 def _cmd_register(db, args):
     """Register a new local user with password-derived Ed25519 key pair.
 
-    args: --name, --json
+    args: --name, --password (optional), --json
     """
 
-    password = getpass.getpass("Password: ")
-    if not password:
-        _die("Password must not be empty.")
-    confirm = getpass.getpass("Confirm password: ")
-    if password != confirm:
-        _die("Passwords do not match.")
+    password = _get_password(args, confirm=True)
 
     salt_hex = new_salt()
     private_key_bytes, pubkey_bytes = derive_key_pair(password, salt_hex)
@@ -67,7 +83,7 @@ def _cmd_register(db, args):
 def _cmd_login(db, args):
     """Log in as an existing user — verify password, load key into session.
 
-    args: --name, --json
+    args: --name, --password (optional), --json
     """
 
     user = get_user_by_name(db, args.name)
@@ -82,7 +98,7 @@ def _cmd_login(db, args):
         _die(f"User '{args.name}' was registered before key derivation was supported. "
              "Please re-register: peerpedia account register --name {args.name}")
 
-    password = getpass.getpass("Password: ")
+    password = _get_password(args)
     private_key_bytes, pubkey_bytes = derive_key_pair(password, user.salt)
     if pubkey_bytes.hex() != user.public_key:
         _die("Wrong password.")

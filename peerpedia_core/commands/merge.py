@@ -92,10 +92,14 @@ def accept_merge(db: Session, article_id: str, proposal_id: str, user_id: str) -
     if not (fork_repo / ".git").is_dir():
         raise NotFoundError(f"Fork article repo not found: {mp.fork_article_id}")
 
-    # G2b: merge_git_repos succeeds → if process dies here before the
-    # [status] commit, the DB stays "published" with merged content in git
-    # and no marker for integrity repair.  The gap between L97 and L110 is
-    # a crash window.
+    # Validate proposal is still open BEFORE the git merge.  The
+    # _resolve() inside accept_merge_proposal checks again for defense-in-depth,
+    # so the crash window between git merge and DB update is minimised.
+    if mp.status != "open":
+        raise BadRequestError(
+            f"Merge proposal {proposal_id} is already {mp.status}"
+        )
+
     try:
         merge_git_repos(target_repo, fork_repo, user.name)
     except MergeConflictError:
@@ -103,6 +107,8 @@ def accept_merge(db: Session, article_id: str, proposal_id: str, user_id: str) -
             "status": "conflict",
             "message": "Merge conflicts detected.",
         }
+
+    mp = accept_merge_proposal(db, proposal_id)
 
     rebuild_article_authors(db, article_id)
 
@@ -113,7 +119,6 @@ def accept_merge(db: Session, article_id: str, proposal_id: str, user_id: str) -
         commit_status_marker(target_repo, "sedimentation")
         set_sink_start(db, article_id, params.sink.edit_article_default_days)
 
-    mp = accept_merge_proposal(db, proposal_id)
     head_hash = get_head_hash(target_repo)
 
     # Notify the proposer that their merge was accepted.

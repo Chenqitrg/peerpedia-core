@@ -61,7 +61,7 @@ from typing import Optional
 
 from peerpedia_core.exceptions import BadRequestError, ConflictError, NotAuthorizedError
 from peerpedia_core.storage.db.models import Article, Review, User
-from peerpedia_core.types.scores import SCORE_DIMENSIONS
+from peerpedia_core.types.scores import SCORE_DIMENSIONS, FiveDimScores
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Visibility rules
@@ -147,7 +147,7 @@ def assert_not_folded(article, *, threshold: float = 1.0) -> None:
         return
     scores = article.score
     if isinstance(scores, dict):
-        avg = sum(scores.values()) / len(scores) if scores else 0.0
+        avg = FiveDimScores(**scores).average()
     else:
         avg = float(scores)
     if avg < threshold:
@@ -271,13 +271,17 @@ def assert_can_submit_review(article: Article) -> Article:
     raise NotAuthorizedError("Cannot review a draft article")
 
 
-def assert_can_reply_to_review(article: Article, maintainer_ids: list[str], user: User) -> Article:
+def assert_can_reply_to_review(article: Article, maintainer_ids: list[str], user: User, *,
+                               fold_threshold: float = 1.0) -> Article:
     """Raise if *user* (an author) cannot reply to reviews on *article*.
 
     Authors can reply to reviews during sedimentation and after publication.
     Only maintainers (authors) of the article can reply.
+
+    *fold_threshold* is the minimum average score for a non-folded article.
+    The caller should pass ``params.reputation.fold_score_threshold``.
     """
-    assert_not_folded(article)
+    assert_not_folded(article, threshold=fold_threshold)
     if article.status not in ("sedimentation", "published"):
         raise NotAuthorizedError("Cannot reply to reviews on a draft article")
     if user.id not in maintainer_ids:
@@ -367,21 +371,5 @@ def assert_article_has_score(article) -> None:
 
     Must be called AFTER ``recompute_article_score``.
     """
-    if article.score is None:
-        raise BadRequestError("Article must have a score before publishing")
-
-
-def require_self_review_for_publish(
-    article: Article,
-    existing_review: Review | None,
-) -> None:
-    """Raise if the article lacks a self-review by *user* at current HEAD.
-
-    The caller must have already verified the git repo exists and has a
-    HEAD, fetched the article, and looked up the self-review.
-    """
-    if existing_review is None:
-        raise BadRequestError("self_review is required before publishing")
-
     if article.score is None:
         raise BadRequestError("Article must have a score before publishing")

@@ -7,6 +7,7 @@ import json
 import uuid
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from peerpedia_core.cli.handlers.account import _validate_bootstrap_json
@@ -67,7 +68,7 @@ class TestCreateUserStub:
                                 public_key=_make_pubkey(), salt=_make_salt())
         db.flush()
 
-        with pytest.raises(Exception):  # SQLite IntegrityError or similar
+        with pytest.raises(IntegrityError):
             _crud_create_user_stub(db, user_id=uid, name="alice",
                                     public_key=_make_pubkey(), salt=_make_salt())
             db.flush()

@@ -717,10 +717,10 @@ class TestPolicyErrorPaths:
                 {"originality": 0, "rigor": 3, "completeness": 3, "pedagogy": 3, "impact": 3}
             )
 
-    def test_require_self_review_raises_if_none(self):
-        from peerpedia_core.policies.articles import require_self_review_for_publish
+    def test_assert_article_has_score_raises_if_none(self):
+        from peerpedia_core.policies.articles import assert_article_has_score
         from peerpedia_core.exceptions import BadRequestError
         from peerpedia_core.storage.db.models import Article
         a = Article(id="test", title="T", status="draft")
-        with pytest.raises(BadRequestError, match="self_review is required"):
-            require_self_review_for_publish(a, None)
+        with pytest.raises(BadRequestError, match="Article must have a score"):
+            assert_article_has_score(a)

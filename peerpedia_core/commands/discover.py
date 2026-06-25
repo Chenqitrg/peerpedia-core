@@ -224,11 +224,11 @@ def merge_shares(db: Session, user_id: str, entries: list[dict]) -> int:
 
     Each entry must have ``article_id``.  Duplicates are skipped.
     """
+    _require_keys(entries, "article_id", label="shares")
+
     added = 0
     for e in entries:
-        article_id = e.get("article_id")
-        if not article_id:
-            continue
+        article_id = e["article_id"]
         if is_shared(db, user_id, article_id):
             continue
         _add_share(

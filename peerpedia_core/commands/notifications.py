@@ -4,6 +4,7 @@
 """Notification commands — thin facade over CRUD."""
 
 from peerpedia_core.storage.db import Session
+from peerpedia_core.storage.db.models import Notification
 from peerpedia_core.storage.db.crud_notification import (
     count_unread as _count_unread,
     create_notification as _create,
@@ -37,3 +38,28 @@ def mark_read(db: Session, notification_id: str):
 
 def count_unread(db: Session, user_id: str) -> int:
     return _count_unread(db, user_id)
+
+
+def create_notifications_batch(
+    db: Session,
+    entries: list[dict],
+) -> list[Notification]:
+    """Create multiple notifications in one batch flush.
+
+    Each entry dict must have keys matching ``create_notification`` kwargs:
+    user_id, event, message, plus optional article_id and actor_id.
+    Returns the list of created Notification ORM objects.
+    """
+    notifications = [
+        Notification(
+            user_id=e["user_id"],
+            event=e["event"],
+            message=e["message"],
+            article_id=e.get("article_id"),
+            actor_id=e.get("actor_id"),
+        )
+        for e in entries
+    ]
+    db.add_all(notifications)
+    db.flush()
+    return notifications

@@ -53,7 +53,7 @@ from datetime import timedelta, timezone
 from peerpedia_core.storage.db import Session
 
 from peerpedia_core.config.params import params
-from peerpedia_core.storage.db.crud_article import get_article, get_articles_by_author, get_author_ids, list_articles, update_article_score, update_article_status
+from peerpedia_core.storage.db.crud_article import get_article, get_articles_by_author, get_author_ids, get_author_ids_batch, list_articles, update_article_score, update_article_status
 from peerpedia_core.storage.db.crud_review import get_reviews_for_article, upsert_review
 from peerpedia_core.storage.db.crud_user import get_user, get_users_by_ids, list_users, update_user_reputation
 from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, commit_article, commit_status_marker
@@ -207,8 +207,11 @@ def extract_state(db: Session, user_id: str) -> ReputationState:
     article_map: dict[str, ArticleSnapshot] = {}
     reviews_map: dict[str, tuple[ReviewSnapshot, ...]] = {}
 
+    article_id_list = [a.id for a in articles]
+    author_map = get_author_ids_batch(db, article_id_list)
+
     for a in articles:
-        authors = get_author_ids(db, a.id)
+        authors = author_map.get(a.id, [])
         all_reviews = get_reviews_for_article(db, a.id)
         review_count = len(all_reviews)
 

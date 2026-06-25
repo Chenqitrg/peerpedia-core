@@ -414,9 +414,9 @@ def merge_git_repos(target: Path, fork: Path, author_name: str) -> str:
         merge_env = {
             **os.environ,
             "GIT_AUTHOR_NAME": author_name,
-            "GIT_AUTHOR_EMAIL": "system@peerpedia",
+            "GIT_AUTHOR_EMAIL": PLATFORM_EMAIL,
             "GIT_COMMITTER_NAME": author_name,
-            "GIT_COMMITTER_EMAIL": "system@peerpedia",
+            "GIT_COMMITTER_EMAIL": PLATFORM_EMAIL,
         }
         target_repo.git.merge(
             fork_ref.commit.hexsha,

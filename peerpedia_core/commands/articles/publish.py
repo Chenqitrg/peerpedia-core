@@ -31,7 +31,7 @@ from peerpedia_core.storage.git_backend import (
 )
 from peerpedia_core.commands.integrity import assert_article_integrity
 from peerpedia_core.commands.reviews import write_review_to_git
-from peerpedia_core.commands.notifications import create_notification
+from peerpedia_core.commands.notifications import create_notifications_batch
 from peerpedia_core.commands.workflow import recompute_article_score
 
 
@@ -114,26 +114,29 @@ def publish_article(
     # Post-mutation guard: verify the score was computed successfully.
     assert_article_has_score(a)
 
-    # Notify followers that the article was published.
+    # Collect all notifications and flush in one batch.
+    batch: list[dict] = []
     followers = get_followers(db, user_id)
     for follower in followers:
-        create_notification(
-            db, user_id=follower.id, event="article_published",
-            message=f"{user.name} published \"{a.title}\"",
-            article_id=article_id, actor_id=user_id,
-        )
+        batch.append({
+            "user_id": follower.id, "event": "article_published",
+            "message": f"{user.name} published \"{a.title}\"",
+            "article_id": article_id, "actor_id": user_id,
+        })
 
-    # Notify reviewers that the article published (outcome feedback loop).
     reviews = get_reviews_for_article(db, article_id)
     notified = set()
     for r in reviews:
         rid = r.reviewer_id
         if rid != user_id and rid not in notified:
             notified.add(rid)
-            create_notification(
-                db, user_id=rid, event="article_published",
-                message=f"\"{a.title}\" was published — your review contributed",
-                article_id=article_id, actor_id=user_id,
-            )
+            batch.append({
+                "user_id": rid, "event": "article_published",
+                "message": f"\"{a.title}\" was published — your review contributed",
+                "article_id": article_id, "actor_id": user_id,
+            })
+
+    if batch:
+        create_notifications_batch(db, batch)
 
     return {"id": a.id, "title": a.title, "status": a.status, "commit_hash": commit_hash}

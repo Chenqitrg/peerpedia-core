@@ -371,6 +371,8 @@ def push_share(
     private_key_bytes: bytes | None = None,
 ) -> bool:
     """POST /api/v1/users/{sharer_id}/share → True on success."""
+    if not private_key_bytes:
+        raise ValueError("private_key_bytes is required for share push")
     path = f"/api/v1/users/{sharer_id}/share"
     body = json.dumps({
         "article_id": article_id,

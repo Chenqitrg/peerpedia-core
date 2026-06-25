@@ -32,7 +32,7 @@ def _count_users() -> int:
         DB_PATH.parent.mkdir(parents=True, exist_ok=True)
         with db_session(DB_URL) as session:
             return len(list_users(session))
-    except Exception:
+    except OSError:
         return 0
 
 

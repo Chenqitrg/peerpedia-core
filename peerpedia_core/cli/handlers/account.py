@@ -132,8 +132,8 @@ def _cmd_recover(db, args):
         _die("Specify either --name or --user-id.")
 
     if user.salt is None:
-        _die(f"User '{args.name}' has no stored salt — key was not derived. "
-             "Please re-register: peerpedia account register --name {args.name}")
+        _die(f"User '{user.name}' has no stored salt — key was not derived. "
+             f"Please re-register: peerpedia account register --name {user.name}")
 
     password = getpass.getpass("Password: ")
     private_key_bytes, pubkey_bytes = derive_key_pair(password, user.salt)

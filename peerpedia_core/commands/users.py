@@ -74,7 +74,11 @@ def follow_user(db: Session, follower_id: str, followed_id: str):
     result = _follow(db, follower_id, followed_id)
 
     follower = _get(db, follower_id)
-    follower_name = follower.name if follower else "Someone"
+    if follower is None:
+        raise RuntimeError(
+            f"Follower {follower_id} not found after follow — DB inconsistency"
+        )
+    follower_name = follower.name
     create_notification(
         db, user_id=followed_id, event="new_follower",
         message=f"{follower_name} started following you",

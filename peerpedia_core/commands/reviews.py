@@ -173,7 +173,10 @@ def submit_reply(
         raise NotFoundError("Reviewer not found")
 
     mids = get_maintainer_ids(db, article_id)
-    assert_can_reply_to_review(article, mids, user)
+    assert_can_reply_to_review(
+        article, mids, user,
+        fold_threshold=params.reputation.fold_score_threshold,
+    )
 
     if article.status == "sedimentation":
         directory_id = _derive_anonymous_id(article_id, reviewer_ref)
@@ -235,18 +238,18 @@ def _write_thread_message(
     threads_dir = rp / "reviews" / directory_id / "threads"
     threads_dir.mkdir(parents=True, exist_ok=True)
 
-    existing = sorted(threads_dir.glob("*.md"))
-    next_num = len(existing) + 1
-    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    thread_path = threads_dir / f"{next_num:03d}.md"
-    thread_path.write_text(f"### {display_name} ({ts})\n\n{content}\n")
-
     lock = get_article_lock(article_id)
     acquired = lock.acquire(timeout=10)
     if not acquired:
         raise ConflictError("Article busy — retry later")
 
     try:
+        existing = sorted(threads_dir.glob("*.md"))
+        next_num = len(existing) + 1
+        ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        thread_path = threads_dir / f"{next_num:03d}.md"
+        thread_path.write_text(f"### {display_name} ({ts})\n\n{content}\n")
+
         key_path = write_key_to_tempfile(signing_key_bytes) if signing_key_bytes else None
         try:
             h = commit_article(
@@ -279,7 +282,10 @@ def write_review_to_git(
     review_dir = rp / "reviews" / directory_id
     review_dir.mkdir(parents=True, exist_ok=True)
 
-    # Scores: always overwrite with latest.
+    # Scores: always overwrite with latest.  For the comment path,
+    # _write_thread_message acquires the lock for the git commit which
+    # includes both scores.json + thread file.  For the comment-less path
+    # we acquire the lock here to protect scores.json.
     (review_dir / "scores.json").write_text(json.dumps(scores, indent=2))
 
     if comment:
@@ -289,7 +295,7 @@ def write_review_to_git(
             signing_key_bytes=signing_key_bytes, pubkey_hex=pubkey_hex,
         )
 
-    # Comment-less review — still need to commit scores.json.
+    # Comment-less review — lock before git commit to prevent races.
     lock = get_article_lock(article_id)
     acquired = lock.acquire(timeout=10)
     if not acquired:

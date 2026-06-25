@@ -45,27 +45,48 @@ def _pull_social(db, user_id: str) -> None:
         console.print(f"[warning]⚠ Social pull from {server} failed: {e}[/]")
 
 
-def _push_social(action: str, **kwargs) -> None:
-    """Push a social action to the peer server.  Best-effort — warns on failure.
+def _push_to_peer(label: str, push_fn) -> None:
+    """Best-effort push to PEERPEDIA_SERVER.  Warns on failure.
 
-    *action* is one of ``"follow"``, ``"unfollow"``, ``"bookmark"``.
-    Reads the server URL from ``PEERPEDIA_SERVER`` env var.  Warns on
-    each invocation if the server is unreachable.
+    *push_fn* is called with ``(server)`` once the server URL and session
+    key are resolved.  If PEERPEDIA_SERVER is not set, prints a warning
+    and returns without calling *push_fn*.
     """
     server = os.environ.get("PEERPEDIA_SERVER")
     if not server:
-        console.print("[warning]⚠ No PEERPEDIA_SERVER set — social push skipped. Set with: export PEERPEDIA_SERVER=https://your-peer.example.com[/]")
+        console.print(
+            f"[warning]⚠ No PEERPEDIA_SERVER set — {label} push skipped. "
+            "Set with: export PEERPEDIA_SERVER=https://your-peer.example.com[/]"
+        )
         return
     try:
-        key = _get_session_key()
-        if action == "follow":
-            push_follow(server, kwargs["follower_id"], kwargs["followed_id"],
-                        private_key_bytes=key)
-        elif action == "unfollow":
-            push_unfollow(server, kwargs["follower_id"], kwargs["followed_id"],
-                          private_key_bytes=key)
+        push_fn(server)
     except Exception as e:
-        console.print(f"[warning]⚠ Social sync ({action}) to {server} failed: {e}[/]")
+        console.print(f"[warning]⚠ {label} push to {server} failed: {e}[/]")
+
+
+def _push_social(action: str, **kwargs) -> None:
+    """Push a social action to the peer server.  Best-effort — warns on failure.
+
+    *action* is one of ``"follow"``, ``"unfollow"``.
+    """
+    key = _get_session_key()
+    if action == "follow":
+        _push_to_peer(
+            f"Social sync ({action})",
+            lambda s: push_follow(
+                s, kwargs["follower_id"], kwargs["followed_id"],
+                private_key_bytes=key,
+            ),
+        )
+    elif action == "unfollow":
+        _push_to_peer(
+            f"Social sync ({action})",
+            lambda s: push_unfollow(
+                s, kwargs["follower_id"], kwargs["followed_id"],
+                private_key_bytes=key,
+            ),
+        )
 
 
 def _push_share(article_id: str, sharer_id: str, recipient_id: str | None = None,
@@ -74,21 +95,20 @@ def _push_share(article_id: str, sharer_id: str, recipient_id: str | None = None
 
     *action*: ``"add"`` (default) or ``"remove"``.
     """
-    server = os.environ.get("PEERPEDIA_SERVER")
-    if not server:
-        console.print("[warning]⚠ No PEERPEDIA_SERVER set — share push skipped. Set with: export PEERPEDIA_SERVER=https://your-peer.example.com[/]")
-        return
-    try:
-        key = _get_session_key()
-        if action == "remove":
-            push_share_remove(server, sharer_id, article_id,
-                              private_key_bytes=key)
-        else:
-            push_share(server, sharer_id, article_id,
-                       recipient_id=recipient_id, comment=comment,
-                       private_key_bytes=key)
-    except Exception as e:
-        console.print(f"[warning]⚠ Share push to {server} failed: {e}[/]")
+    key = _get_session_key()
+    if action == "remove":
+        _push_to_peer(
+            "Share remove",
+            lambda s: push_share_remove(s, sharer_id, article_id,
+                                        private_key_bytes=key),
+        )
+    else:
+        _push_to_peer(
+            "Share push",
+            lambda s: push_share(s, sharer_id, article_id,
+                                 recipient_id=recipient_id, comment=comment,
+                                 private_key_bytes=key),
+        )
 
 
 @_with_db

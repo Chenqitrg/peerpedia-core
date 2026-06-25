@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+from peerpedia_core.policies.articles import PUBLIC_READABLE_STATUSES
+
 from peerpedia_core.cli.helpers import (
     _with_db, _get_session_user, _get_session_key, _resolve_and_display_article, _resolve_article_id,
     _find_article_file, _open_editor,
@@ -57,6 +59,10 @@ def _cmd_article_create(db, args):
             signing_key_bytes=key_bytes, pubkey_hex=user.public_key,
         )
     db.commit()
+    # TODO(P2P-sync): auto-queue the new article for push to peer server.
+    # Currently articles are only synced when manually queued via
+    # ``pending.add('push', article_id)``.  After create/publish, the
+    # article should be queued automatically if PEERPEDIA_SERVER is set.
     _try_sync(db)
     if args.json:
         _json_out(result)
@@ -114,7 +120,7 @@ def _cmd_article_list(db, args):
     if args.bookmarked:
         bookmarked_by = args.user or me
 
-    # Default: only public articles.  Drafts require --mine.
+    # Default: only publicly readable articles.  Drafts require --mine.
     if args.mine:
         status = args.status or None
     elif args.status:
@@ -125,7 +131,7 @@ def _cmd_article_list(db, args):
                  see_also=["article list --mine"])
         status = args.status
     else:
-        status = {"published", "sedimentation"}
+        status = PUBLIC_READABLE_STATUSES
 
     articles = list_articles(
         db,

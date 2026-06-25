@@ -40,6 +40,7 @@ from peerpedia_core.cli.handlers.social import (
     _cmd_merge_accept,
     _cmd_merge_propose,
     _cmd_merge_withdraw,
+    _cmd_school,
     _cmd_share_add, _cmd_share_list, _cmd_share_remove,
     _cmd_unfollow_user,
 )

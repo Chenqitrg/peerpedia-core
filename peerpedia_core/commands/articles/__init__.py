@@ -49,20 +49,26 @@ def list_articles(
     limit: int | None = None,
     offset: int = 0,
 ) -> list:
-    """List articles with AND filters."""
-    articles = _list(db, status=status, search_query=search_query)
-    if author_id:
-        articles = [a for a in articles if author_id in _get_author_ids(db, a.id)]
+    """List articles with AND filters — all pushed to SQL via JOINs.
+
+    *viewer_id* (feed) looks up followed users first, then passes their
+    IDs as an ``author_ids`` SQL filter.
+    """
+    # Resolve author filter: explicit --user, or --feed (followed users).
+    ids: str | list[str] | None = author_id
     if viewer_id:
-        followed = {u.id for u in _get_following(db, viewer_id)}
-        articles = [a for a in articles if any(aid in followed for aid in _get_author_ids(db, a.id))]
-    if bookmarked_by:
-        articles = [a for a in articles if _is_bookmarked(db, bookmarked_by, a.id)]
-    if offset:
-        articles = articles[offset:]
-    if limit is not None:
-        articles = articles[:limit]
-    return articles
+        followed = [u.id for u in _get_following(db, viewer_id)]
+        if not followed:
+            return []
+        if author_id and author_id not in followed:
+            return []
+        ids = followed
+
+    return _list(
+        db, status=status, search_query=search_query,
+        author_ids=ids, bookmarked_by=bookmarked_by,
+        limit=limit, offset=offset,
+    )
 
 
 def count_articles(db: Session, **kwargs) -> int:

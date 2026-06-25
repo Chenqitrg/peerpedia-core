@@ -249,13 +249,14 @@ def fetch_followers(server: str, user_id: str) -> list[dict] | None:
 
 
 def push_follow(server: str, follower_id: str, followed_id: str, *,
-                private_key_bytes: bytes | None = None) -> bool:
+                private_key_bytes: bytes | None = None,
+                pubkey_hex: str = "") -> bool:
     """POST /users/{follower_id}/follow → True on success, False if not found."""
     path = f"/api/v1/users/{follower_id}/follow"
     body = json.dumps({"followed_id": followed_id}).encode("utf-8")
     headers: dict[str, str] = {}
     if private_key_bytes:
-        headers["Authorization"] = sign_auth_header("POST", path, follower_id, private_key_bytes, body=body)
+        headers["Authorization"] = sign_auth_header("POST", path, follower_id, private_key_bytes, pubkey_hex=pubkey_hex, body=body)
     try:
         resp = _get_client().post(f"{server}{path}", content=body, headers=headers)
     except httpx.HTTPError as e:
@@ -268,13 +269,14 @@ def push_follow(server: str, follower_id: str, followed_id: str, *,
 
 
 def push_unfollow(server: str, follower_id: str, followed_id: str, *,
-                  private_key_bytes: bytes | None = None) -> bool:
+                  private_key_bytes: bytes | None = None,
+                  pubkey_hex: str = "") -> bool:
     """POST /users/{follower_id}/unfollow → True on success, False if not found."""
     path = f"/api/v1/users/{follower_id}/unfollow"
     body = json.dumps({"followed_id": followed_id}).encode("utf-8")
     headers: dict[str, str] = {}
     if private_key_bytes:
-        headers["Authorization"] = sign_auth_header("POST", path, follower_id, private_key_bytes, body=body)
+        headers["Authorization"] = sign_auth_header("POST", path, follower_id, private_key_bytes, pubkey_hex=pubkey_hex, body=body)
     try:
         resp = _get_client().post(f"{server}{path}", content=body, headers=headers)
     except httpx.HTTPError as e:
@@ -329,6 +331,7 @@ def fetch_user_articles(server: str, user_id: str, limit: int = 20, offset: int 
 def push_key_rotation(
     server: str, user_id: str, new_pubkey_hex: str, *,
     private_key_bytes: bytes,
+    pubkey_hex: str = "",
 ) -> bool:
     """POST /api/v1/users/{user_id}/rotate-key → True on success.
 
@@ -342,7 +345,7 @@ def push_key_rotation(
     body = json.dumps({"public_key": new_pubkey_hex}).encode("utf-8")
     headers: dict[str, str] = {
         "Authorization": sign_auth_header(
-            "POST", path, user_id, private_key_bytes, body=body,
+            "POST", path, user_id, private_key_bytes, pubkey_hex=pubkey_hex, body=body,
         ),
     }
     try:
@@ -369,6 +372,7 @@ def push_share(
     server: str, sharer_id: str, article_id: str, *,
     recipient_id: str | None = None, comment: str | None = None,
     private_key_bytes: bytes | None = None,
+    pubkey_hex: str = "",
 ) -> bool:
     """POST /api/v1/users/{sharer_id}/share → True on success."""
     if not private_key_bytes:
@@ -382,7 +386,7 @@ def push_share(
     headers: dict[str, str] = {}
     if private_key_bytes:
         headers["Authorization"] = sign_auth_header(
-            "POST", path, sharer_id, private_key_bytes, body=body,
+            "POST", path, sharer_id, private_key_bytes, pubkey_hex=pubkey_hex, body=body,
         )
     try:
         resp = _get_client().post(f"{server}{path}", content=body, headers=headers)
@@ -402,6 +406,7 @@ def push_share(
 def push_share_remove(
     server: str, sharer_id: str, article_id: str, *,
     private_key_bytes: bytes,
+    pubkey_hex: str = "",
 ) -> bool:
     """DELETE /api/v1/users/{sharer_id}/share → True on success.
 
@@ -414,7 +419,7 @@ def push_share_remove(
     body = json.dumps({"article_id": article_id}).encode("utf-8")
     headers: dict[str, str] = {
         "Authorization": sign_auth_header(
-            "DELETE", path, sharer_id, private_key_bytes, body=body,
+            "DELETE", path, sharer_id, private_key_bytes, pubkey_hex=pubkey_hex, body=body,
         ),
     }
     try:
@@ -467,4 +472,29 @@ def fetch_peers(server: str) -> list[str]:
     except (httpx.HTTPError, _json.JSONDecodeError) as e:
         raise TransportError(
             f"Failed to fetch peers from {server}: {e}"
+        ) from e
+
+
+def fetch_school(server: str, limit: int = 20) -> list[dict]:
+    """GET /api/v1/school → top users by follower count (public, no auth).
+
+    Returns a list of ``{"id": str, "name": str, "follower_count": int}``.
+    Raises ``TransportError`` on network failure, ``ProtocolError`` on
+    malformed response.
+    """
+    import json as _json
+    client = _get_client()
+    try:
+        resp = client.get(f"{server}/api/v1/school", params={"limit": limit})
+        resp.raise_for_status()
+        data = resp.json()
+        if not isinstance(data, list):
+            raise ProtocolError(
+                f"Malformed school response from {server}: expected list, "
+                f"got {type(data).__name__}"
+            )
+        return data
+    except (httpx.HTTPError, _json.JSONDecodeError) as e:
+        raise TransportError(
+            f"Failed to fetch school from {server}: {e}"
         ) from e

@@ -1,0 +1,21 @@
+EXAMPLES
+  # Fetch from the peer server (default)
+  peerpedia school
+
+  # From a specific server
+  peerpedia school --server https://peer.example.com
+
+  # Show top 10
+  peerpedia school --limit 10
+
+  # Read from local DB only
+  peerpedia school --local
+
+The school lists users ranked by follower count.  Follow the top users
+to bootstrap your feed — they act as hubs, curating high-quality content
+and connecting you to more of the network.
+
+SEE ALSO
+  follow             Follow a user from the school
+  article list --feed    See what your followed users are reading
+  account search     Search for a specific user

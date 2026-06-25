@@ -150,14 +150,18 @@ def merge_article_meta(db: Session, entries: list[dict]) -> int:
     """
     _require_keys(entries, "id", "title", "status", label="article_meta")
 
+    # Datetime fields that may arrive as ISO strings from JSON.
+    _dt_fields = {"sink_start", "created_at", "witnessed_at", "updated_at"}
+
     added = 0
     for e in entries:
         if get_article(db, e["id"]) is not None:
-            logger.warning(
-                "merge_article_meta: article %s already exists — skipping duplicate",
-                e["id"],
-            )
             continue
+        # Convert ISO datetime strings to Python datetime objects.
+        for field in _dt_fields:
+            val = e.get(field)
+            if isinstance(val, str):
+                e[field] = datetime.fromisoformat(val)
         author_ids = e.get("authors", [])
         article = Article(**{k: v for k, v in e.items() if k != "authors"})
         insert_article(db, article, author_ids)

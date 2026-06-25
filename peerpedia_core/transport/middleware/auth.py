@@ -29,7 +29,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from peerpedia_core.commands import get_user
+from peerpedia_core.commands import create_user_stub, get_user, update_user_public_key
 from peerpedia_core.transport.auth import verify_auth_header
 
 
@@ -42,8 +42,13 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
     # Paths that are public suffixes (e.g. /api/v1/articles/{id}/head).
     # endswith prevents substring false-positives like "/repo" matching "/report".
-    _PUBLIC_PREFIXES = ("/health",)
-    _PUBLIC_SUFFIXES = ("/head", "/bundle", "/sync", "/repo")
+    _PUBLIC_PREFIXES = ("/health", "/api/v1/school")
+    # Read-only — public.  /articles is NOT public (drafts are private),
+    # but is called without auth from peers; the handler filters by status.
+    _PUBLIC_SUFFIXES = (
+        "/head", "/bundle", "/sync", "/repo",
+        "/following", "/followers", "/articles", "/shares",
+    )
     _PUBLIC_CONTAINS = ("/ancestor/",)  # /api/v1/articles/{id}/ancestor/{hash}
 
     async def dispatch(self, request: Request, call_next):
@@ -61,41 +66,38 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if not auth_header.startswith("Peerpedia "):
             return self._unauthorized()
 
-        # DB session must be available (DBSessionMiddleware runs first).
         db = getattr(request.state, "db", None)
         if db is None:
             return self._unauthorized()
 
-        # Extract user_id from header to look up the public key.
-        try:
-            _, payload = auth_header.split(" ", 1)
-            user_id = payload.split(":")[0]
-        except ValueError:
-            return self._unauthorized()
-
-        user = get_user(db, user_id)
-        if user is None or not user.public_key:
-            return self._unauthorized()
-
-        # Read the body for signature verification, then make it available
-        # to the route handler via request.state.body.
         body = await request.body()
 
+        # Self-contained verification — pubkey is in the header.
         result = verify_auth_header(
-            auth_header,
-            request.method,
-            path,
-            user.public_key,
-            body=body,
+            auth_header, request.method, path, body=body,
         )
-        if result is None:
-            return self._unauthorized()
+        if not result.ok:
+            return self._unauthorized(detail=result.reason)
+        user_id, pubkey_hex = result.user_id, result.pubkey_hex
 
-        request.state.user_id = result
+        # TOFU: if user doesn't exist locally, create a stub.
+        # The signature proves they control this key pair.
+        user = get_user(db, user_id)
+        if user is None:
+            create_user_stub(
+                db, user_id=user_id, name=user_id[:8],
+                public_key=pubkey_hex, salt="",
+            )
+            db.commit()
+        elif user.public_key and user.public_key != pubkey_hex:
+            update_user_public_key(db, user_id, pubkey_hex)
+            db.commit()
+
+        request.state.user_id = user_id
         return await call_next(request)
 
-    def _unauthorized(self):
-        return JSONResponse(
-            {"error": "Authentication required", "status": 401},
-            status_code=401,
-        )
+    def _unauthorized(self, detail: str = ""):
+        body = {"error": "Authentication required", "status": 401}
+        if detail:
+            body["detail"] = detail
+        return JSONResponse(body, status_code=401)

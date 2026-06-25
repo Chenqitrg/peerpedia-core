@@ -286,3 +286,29 @@ def get_following_count(session: Session, user_id: str) -> int:
         .filter(Follow.follower_id == user_id, Follow.deleted_at.is_(None))
         .count()
     )
+
+
+def get_top_users_by_followers(session: Session, limit: int = 20) -> list[dict]:
+    """Return users ranked by active follower count (descending).
+
+    Each dict has ``id``, ``name``, and ``follower_count``.
+    Includes all users — even those with 0 followers — so new users
+    are discoverable via ``peerpedia school``.
+    """
+    from sqlalchemy import func
+    rows = (
+        session.query(
+            User.id, User.name,
+            func.count(Follow.follower_id).label("follower_count"),
+        )
+        .outerjoin(Follow, (Follow.followed_id == User.id)
+                   & (Follow.deleted_at.is_(None)))
+        .group_by(User.id, User.name)
+        .order_by(func.count(Follow.follower_id).desc())
+        .limit(limit)
+        .all()
+    )
+    return [
+        {"id": r.id, "name": r.name, "follower_count": r.follower_count}
+        for r in rows
+    ]

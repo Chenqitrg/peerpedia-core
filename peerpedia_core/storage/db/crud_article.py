@@ -151,17 +151,18 @@ def list_articles(
     session: Session,
     status: str | set[str] | None = None,
     search_query: str | None = None,
+    author_ids: str | list[str] | None = None,
+    bookmarked_by: str | None = None,
     limit: int | None = None,
     offset: int = 0,
 ) -> list[Article]:
     """List articles with optional SQL-level AND filters, ordered by created_at desc.
 
-    Single-table only — cross-table joins belong in ``commands/``.
-
     Args:
-        status: Filter by Article.status. ``str`` for single, ``set[str]``
-            for multiple, ``None`` for no filter.
+        status: Filter by Article.status.
         search_query: Fuzzy title match (case-insensitive ILIKE).
+        author_id: Only articles authored by this user (JOIN on article_authors).
+        bookmarked_by: Only articles bookmarked by this user (JOIN on bookmarks).
         limit: Max results. None = unlimited.
         offset: Pagination offset.
     """
@@ -172,10 +173,16 @@ def list_articles(
     elif status:
         q = q.filter(Article.status == status)
     if search_query:
-        # NOTE: ILIKE %term% scans linearly.  For a P2P system with hundreds
-        # of articles (not millions), this is fine.  If article count exceeds
-        # ~10k, switch to SQLite FTS5 virtual table for full-text search.
         q = q.filter(Article.title.ilike(f"%{search_query}%"))
+    if author_ids:
+        q = q.join(ArticleAuthor, ArticleAuthor.article_id == Article.id)
+        if isinstance(author_ids, list):
+            q = q.filter(ArticleAuthor.author_id.in_(author_ids))
+        else:
+            q = q.filter(ArticleAuthor.author_id == author_ids)
+    if bookmarked_by:
+        q = q.join(Bookmark, Bookmark.article_id == Article.id)\
+             .filter(Bookmark.user_id == bookmarked_by)
     q = q.order_by(Article.created_at.desc())
     if limit is not None:
         q = q.limit(limit).offset(offset)

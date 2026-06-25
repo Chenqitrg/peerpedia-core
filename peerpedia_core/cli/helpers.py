@@ -20,8 +20,9 @@ from pathlib import Path
 from peerpedia_core.cli.display import console, theme, display_article as _render_article
 from peerpedia_core.commands import db_session, get_article, get_author_ids, list_articles, parse_frontmatter, resolve_username_or_alias
 from peerpedia_core.config.paths import ARTICLES_DIR as DEFAULT_ARTICLES_DIR, DB_PATH, DB_URL, SESSION_FILE
+from peerpedia_core.crypto import _load_private_key, _public_key_to_bytes
 from peerpedia_core.exceptions import PeerpediaError
-from peerpedia_core.storage.db.models import Article
+from peerpedia_core.storage.db.models import Article, User
 from peerpedia_core.types.scores import SCORE_DIMENSIONS
 
 
@@ -214,13 +215,10 @@ def _resolve_user(db, user_ref: str) -> str:
     """Resolve a user reference to a user ID.
 
     ``@name`` → look up username first, then aliases.
-    UUID or UUID prefix → pass through directly.
+    UUID or UUID prefix → search DB for matching user.
     """
     if user_ref.startswith("@"):
         name = user_ref[1:]
-        # resolve_username_or_alias checks username first, then falls back
-        # to aliases — single query path covers both.  No need for a
-        # separate get_user_by_name call.
         session_user = _get_session_user()
         users = resolve_username_or_alias(db, session_user, name)
 
@@ -239,7 +237,32 @@ def _resolve_user(db, user_ref: str) -> str:
             f"  Register: peerpedia account register --name {name}\n"
             f"  Or set an alias: peerpedia alias set <user_id> {name}"
         )
-    return user_ref
+
+    # Plain string — resolve as UUID, prefix, or exact name match.
+    # Exact UUID match
+    user = db.get(User, user_ref)
+    if user is not None:
+        return user.id
+    # UUID prefix match
+    candidates = db.query(User).filter(User.id.startswith(user_ref)).all()
+    if len(candidates) == 1:
+        return candidates[0].id
+    if len(candidates) > 1:
+        names = ", ".join(f"{u.id[:8]} ({u.name})" for u in candidates)
+        _die(f"Multiple UUID prefix matches for '{user_ref}': {names}",
+             suggestion="Use a longer prefix or the full UUID.")
+    # Name match
+    candidates = db.query(User).filter(User.name.ilike(f"%{user_ref}%")).all()
+    if len(candidates) == 1:
+        return candidates[0].id
+    if len(candidates) > 1:
+        names = ", ".join(f"{u.id[:8]} ({u.name})" for u in candidates)
+        _die(f"Multiple users match '{user_ref}': {names}",
+             suggestion="Use an @name, a UUID prefix, or try 'account search' first.",
+             see_also=["account search"])
+    _die(f"User '{user_ref}' not found.",
+         suggestion="Check the spelling, use an @name, or search with 'account search'.",
+         see_also=["account search", "account register"])
 
 
 def _get_session_key() -> bytes | None:
@@ -250,6 +273,17 @@ def _get_session_key() -> bytes | None:
         if key_hex:
             return bytes.fromhex(key_hex)
     return None
+
+
+def _get_session_pubkey() -> str:
+    """Return the current user's Ed25519 public key (hex), derived from the
+    session private key.  Returns ``""`` if not logged in."""
+    key = _get_session_key()
+    if key:
+        priv = _load_private_key(key)
+        pub = priv.public_key()
+        return _public_key_to_bytes(pub).hex()
+    return ""
 
 
 def _parse_scores(scores_str: str | None) -> dict | None:
@@ -279,6 +313,9 @@ def _parse_scores(scores_str: str | None) -> dict | None:
             abbr_list = ", ".join(sorted(_valid_abbr))
             _die(f"Unknown score dimension: '{k}'. Valid: {abbr_list}",
                  code="BAD_REQUEST", field="scores", bad_dimension=k)
+        # Normalize abbreviations to full names (downstream code expects full names).
+        if k in _valid_abbr:
+            k = SCORE_DIMENSIONS[k]
         try:
             score = int(v)
         except ValueError:

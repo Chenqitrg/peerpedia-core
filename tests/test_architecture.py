@@ -112,6 +112,9 @@ def test_no_internal_peerpedia_imports():
         ("peerpedia_core/commands/integrity.py",
          "peerpedia_core.commands.bundle"):
             "circular: integrity.py → bundle.sync_reviews_from_worktree → bundle.py → integrity.assert_article_integrity",
+        ("peerpedia_core/cli/handlers/schema.py",
+         "peerpedia_core.cli.parser"):
+            "circular: parser imports from handlers (→ schema), schema needs COMMAND_GROUPS from parser",
     }
 
     for f in _all_modules():
@@ -692,3 +695,60 @@ def test_no_to_dict_in_transport_or_cli():
                     "use commands/views.py (get_article_view, "
                     "get_following_views, etc.) instead"
                 )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# M. No inline list filtering of DB results
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# If a module imports from storage/db/, it has SQL capability.
+# Any list comprehension in such a module that filters on DB-column-like
+# attributes must be pushed into the SQL query instead.
+#
+# Modules that do NOT import storage/db/ are skipped — they have no DB
+# access and can only filter in-memory data.
+
+_DB_FIELD_NAMES = {"status", "id", "user_id", "author_id", "article_id",
+                    "title", "created_at", "forked_from", "fork_count",
+                    "sink_start", "follower_id", "followed_id"}
+
+
+def _imports_db_module(rel_path: str, source: str) -> bool:
+    """Return True if *rel_path* imports from ``peerpedia_core.storage.db``."""
+    import ast as _ast
+    try:
+        tree = _ast.parse(source)
+    except SyntaxError:
+        return False
+    for node in _ast.walk(tree):
+        if isinstance(node, _ast.ImportFrom):
+            if node.module and node.module.startswith("peerpedia_core.storage.db"):
+                return True
+    return False
+
+
+def test_no_inline_db_filtering():
+    """Modules that import storage/db must not filter DB results in Python."""
+    for f in _all_modules():
+        rel = _rel(f)
+        if not (rel.startswith("peerpedia_core/commands/") or
+                rel.startswith("peerpedia_core/cli/handlers/") or
+                rel.startswith("peerpedia_core/transport/routes/")):
+            continue
+        source = f.read_text()
+        if not _imports_db_module(rel, source):
+            continue  # No DB access → no DB data to filter inline.
+        tree = ast.parse(source)
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.ListComp):
+                continue
+            for clause in node.generators:
+                for if_node in ast.walk(clause):
+                    if isinstance(if_node, ast.Attribute) and if_node.attr in _DB_FIELD_NAMES:
+                        lineno = node.lineno if hasattr(node, "lineno") else 0
+                        raise AssertionError(
+                            f"{rel}:{lineno}: list comprehension filters on "
+                            f"'{if_node.attr}' — this module imports storage/db, "
+                            f"so push the filter into the SQL query (JOIN / WHERE) "
+                            f"instead of filtering in Python after fetching all rows"
+                        )

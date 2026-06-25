@@ -24,12 +24,14 @@ from peerpedia_core.commands import (
     get_follower_views,
     get_following_views,
     get_shares_for_user,
+    get_top_users_by_followers,
     list_user_article_views,
     remove_share,
     unfollow_user,
     update_user_public_key,
 )
 from peerpedia_core.exceptions import BadRequestError
+from peerpedia_core.policies.articles import PUBLIC_READABLE_STATUSES
 from peerpedia_core.transport.shared import _validate_id
 
 
@@ -109,8 +111,12 @@ async def _articles(request: Request) -> JSONResponse:
     _validate_id(user_id, "user_id")
     limit = min(int(request.query_params.get("limit", 20)), 100)
     offset = int(request.query_params.get("offset", 0))
+    # Policy: unauthenticated peers see only public-readable statuses.
+    # The author sees all their own articles.
+    requester = getattr(request.state, "user_id", None)
+    status = None if requester == user_id else PUBLIC_READABLE_STATUSES
     return JSONResponse(list_user_article_views(
-        request.state.db, user_id, limit=limit, offset=offset,
+        request.state.db, user_id, status=status, limit=limit, offset=offset,
     ))
 
 
@@ -142,10 +148,17 @@ async def _get_shares(request: Request) -> JSONResponse:
     return JSONResponse(get_shares_for_user(request.state.db, user_id))
 
 
+async def _school(request: Request) -> JSONResponse:
+    """GET /api/v1/school — top users by follower count (public, no auth)."""
+    limit = min(int(request.query_params.get("limit", 20)), 100)
+    return JSONResponse(get_top_users_by_followers(request.state.db, limit=limit))
+
+
 # ── Route table ──────────────────────────────────────────────────────────
 
 
 ROUTES = [
+    Route("/api/v1/school", _school, methods=["GET"]),
     Route("/api/v1/users/{user_id}/following", _following, methods=["GET"]),
     Route("/api/v1/users/{user_id}/followers", _followers, methods=["GET"]),
     Route("/api/v1/users/{user_id}/articles", _articles, methods=["GET"]),

@@ -34,6 +34,7 @@ from peerpedia_core.cli.handlers import (
     _cmd_mother,
     _cmd_register,
     _cmd_schema,
+    _cmd_school,
     _cmd_meta_help,
     _cmd_review_invite, _cmd_review_list, _cmd_review_rate, _cmd_review_reply, _cmd_review_submit,
     _cmd_server_start,
@@ -309,6 +310,11 @@ TOP_LEVEL = [
         (("user_identifier",), {"help": "User ID, @name, or UUID prefix"}),
     ]),
     ("?Mother", _cmd_mother, []),
+    ("school", _cmd_school, [
+        (("--limit",), {"type": int, "default": 20, "help": "Max users to show"}),
+        (("--server",), {"help": "Peer server URL (or set PEERPEDIA_SERVER env var)"}),
+        (("--local",), {"action": "store_true", "help": "Read from local DB instead of peer server"}),
+    ], {"epilog": _load_help("school")}),
     ("help", _cmd_meta_help, [
         (("topic",), {"nargs": "?", "help": "Command or topic to get help about (default: meta help)"}),
     ]),

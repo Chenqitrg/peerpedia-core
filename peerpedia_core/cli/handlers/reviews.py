@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from peerpedia_core.cli.helpers import (
     _with_db, _get_session_user, _get_session_key, _open_editor, _parse_scores,
-    _page, _resolve_user, _ok, _die, _json_out,
+    _page, _resolve_article_id, _resolve_user, _ok, _die, _json_out,
     DEFAULT_ARTICLES_DIR,
 )
 from peerpedia_core.cli.display import _stars, console
@@ -51,7 +51,8 @@ def _cmd_review_list(db, args):
 
     args: article_id [positional], --show [meta|full], --json
     """
-    reviews = get_reviews_for_article(db, args.article_id)
+    article = _resolve_article_id(db, args.article_id)
+    reviews = get_reviews_for_article(db, article.id)
     if args.json:
         _json_out([{"id": r.id, "reviewer_id": r.reviewer_id, "scores": r.scores} for r in reviews])
         return

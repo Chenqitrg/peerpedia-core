@@ -96,6 +96,7 @@ from peerpedia_core.commands.users import (
     list_users,
     get_followers,
     get_following,
+    get_top_users_by_followers,
     get_user,
     get_user_by_name,
     is_following,

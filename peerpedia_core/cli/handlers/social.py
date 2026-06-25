@@ -8,7 +8,8 @@ from __future__ import annotations
 import os
 
 from peerpedia_core.cli.helpers import (
-    _with_db, _resolve_user, _get_session_user, _get_session_key,
+    _with_db, _resolve_article_id, _resolve_user, _get_session_user,
+    _get_session_key, _get_session_pubkey,
     _resolve_and_display_article, _ok, _die, _json_out,
 )
 from peerpedia_core.cli.display import console
@@ -19,9 +20,9 @@ from peerpedia_core.commands import (
     list_aliases, remove_alias, remove_bookmark, remove_share, set_alias,
     follow_user, unfollow_user,
     get_follower_views, get_followers, get_following, get_following_views,
-    get_article, merge_article_meta,
+    create_user_stub, get_article, get_top_users_by_followers, get_user, merge_article_meta,
 )
-from peerpedia_core.transport import fetch_article_meta, push_share, push_share_remove
+from peerpedia_core.transport import fetch_article_meta, fetch_school, push_share, push_share_remove
 from peerpedia_core.social import discover_articles, discover_followers, discover_following, discover_shares
 from peerpedia_core.transport import push_follow, push_unfollow
 
@@ -71,12 +72,13 @@ def _push_social(action: str, **kwargs) -> None:
     *action* is one of ``"follow"``, ``"unfollow"``.
     """
     key = _get_session_key()
+    pubkey = _get_session_pubkey()
     if action == "follow":
         _push_to_peer(
             f"Social sync ({action})",
             lambda s: push_follow(
                 s, kwargs["follower_id"], kwargs["followed_id"],
-                private_key_bytes=key,
+                private_key_bytes=key, pubkey_hex=pubkey,
             ),
         )
     elif action == "unfollow":
@@ -84,7 +86,7 @@ def _push_social(action: str, **kwargs) -> None:
             f"Social sync ({action})",
             lambda s: push_unfollow(
                 s, kwargs["follower_id"], kwargs["followed_id"],
-                private_key_bytes=key,
+                private_key_bytes=key, pubkey_hex=pubkey,
             ),
         )
 
@@ -96,18 +98,21 @@ def _push_share(article_id: str, sharer_id: str, recipient_id: str | None = None
     *action*: ``"add"`` (default) or ``"remove"``.
     """
     key = _get_session_key()
+    pubkey = _get_session_pubkey()
     if action == "remove":
         _push_to_peer(
             "Share remove",
             lambda s: push_share_remove(s, sharer_id, article_id,
-                                        private_key_bytes=key),
+                                        private_key_bytes=key,
+                                        pubkey_hex=pubkey),
         )
     else:
         _push_to_peer(
             "Share push",
             lambda s: push_share(s, sharer_id, article_id,
                                  recipient_id=recipient_id, comment=comment,
-                                 private_key_bytes=key),
+                                 private_key_bytes=key,
+                                 pubkey_hex=pubkey),
         )
 
 
@@ -233,6 +238,9 @@ def _cmd_follow_user(db, args):
     follow_user(db, follower_id, followed_id)
     db.commit()
     _try_sync(db)
+    # TODO(P2P-sync): social graph push/pull requires Ed25519 auth.
+    # Currently best-effort — warns and skips if PEERPEDIA_SERVER is not
+    # set or if the server rejects the unsigned request (401).
     _push_social("follow", follower_id=follower_id, followed_id=followed_id)
     _pull_social(db, followed_id)
     if args.json:
@@ -348,10 +356,11 @@ def _cmd_share_add(db, args):
     args: article_id [positional], --to, --comment, --json
     """
     user_id = _get_session_user()
+    article = _resolve_article_id(db, args.article_id)
     recipient_id = None
     if getattr(args, "to", None):
         recipient_id = _resolve_user(db, args.to)
-    result = add_share(db, user_id, args.article_id,
+    result = add_share(db, user_id, article.id,
                        recipient_id=recipient_id, comment=args.comment)
     db.commit()
     _push_share(args.article_id, user_id, recipient_id, args.comment)
@@ -403,9 +412,67 @@ def _cmd_share_remove(db, args):
     """
 
     user_id = _get_session_user()
-    remove_share(db, user_id, args.article_id)
+    article = _resolve_article_id(db, args.article_id)
+    remove_share(db, user_id, article.id)
     db.commit()
     _push_share(args.article_id, user_id, action="remove")
     _ok(f"Unshared [accent]{args.article_id[:8]}[/]")
+
+
+# ── School ────────────────────────────────────────────────────────────────────
+
+
+@_with_db
+def _cmd_school(db, args):
+    """List top users ranked by follower count — the user directory.
+
+    args: --server, --local, --limit, --json
+
+    Default: fetches from the peer server (network is the primary source).
+    With --local: queries the local DB only.
+    """
+    limit = getattr(args, "limit", 20) or 20
+
+    users: list[dict] = []
+    if not getattr(args, "local", False):
+        # Default: fetch from peer server.
+        server = _sync_server(args)
+        try:
+            users = fetch_school(server, limit=limit)
+            # Merge fetched users into local DB so they appear in future
+            # local queries (school --local, follow, etc.).
+            for u in users:
+                existing = get_user(db, u["id"])
+                if existing is None:
+                    create_user_stub(
+                        db, user_id=u["id"], name=u["name"],
+                        public_key="", salt="",
+                    )
+                    db.commit()
+        except Exception as e:
+            console.print(f"[dim]Remote school unavailable ({e}) — showing local.[/]")
+            users = []
+
+    if not users:
+        users = get_top_users_by_followers(db, limit=limit)
+        db.commit()
+
+    if args.json:
+        _json_out(users)
+        return
+
+    if not users:
+        console.print("[muted]No users with followers yet. "
+                      "Follow some people to build the school.[/]")
+        return
+
+    from rich.table import Table
+    table = Table(title="School — Top Users by Followers")
+    table.add_column("Rank", style="dim", justify="right")
+    table.add_column("Name")
+    table.add_column("Followers", justify="right")
+    for i, u in enumerate(users, 1):
+        table.add_row(str(i), u["name"], str(u["follower_count"]))
+    console.print(table)
 
 

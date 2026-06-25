@@ -19,6 +19,7 @@ from peerpedia_core.storage.db.crud_user import (
     list_users as _list_users,
     get_followers as _get_followers,
     get_following as _get_following,
+    get_top_users_by_followers as _get_top_users_by_followers,
     get_user as _get,
     get_user_by_name as _get_by_name,
     search_users as _search_users,
@@ -105,6 +106,14 @@ def get_followers(db: Session, user_id: str) -> list:
 def get_following(db: Session, user_id: str) -> list:
     """Return users user_id follows."""
     return _get_following(db, user_id)
+
+
+def get_top_users_by_followers(db: Session, limit: int = 20) -> list[dict]:
+    """Return users ranked by active follower count (descending).
+
+    Each dict has ``id``, ``name``, and ``follower_count``.
+    """
+    return _get_top_users_by_followers(db, limit=limit)
 
 
 def search_users(db: Session, query: str, limit: int | None = None, offset: int = 0) -> list:

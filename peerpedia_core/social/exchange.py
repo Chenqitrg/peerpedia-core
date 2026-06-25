@@ -85,6 +85,9 @@ def discover_articles(
 
     Returns count of new articles discovered.  Raises ConnectionError if
     the server is unreachable.  Raises ProtocolError on malformed responses.
+
+    TODO(P2P-sync): needs Ed25519-signed requests to pass server auth.
+    Currently the server returns 401 for unauthenticated discovery.
     """
     data = _fetch_or_raise(
         partial(fetch_user_articles, limit=limit, offset=offset),

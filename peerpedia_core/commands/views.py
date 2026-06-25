@@ -78,7 +78,7 @@ def list_user_article_views(
     db: Session,
     user_id: str,
     *,
-    status: str | None = None,
+    status: str | set[str] | None = None,
     limit: int | None = None,
     offset: int = 0,
 ) -> list[dict]:

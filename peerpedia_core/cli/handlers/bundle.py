@@ -88,6 +88,10 @@ def _cmd_sync_pull(db, args):
     """Pull article updates from a peer server.
 
     args: --server, --json
+
+    TODO(P2P-sync): currently only updates articles that already exist
+    locally.  Add article *discovery* — fetch the server's article list
+    and pull new articles that the user doesn't have yet.
     """
     server = _sync_server(args)
     if not is_online(server):

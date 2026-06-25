@@ -24,5 +24,6 @@ from peerpedia_core.transport.http_client import (
     push_share_remove,
     push_unfollow,
     fetch_peers,
+    fetch_school,
     fetch_shares,
 )

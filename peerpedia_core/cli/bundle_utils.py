@@ -29,6 +29,10 @@ def _try_sync(db, server: str | None = None) -> None:
     Best-effort: network and conflict errors are silent — local state
     is already persisted and manual push can retry later.  Warns on
     each invocation if the server is unreachable.
+
+    TODO(P2P-sync): this pushes local articles but never pulls remote ones.
+    After push, should also pull new articles from followed users and
+    check for updates to existing articles.
     """
     srv = server or os.environ.get("PEERPEDIA_SERVER")
     if not srv:

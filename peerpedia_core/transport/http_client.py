@@ -454,3 +454,17 @@ def fetch_shares(server: str, user_id: str) -> list[dict] | None:
     raise ProtocolError(
         f"fetch_shares: unexpected status {resp.status_code} from {server}"
     )
+
+
+def fetch_peers(server: str) -> list[str]:
+    """GET /api/v1/peers → list of known peer URLs for discovery."""
+    import json as _json
+    client = _get_client(server)
+    try:
+        resp = client.get("/api/v1/peers")
+        resp.raise_for_status()
+        return resp.json().get("peers", [])
+    except (httpx.HTTPError, _json.JSONDecodeError) as e:
+        raise TransportError(
+            f"Failed to fetch peers from {server}: {e}"
+        ) from e

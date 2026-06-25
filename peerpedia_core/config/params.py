@@ -83,6 +83,17 @@ class CommentParams:
 
 
 @dataclass
+class DiscoveryParams:
+    """P2P network discovery parameters."""
+
+    seed_peers: tuple[str, ...] = (
+        "https://seed1.peerpedia.org",
+        "https://seed2.peerpedia.org",
+    )
+    max_known_peers: int = 50
+
+
+@dataclass
 class Params:
     """Aggregate of all tunable parameter groups."""
 
@@ -90,12 +101,14 @@ class Params:
     score: ScoreParams
     reputation: ReputationParams
     comment: CommentParams
+    discovery: DiscoveryParams
 
     def __init__(self):
         self.sink = SinkParams()
         self.score = ScoreParams()
         self.reputation = ReputationParams()
         self.comment = CommentParams()
+        self.discovery = DiscoveryParams()
 
 
 params = Params()

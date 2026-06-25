@@ -6,8 +6,8 @@
 from __future__ import annotations
 
 from peerpedia_core.storage.db import Session
-from peerpedia_core.config.params import PLATFORM_EMAIL, params
-from peerpedia_core.exceptions import BadRequestError, NotAuthorizedError, NotFoundError
+from peerpedia_core.config.params import PLATFORM_EMAIL, make_peerpedia_email, params
+from peerpedia_core.exceptions import BadRequestError, NotAuthorizedError
 from peerpedia_core.policies.articles import (
     assert_article_has_score,
     assert_can_publish_article,
@@ -16,13 +16,12 @@ from peerpedia_core.policies.articles import (
 )
 from peerpedia_core.storage.db.crud_article import (
     count_articles,
-    get_article as _get_article,
     set_sink_start,
     update_article_status,
 )
 from peerpedia_core.storage.db.crud_maintainer import get_maintainer_ids
 from peerpedia_core.storage.db.crud_review import get_review, get_reviews_for_article, upsert_review
-from peerpedia_core.storage.db.crud_user import get_followers, get_user
+from peerpedia_core.storage.db.crud_user import get_followers
 from peerpedia_core.storage.git_backend import (
     DEFAULT_ARTICLES_DIR,
     commit_article,
@@ -33,6 +32,7 @@ from peerpedia_core.commands.integrity import assert_article_integrity
 from peerpedia_core.commands.reviews import write_review_to_git
 from peerpedia_core.commands.notifications import create_notifications_batch
 from peerpedia_core.commands.workflow import recompute_article_score
+from peerpedia_core.commands.articles._helpers import require_article, require_user
 
 
 def publish_article(
@@ -49,13 +49,8 @@ def publish_article(
     Raises NotAuthorizedError if the article is not in draft status.
     Raises BadRequestError if the author has too many articles in sedimentation.
     """
-    user = get_user(db, user_id)
-    if user is None:
-        raise NotFoundError("User not found")
-
-    a = _get_article(db, article_id)
-    if a is None:
-        raise NotFoundError("Article not found")
+    user = require_user(db, user_id)
+    a = require_article(db, article_id)
     mids = get_maintainer_ids(db, article_id)
     assert_not_folded(a, threshold=params.reputation.fold_score_threshold)
     assert_can_publish_article(a, mids, user)
@@ -87,7 +82,7 @@ def publish_article(
         )
 
     write_review_to_git(
-        article_id, user_id, self_review, comment, user.name, f"{user_id}@peerpedia",
+        article_id, user_id, self_review, comment, user.name, make_peerpedia_email(user_id),
         signing_key_bytes=signing_key_bytes, pubkey_hex=pubkey_hex,
     )
 

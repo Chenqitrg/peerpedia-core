@@ -58,12 +58,10 @@ def articles_dir():
             "peerpedia_core.commands.articles.fork",
             "peerpedia_core.commands.articles.publish",
             "peerpedia_core.commands.articles.rollback",
-            "peerpedia_core.commands.articles.update",
             "peerpedia_core.commands.articles._helpers",
         ]
         patches = [
             patch.object(git_backend, "DEFAULT_ARTICLES_DIR", Path(tmp)),
-            patch("peerpedia_core.commands.merge.DEFAULT_ARTICLES_DIR", Path(tmp)),
             patch("peerpedia_core.commands.articles.DEFAULT_ARTICLES_DIR", Path(tmp)),
         ] + [patch(f"{m}.DEFAULT_ARTICLES_DIR", Path(tmp)) for m in _submodules]
         for p in patches:
@@ -192,7 +190,7 @@ class TestAcceptMerge:
         mp = _db_create_mp(db, "art-fork-no-target", target.id, "alice")
         db.flush()
 
-        with pytest.raises(NotFoundError, match="Target article repo not found"):
+        with pytest.raises(NotFoundError, match="Article repo not found"):
             accept_merge(db, target.id, mp.id, "alice")
 
     def test_fork_repo_not_found(self, db, articles_dir):
@@ -209,7 +207,7 @@ class TestAcceptMerge:
         mp = _db_create_mp(db, fork.id, "art-target-no-fork", "alice")
         db.flush()
 
-        with pytest.raises(NotFoundError, match="Fork article repo not found"):
+        with pytest.raises(NotFoundError, match="Article repo not found"):
             accept_merge(db, "art-target-no-fork", mp.id, "alice")
 
     def test_merge_conflict_returns_conflict_status(self, db, articles_dir):

@@ -56,20 +56,24 @@ from pathlib import Path
 
 from peerpedia_core.storage.db import Session
 
-from peerpedia_core.config.params import params
+from peerpedia_core.config.params import make_peerpedia_email, params
 from peerpedia_core.exceptions import BadRequestError, ConflictError, NotFoundError
 from peerpedia_core.policies.articles import (
     assert_can_reply_to_review, assert_can_submit_review, assert_not_folded,
 )
-from peerpedia_core.storage.db.crud_article import get_article, get_author_ids
+from peerpedia_core.storage.db.crud_article import get_author_ids
 from peerpedia_core.storage.db.crud_maintainer import get_maintainer_ids
 from peerpedia_core.storage.db.crud_review import get_reviews_for_article as _get, upsert_review
-from peerpedia_core.storage.db.crud_user import get_user
 from peerpedia_core.names import derive_anonymous_name
-from peerpedia_core.crypto import write_key_to_tempfile
+from peerpedia_core.crypto import temp_signing_key
 from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, commit_article
 from peerpedia_core.storage.locks import get_article_lock
 from peerpedia_core.commands.workflow import recompute_article_score, recompute_author_reputation
+from peerpedia_core.commands.articles._helpers import (
+    require_article,
+    require_article_repo,
+    require_user,
+)
 from peerpedia_core.commands.notifications import create_notification
 from peerpedia_core.types.scores import SCORE_DIMENSIONS
 
@@ -98,13 +102,8 @@ def submit_review(
     """
     assert_valid_review(scores, comment)
 
-    user = get_user(db, reviewer_id)
-    if user is None:
-        raise NotFoundError("Reviewer not found")
-
-    article = get_article(db, article_id)
-    if article is None:
-        raise NotFoundError("Article not found")
+    user = require_user(db, reviewer_id)
+    article = require_article(db, article_id)
     assert_not_folded(article, threshold=params.reputation.fold_score_threshold)
     assert_can_submit_review(article)
 
@@ -113,14 +112,14 @@ def submit_review(
     if article.status == "sedimentation":
         anon_id = _derive_anonymous_id(article_id, signing_key=signing_key_bytes)
         display_name = derive_anonymous_name(anon_id)
-        email = f"anon-{anon_id}@peerpedia"
+        email = make_peerpedia_email(f"anon-{anon_id}")
         commit_hash = write_review_to_git(
             article_id, anon_id, scores, comment, display_name, email,
             signing_key_bytes=signing_key_bytes, pubkey_hex=pubkey_hex,
         )
     else:
         display_name = user.name
-        email = f"{reviewer_id}@peerpedia"
+        email = make_peerpedia_email(reviewer_id)
         commit_hash = write_review_to_git(
             article_id, reviewer_id, scores, comment, display_name, email,
             signing_key_bytes=signing_key_bytes, pubkey_hex=pubkey_hex,
@@ -165,9 +164,7 @@ def invite_reviewer(
     Raises ConflictError if the user has already been invited.
     """
     from datetime import datetime, timezone
-    article = get_article(db, article_id)
-    if article is None:
-        raise NotFoundError("Article not found")
+    article = require_article(db, article_id)
     if article.status != "sedimentation":
         raise BadRequestError("Can only invite reviewers to articles in sedimentation")
 
@@ -175,9 +172,7 @@ def invite_reviewer(
     if inviter_id not in mids:
         raise NotAuthorizedError("Only article maintainers can invite reviewers")
 
-    invited_user = get_user(db, invited_id)
-    if invited_user is None:
-        raise NotFoundError("Invited user not found")
+    invited_user = require_user(db, invited_id)
 
     # Check for duplicate invitation
     existing = _get(db, article_id)
@@ -228,17 +223,9 @@ def submit_reply(
 
     Raises NotFoundError if the user, article, or reviewer is not found.
     """
-    user = get_user(db, user_id)
-    if user is None:
-        raise NotFoundError("User not found")
-
-    article = get_article(db, article_id)
-    if article is None:
-        raise NotFoundError("Article not found")
-
-    reviewer = get_user(db, reviewer_ref)
-    if reviewer is None:
-        raise NotFoundError("Reviewer not found")
+    user = require_user(db, user_id)
+    article = require_article(db, article_id)
+    reviewer = require_user(db, reviewer_ref)
 
     mids = get_maintainer_ids(db, article_id)
     assert_can_reply_to_review(
@@ -249,11 +236,11 @@ def submit_reply(
     if article.status == "sedimentation":
         directory_id = _derive_anonymous_id(article_id, signing_key=signing_key_bytes)
         display_name = derive_anonymous_name(directory_id)
-        email = f"anon-{directory_id}@peerpedia"
+        email = make_peerpedia_email(f"anon-{directory_id}")
     else:
         directory_id = reviewer_ref
         display_name = user.name
-        email = f"{user_id}@peerpedia"
+        email = make_peerpedia_email(user_id)
 
     commit_hash = _write_thread_message(
         article_id, directory_id, content, display_name, email,
@@ -338,10 +325,7 @@ def _write_thread_message(
     *commit_marker* is ``"[review]"`` for reviewer messages or ``"[reply]"``
     for author replies.
     """
-    rp = DEFAULT_ARTICLES_DIR / article_id
-    if not (rp / ".git").is_dir():
-        raise NotFoundError(f"Article repo not found: {article_id}")
-
+    rp = require_article_repo(article_id)
     threads_dir = rp / "reviews" / directory_id / "threads"
     threads_dir.mkdir(parents=True, exist_ok=True)
 
@@ -357,15 +341,17 @@ def _write_thread_message(
         thread_path = threads_dir / f"{next_num:03d}.md"
         thread_path.write_text(f"### {display_name} ({ts})\n\n{content}\n")
 
-        key_path = write_key_to_tempfile(signing_key_bytes) if signing_key_bytes else None
-        try:
+        if signing_key_bytes:
+            with temp_signing_key(signing_key_bytes) as key_path:
+                h = commit_article(
+                    rp, f"{commit_marker} {display_name}", display_name, email,
+                    signing_key=key_path, pubkey_hex=pubkey_hex,
+                )
+        else:
             h = commit_article(
                 rp, f"{commit_marker} {display_name}", display_name, email,
-                signing_key=key_path, pubkey_hex=pubkey_hex,
+                signing_key=None, pubkey_hex=pubkey_hex,
             )
-        finally:
-            if key_path:
-                key_path.unlink(missing_ok=True)
     finally:
         lock.release()
     return h
@@ -386,9 +372,6 @@ def write_review_to_git(
     Raises NotFoundError if the article repo does not exist.
     """
     rp = DEFAULT_ARTICLES_DIR / article_id
-    if not (rp / ".git").is_dir():
-        raise NotFoundError(f"Article repo not found: {article_id}")
-
     review_dir = rp / "reviews" / directory_id
     review_dir.mkdir(parents=True, exist_ok=True)
 
@@ -426,10 +409,7 @@ def rate_review_helpfulness(
     Raises NotAuthorizedError if the rater is not a maintainer.
     Raises BadRequestError if the score is outside 1-5 range.
     """
-    article = get_article(db, article_id)
-    if article is None:
-        raise NotFoundError("Article not found")
-
+    article = require_article(db, article_id)
     mids = get_maintainer_ids(db, article_id)
     if rater_id not in mids:
         raise NotAuthorizedError("Only article maintainers can rate reviews")

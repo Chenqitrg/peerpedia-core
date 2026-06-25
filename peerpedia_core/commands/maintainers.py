@@ -32,6 +32,7 @@ from peerpedia_core.storage.db.crud_article import (
 )
 from peerpedia_core.storage.db.models import Article
 from peerpedia_core.storage.db import crud_maintainer
+from peerpedia_core.commands.articles._helpers import _assert_caller_is_maintainer
 from peerpedia_core.storage.db.crud_user import get_user
 
 
@@ -101,20 +102,6 @@ def list_maintainers(db: Session, article_id: str) -> list[str]:
     if article is None:
         raise NotFoundError("Article not found")
     return crud_maintainer.get_maintainer_ids(db, article_id)
-
-
-def _assert_caller_is_maintainer(db: Session, article_id: str, caller_id: str) -> None:
-    """Raise if *caller_id* is not a maintainer of *article_id*."""
-    caller = get_user(db, caller_id)
-    if caller is None:
-        raise NotFoundError("Caller not found")
-    article = get_article(db, article_id)
-    if article is None:
-        raise NotFoundError("Article not found")
-    if not crud_maintainer.is_maintainer(db, article_id, caller_id):
-        raise NotAuthorizedError(
-            f"User {caller_id} is not a maintainer of script {article_id}"
-        )
 
 
 def consent_to_publish(db: Session, article_id: str, user_id: str) -> dict:

@@ -19,7 +19,9 @@ import os
 import secrets
 import struct
 import tempfile
+from contextlib import contextmanager
 from pathlib import Path
+from typing import Generator
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import serialization
@@ -117,6 +119,8 @@ def write_key_to_tempfile(private_key_bytes: bytes) -> Path:
     Serializes raw key bytes to OpenSSH format so ``ssh-keygen`` can use
     the file for git commit signing.  Callers MUST unlink the returned
     path after use.
+
+    Prefer ``temp_signing_key`` — the context manager that handles cleanup.
     """
     priv_pem = serialize_private_key_pem(private_key_bytes)
     fd, path = tempfile.mkstemp(suffix="_peerpedia_ed25519")
@@ -128,6 +132,25 @@ def write_key_to_tempfile(private_key_bytes: bytes) -> Path:
         Path(path).unlink(missing_ok=True)
         raise
     return Path(path)
+
+
+@contextmanager
+def temp_signing_key(private_key_bytes: bytes) -> Generator[Path, None, None]:
+    """Context manager that writes a temp key file and cleans it up on exit.
+
+    Usage::
+
+        with temp_signing_key(signing_key_bytes) as key_path:
+            commit_hash = commit_article(rp, ..., signing_key=key_path, ...)
+
+    Replaces the repeated ``write_key_to_tempfile / try / finally / unlink``
+    pattern that appears in 4 places.
+    """
+    key_path = write_key_to_tempfile(private_key_bytes)
+    try:
+        yield key_path
+    finally:
+        key_path.unlink(missing_ok=True)
 
 
 def new_salt() -> str:

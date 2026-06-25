@@ -8,7 +8,7 @@ from __future__ import annotations
 from peerpedia_core.cli.helpers import (
     _with_db, _get_session_user, _get_session_key, _open_editor, _parse_scores,
     _page, _resolve_article_id, _resolve_user, _ok, _die, _json_out,
-    DEFAULT_ARTICLES_DIR,
+    _empty_state, DEFAULT_ARTICLES_DIR,
 )
 from peerpedia_core.cli.display import _stars, console
 from peerpedia_core.cli.bundle_utils import _try_sync
@@ -57,7 +57,7 @@ def _cmd_review_list(db, args):
         _json_out([{"id": r.id, "reviewer_id": r.reviewer_id, "scores": r.scores} for r in reviews])
         return
     if not reviews:
-        console.print("[muted]No reviews yet.[/]")
+        _empty_state("No reviews yet.")
         return
 
     show_mode = getattr(args, "show", "meta")

@@ -61,7 +61,7 @@ from typing import Optional
 
 from peerpedia_core.exceptions import BadRequestError, ConflictError, NotAuthorizedError
 from peerpedia_core.storage.db.models import Article, Review, User
-from peerpedia_core.types.scores import SCORE_DIMENSIONS, FiveDimScores
+from peerpedia_core.types.scores import FiveDimScores, SCORE_DIMENSIONS
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Visibility rules
@@ -343,6 +343,7 @@ def assert_can_fork_article(
 
 # Abbreviated keys (CLI input) and full-name keys (internal representation).
 # Derived from SCORE_DIMENSIONS (types/scores.py) — single source of truth.
+# Duplicated from commands/reviews.py because policies cannot import from commands.
 _FULL_DIMS = set(SCORE_DIMENSIONS.values())
 _ABBR_DIMS = set(SCORE_DIMENSIONS.keys())
 _DIMS_LIST = ", ".join(sorted(SCORE_DIMENSIONS.keys()))

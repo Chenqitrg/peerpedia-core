@@ -62,6 +62,47 @@ def _api_url(server: str, article_id: str) -> str:
     return f"{server}/api/v1/articles/{article_id}"
 
 
+def _encode_body(data: dict) -> bytes:
+    """Serialize a dict to JSON bytes for HTTP request bodies."""
+    return json.dumps(data).encode("utf-8")
+
+
+def _json_or_none(resp: httpx.Response, server: str, context: str) -> dict | list | None:
+    """Parse a 200/404 response: JSON on 200, None on 404, ProtocolError otherwise."""
+    if resp.status_code == 200:
+        try:
+            return resp.json()
+        except json.JSONDecodeError as e:
+            raise ProtocolError(f"Malformed JSON from {server} for {context}") from e
+    if resp.status_code == 404:
+        return None
+    raise ProtocolError(f"{context}: unexpected status {resp.status_code} from {server}")
+
+
+def _signed_post(
+    server: str, path: str, body_dict: dict, user_id: str, *,
+    private_key_bytes: bytes | None = None,
+    pubkey_hex: str = "",
+    label: str = "",
+) -> bool:
+    """POST to a peer with Ed25519 auth. Returns True on 200, False on 404."""
+    body = _encode_body(body_dict)
+    headers: dict[str, str] = {}
+    if private_key_bytes:
+        headers["Authorization"] = sign_auth_header(
+            "POST", path, user_id, private_key_bytes, pubkey_hex=pubkey_hex, body=body,
+        )
+    try:
+        resp = _get_client().post(f"{server}{path}", content=body, headers=headers)
+    except httpx.HTTPError as e:
+        raise TransportError(f"{label} failed for {user_id} at {server}: {e}") from e
+    if resp.status_code == 200:
+        return True
+    if resp.status_code == 404:
+        return False
+    raise ProtocolError(f"{label}: unexpected status {resp.status_code} from {server}")
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Article sync
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -94,14 +135,10 @@ def fetch_head(server: str, article_id: str) -> str | None:
     except httpx.HTTPError as e:
         raise TransportError(f"fetch_head failed for {article_id} at {server}: {e}") from e
 
-    if resp.status_code == 200:
-        try:
-            return resp.json().get("hash")
-        except json.JSONDecodeError as e:
-            raise ProtocolError(f"Malformed JSON from {server} for {article_id}/head") from e
-    if resp.status_code == 404:
-        return None
-    raise ProtocolError(f"fetch_head: unexpected status {resp.status_code} from {server}")
+    data = _json_or_none(resp, server, "fetch_head")
+    if data is not None:
+        return data.get("hash")
+    return None
 
 
 def push_bundle(server: str, article_id: str, bundle_bytes: bytes) -> None:
@@ -149,14 +186,10 @@ def fetch_article_repo(server: str, article_id: str) -> str | None:
     except httpx.HTTPError as e:
         raise TransportError(f"fetch_article_repo failed for {article_id} at {server}: {e}") from e
 
-    if resp.status_code == 200:
-        try:
-            return resp.json().get("repo_bundle")
-        except json.JSONDecodeError as e:
-            raise ProtocolError(f"Malformed JSON from {server} for {article_id}/repo") from e
-    if resp.status_code == 404:
-        return None
-    raise ProtocolError(f"fetch_article_repo: unexpected status {resp.status_code} from {server}")
+    data = _json_or_none(resp, server, "fetch_article_repo")
+    if data is not None:
+        return data.get("repo_bundle")
+    return None
 
 
 def push_article_repo(server: str, article_id: str, bundle_b64: str) -> bool:
@@ -184,15 +217,10 @@ def fetch_article_source(server: str, article_id: str) -> tuple[str, str] | None
     except httpx.HTTPError as e:
         raise TransportError(f"fetch_article_source failed for {article_id} at {server}: {e}") from e
 
-    if resp.status_code == 200:
-        try:
-            data = resp.json()
-            return data.get("content"), data.get("format", "markdown")
-        except json.JSONDecodeError as e:
-            raise ProtocolError(f"Malformed JSON from {server} for {article_id}/source") from e
-    if resp.status_code == 404:
-        return None
-    raise ProtocolError(f"fetch_article_source: unexpected status {resp.status_code} from {server}")
+    data = _json_or_none(resp, server, "fetch_article_source")
+    if data is not None:
+        return data.get("content"), data.get("format", "markdown")
+    return None
 
 
 def fetch_search(
@@ -228,14 +256,10 @@ def fetch_following(server: str, user_id: str) -> list[dict] | None:
     except httpx.HTTPError as e:
         raise TransportError(f"fetch_following failed for {user_id} at {server}: {e}") from e
 
-    if resp.status_code == 200:
-        try:
-            return resp.json()
-        except json.JSONDecodeError as e:
-            raise ProtocolError(f"Malformed JSON from {server} for users/{user_id}/following") from e
-    if resp.status_code == 404:
-        return None
-    raise ProtocolError(f"fetch_following: unexpected status {resp.status_code} from {server}")
+    data = _json_or_none(resp, server, "fetch_following")
+    if data is not None:
+        return data
+    return None
 
 
 def fetch_followers(server: str, user_id: str) -> list[dict] | None:
@@ -245,54 +269,38 @@ def fetch_followers(server: str, user_id: str) -> list[dict] | None:
     except httpx.HTTPError as e:
         raise TransportError(f"fetch_followers failed for {user_id} at {server}: {e}") from e
 
-    if resp.status_code == 200:
-        try:
-            return resp.json()
-        except json.JSONDecodeError as e:
-            raise ProtocolError(f"Malformed JSON from {server} for users/{user_id}/followers") from e
-    if resp.status_code == 404:
-        return None
-    raise ProtocolError(f"fetch_followers: unexpected status {resp.status_code} from {server}")
+    data = _json_or_none(resp, server, "fetch_followers")
+    if data is not None:
+        return data
+    return None
 
 
 def push_follow(server: str, follower_id: str, followed_id: str, *,
                 private_key_bytes: bytes | None = None,
                 pubkey_hex: str = "") -> bool:
     """POST /users/{follower_id}/follow → True on success, False if not found."""
-    path = f"/api/v1/users/{follower_id}/follow"
-    body = json.dumps({"followed_id": followed_id}).encode("utf-8")
-    headers: dict[str, str] = {}
-    if private_key_bytes:
-        headers["Authorization"] = sign_auth_header("POST", path, follower_id, private_key_bytes, pubkey_hex=pubkey_hex, body=body)
-    try:
-        resp = _get_client().post(f"{server}{path}", content=body, headers=headers)
-    except httpx.HTTPError as e:
-        raise TransportError(f"push_follow failed for {follower_id} at {server}: {e}") from e
-    if resp.status_code == 200:
-        return True
-    if resp.status_code == 404:
-        return False
-    raise ProtocolError(f"push_follow: unexpected status {resp.status_code} from {server}")
+    return _signed_post(
+        server, f"/api/v1/users/{follower_id}/follow",
+        {"followed_id": followed_id},
+        follower_id,
+        private_key_bytes=private_key_bytes,
+        pubkey_hex=pubkey_hex,
+        label="push_follow",
+    )
 
 
 def push_unfollow(server: str, follower_id: str, followed_id: str, *,
                   private_key_bytes: bytes | None = None,
                   pubkey_hex: str = "") -> bool:
     """POST /users/{follower_id}/unfollow → True on success, False if not found."""
-    path = f"/api/v1/users/{follower_id}/unfollow"
-    body = json.dumps({"followed_id": followed_id}).encode("utf-8")
-    headers: dict[str, str] = {}
-    if private_key_bytes:
-        headers["Authorization"] = sign_auth_header("POST", path, follower_id, private_key_bytes, pubkey_hex=pubkey_hex, body=body)
-    try:
-        resp = _get_client().post(f"{server}{path}", content=body, headers=headers)
-    except httpx.HTTPError as e:
-        raise TransportError(f"push_unfollow failed for {follower_id} at {server}: {e}") from e
-    if resp.status_code == 200:
-        return True
-    if resp.status_code == 404:
-        return False
-    raise ProtocolError(f"push_unfollow: unexpected status {resp.status_code} from {server}")
+    return _signed_post(
+        server, f"/api/v1/users/{follower_id}/unfollow",
+        {"followed_id": followed_id},
+        follower_id,
+        private_key_bytes=private_key_bytes,
+        pubkey_hex=pubkey_hex,
+        label="push_unfollow",
+    )
 
 
 def fetch_article_meta(server: str, article_id: str) -> dict | None:
@@ -301,14 +309,10 @@ def fetch_article_meta(server: str, article_id: str) -> dict | None:
         resp = _get_client().get(f"{_api_url(server, article_id)}")
     except httpx.HTTPError as e:
         raise TransportError(f"fetch_article_meta failed for {article_id} at {server}: {e}") from e
-    if resp.status_code == 200:
-        try:
-            return resp.json()
-        except json.JSONDecodeError as e:
-            raise ProtocolError(f"Malformed JSON from {server} for {article_id}") from e
-    if resp.status_code == 404:
-        return None
-    raise ProtocolError(f"fetch_article_meta: unexpected status {resp.status_code} from {server}")
+    data = _json_or_none(resp, server, "fetch_article_meta")
+    if data is not None:
+        return data
+    return None
 
 
 def fetch_user_articles(server: str, user_id: str, limit: int = 20, offset: int = 0) -> list[dict] | None:
@@ -320,14 +324,10 @@ def fetch_user_articles(server: str, user_id: str, limit: int = 20, offset: int 
         )
     except httpx.HTTPError as e:
         raise TransportError(f"fetch_user_articles failed for {user_id} at {server}: {e}") from e
-    if resp.status_code == 200:
-        try:
-            return resp.json()
-        except json.JSONDecodeError as e:
-            raise ProtocolError(f"Malformed JSON from {server} for users/{user_id}/articles") from e
-    if resp.status_code == 404:
-        return None
-    raise ProtocolError(f"fetch_user_articles: unexpected status {resp.status_code} from {server}")
+    data = _json_or_none(resp, server, "fetch_user_articles")
+    if data is not None:
+        return data
+    return None
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -348,25 +348,13 @@ def push_key_rotation(
     """
     if not private_key_bytes:
         raise ValueError("private_key_bytes is required for key rotation")
-    path = f"/api/v1/users/{user_id}/rotate-key"
-    body = json.dumps({"public_key": new_pubkey_hex}).encode("utf-8")
-    headers: dict[str, str] = {
-        "Authorization": sign_auth_header(
-            "POST", path, user_id, private_key_bytes, pubkey_hex=pubkey_hex, body=body,
-        ),
-    }
-    try:
-        resp = _get_client().post(f"{server}{path}", content=body, headers=headers)
-    except httpx.HTTPError as e:
-        raise TransportError(
-            f"push_key_rotation failed for {user_id} at {server}: {e}"
-        ) from e
-    if resp.status_code == 200:
-        return True
-    if resp.status_code == 404:
-        return False
-    raise ProtocolError(
-        f"push_key_rotation: unexpected status {resp.status_code} from {server}"
+    return _signed_post(
+        server, f"/api/v1/users/{user_id}/rotate-key",
+        {"public_key": new_pubkey_hex},
+        user_id,
+        private_key_bytes=private_key_bytes,
+        pubkey_hex=pubkey_hex,
+        label="push_key_rotation",
     )
 
 
@@ -384,29 +372,13 @@ def push_share(
     """POST /api/v1/users/{sharer_id}/share → True on success."""
     if not private_key_bytes:
         raise ValueError("private_key_bytes is required for share push")
-    path = f"/api/v1/users/{sharer_id}/share"
-    body = json.dumps({
-        "article_id": article_id,
-        "recipient_id": recipient_id,
-        "comment": comment,
-    }).encode("utf-8")
-    headers: dict[str, str] = {}
-    if private_key_bytes:
-        headers["Authorization"] = sign_auth_header(
-            "POST", path, sharer_id, private_key_bytes, pubkey_hex=pubkey_hex, body=body,
-        )
-    try:
-        resp = _get_client().post(f"{server}{path}", content=body, headers=headers)
-    except httpx.HTTPError as e:
-        raise TransportError(
-            f"push_share failed for {sharer_id} at {server}: {e}"
-        ) from e
-    if resp.status_code == 200:
-        return True
-    if resp.status_code == 404:
-        return False
-    raise ProtocolError(
-        f"push_share: unexpected status {resp.status_code} from {server}"
+    return _signed_post(
+        server, f"/api/v1/users/{sharer_id}/share",
+        {"article_id": article_id, "recipient_id": recipient_id, "comment": comment},
+        sharer_id,
+        private_key_bytes=private_key_bytes,
+        pubkey_hex=pubkey_hex,
+        label="push_share",
     )
 
 
@@ -423,7 +395,7 @@ def push_share_remove(
     if not private_key_bytes:
         raise ValueError("private_key_bytes is required for share removal")
     path = f"/api/v1/users/{sharer_id}/share"
-    body = json.dumps({"article_id": article_id}).encode("utf-8")
+    body = _encode_body({"article_id": article_id})
     headers: dict[str, str] = {
         "Authorization": sign_auth_header(
             "DELETE", path, sharer_id, private_key_bytes, pubkey_hex=pubkey_hex, body=body,
@@ -454,18 +426,10 @@ def fetch_shares(server: str, user_id: str) -> list[dict] | None:
         raise TransportError(
             f"fetch_shares failed for {user_id} at {server}: {e}"
         ) from e
-    if resp.status_code == 200:
-        try:
-            return resp.json()
-        except json.JSONDecodeError as e:
-            raise ProtocolError(
-                f"Malformed JSON from {server} for users/{user_id}/shares"
-            ) from e
-    if resp.status_code == 404:
-        return None
-    raise ProtocolError(
-        f"fetch_shares: unexpected status {resp.status_code} from {server}"
-    )
+    data = _json_or_none(resp, server, "fetch_shares")
+    if data is not None:
+        return data
+    return None
 
 
 def fetch_peers(server: str) -> list[str]:

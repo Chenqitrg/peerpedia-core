@@ -48,16 +48,20 @@ from peerpedia_core.storage.db import Session
 from peerpedia_core.config.params import params
 from peerpedia_core.exceptions import BadRequestError, NotAuthorizedError, NotFoundError
 from peerpedia_core.policies.articles import assert_can_accept_merge, assert_not_folded
-from peerpedia_core.storage.db.crud_article import get_article, get_author_ids, set_sink_start
 from peerpedia_core.storage.db.crud_maintainer import get_maintainer_ids
 from peerpedia_core.storage.db.crud_merge import (
     accept_merge_proposal, get_merge_proposal, withdraw_merge_proposal as _withdraw,
 )
-from peerpedia_core.storage.db.crud_user import get_user
 from peerpedia_core.storage.db.crud_merge import create_merge_proposal as _create
+from peerpedia_core.commands.articles._helpers import (
+    _reset_sink,
+    require_article,
+    require_article_repo,
+    require_user,
+)
 from peerpedia_core.commands.notifications import create_notification
 from peerpedia_core.storage.git_backend import (
-    DEFAULT_ARTICLES_DIR, MergeConflictError, commit_status_marker,
+    MergeConflictError,
     get_head_hash, merge_git_repos,
 )
 
@@ -70,31 +74,22 @@ def accept_merge(db: Session, article_id: str, proposal_id: str, user_id: str) -
     Raises NotFoundError if the user, proposal, article, or repo is not found.
     Raises BadRequestError if the proposal does not belong to this article or is not open.
     """
-    user = get_user(db, user_id)
-    if user is None:
-        raise NotFoundError("User not found")
+    user = require_user(db, user_id)
 
     mp = get_merge_proposal(db, proposal_id)
     if mp is None:
         raise NotFoundError("Merge proposal not found")
     if mp.target_article_id != article_id:
         raise BadRequestError("Proposal does not belong to this article")
-    article = get_article(db, article_id)
-    if article is None:
-        raise NotFoundError("Article not found")
+    article = require_article(db, article_id)
     mids = get_maintainer_ids(db, article_id)
     assert_can_accept_merge(article, mids, user)
     assert_not_folded(article, threshold=params.reputation.fold_score_threshold)
 
     was_published = article.status == "published"
 
-    target_repo = DEFAULT_ARTICLES_DIR / article_id
-    fork_repo = DEFAULT_ARTICLES_DIR / mp.fork_article_id
-
-    if not (target_repo / ".git").is_dir():
-        raise NotFoundError(f"Target article repo not found: {article_id}")
-    if not (fork_repo / ".git").is_dir():
-        raise NotFoundError(f"Fork article repo not found: {mp.fork_article_id}")
+    target_repo = require_article_repo(article_id)
+    fork_repo = require_article_repo(mp.fork_article_id)
 
     # Validate proposal is still open BEFORE the git merge.  The
     # _resolve() inside accept_merge_proposal checks again for defense-in-depth,
@@ -120,8 +115,7 @@ def accept_merge(db: Session, article_id: str, proposal_id: str, user_id: str) -
         # Record status transition in git so it survives P2P sync.
         # The merge itself is already committed — this is an empty commit
         # that marks the re-sedimentation triggered by the merge.
-        commit_status_marker(target_repo, "sedimentation")
-        set_sink_start(db, article_id, params.sink.edit_article_default_days)
+        _reset_sink(db, article_id, target_repo, params.sink.edit_article_default_days)
 
     head_hash = get_head_hash(target_repo)
 
@@ -141,8 +135,8 @@ def accept_merge(db: Session, article_id: str, proposal_id: str, user_id: str) -
 
 def create_merge_proposal(db: Session, fork_id: str, target_id: str, proposer_id: str):
     """Create a merge proposal and notify target article maintainers."""
-    proposer = get_user(db, proposer_id)
-    proposer_name = proposer.name if proposer else "A user"
+    proposer = require_user(db, proposer_id)
+    proposer_name = proposer.name
 
     mp = _create(db, fork_id, target_id, proposer_id)
 

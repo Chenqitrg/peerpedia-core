@@ -210,24 +210,27 @@ def update_article_compiled(
     html_format: str,
     output: str | None,
     pages: list[str] | None,
-) -> Article:
+) -> None:
     """Cache compiled output (HTML/PDF/etc.) for an article.
 
-    Called by the compiler pipeline after rendering.  Not yet wired into
-    the production compiler path — currently only exercised in tests.
+    Uses targeted UPDATE to avoid loading ``compiled_output`` (which may
+    be 100KB+).  Called by the compiler pipeline after rendering.  Not yet
+    wired into the production compiler path — currently only exercised in
+    tests.
+
+    Raises NotFoundError if the article does not exist.
     """
-    a = session.get(Article, article_id)
-    if a is None:
-        raise ValueError(f"Article {article_id} not found")
-    a.compiled_format = html_format
-    a.compiled_output = output
-    a.compiled_pages = pages
-    session.flush()
-    return a
+    rows = session.query(Article).filter(Article.id == article_id).update(
+        {"compiled_format": html_format, "compiled_output": output, "compiled_pages": pages},
+        synchronize_session="fetch",
+    )
+    if rows == 0:
+        raise NotFoundError("Article not found", resource_type="article", resource_id=article_id)
+    session.expire_all()
 
 
 def update_article_status(session: Session, article_id: str, new_status: str) -> None:
-    """Transition *article_id* to *new_status*.  Raises ValueError if not found.
+    """Transition *article_id* to *new_status*.  Raises NotFoundError if not found.
 
     Uses targeted UPDATE to avoid loading ``compiled_output`` (which may
     be 100KB+).  Expires the session afterward so subsequent ``get()``
@@ -240,44 +243,47 @@ def update_article_status(session: Session, article_id: str, new_status: str) ->
         {"status": new_status}, synchronize_session="fetch"
     )
     if rows == 0:
-        raise ValueError(f"Article {article_id} not found")
+        raise NotFoundError("Article not found", resource_type="article", resource_id=article_id)
     session.expire_all()
 
 
 def update_article_score(session: Session, article_id: str, score: dict) -> None:
-    """Set the computed score for an article. Raises ValueError if not found."""
+    """Set the computed score for an article. Raises NotFoundError if not found."""
     rows = session.query(Article).filter(Article.id == article_id).update(
         {"score": score}, synchronize_session="fetch"
     )
     if rows == 0:
-        raise ValueError(f"Article {article_id} not found")
+        raise NotFoundError("Article not found", resource_type="article", resource_id=article_id)
     session.expire_all()
 
 
 def increment_fork_count(session: Session, article_id: str) -> None:
-    """Atomically increment ``fork_count`` by 1. Raises ValueError if not found."""
+    """Atomically increment ``fork_count`` by 1. Raises NotFoundError if not found."""
     rows = session.query(Article).filter(Article.id == article_id).update(
         {"fork_count": Article.fork_count + 1}, synchronize_session="fetch"
     )
     if rows == 0:
-        raise ValueError(f"Article {article_id} not found")
+        raise NotFoundError("Article not found", resource_type="article", resource_id=article_id)
     session.expire_all()
 
 
 def decrement_fork_count(session: Session, article_id: str) -> None:
-    """Atomically decrement ``fork_count`` by 1 (floor at 0). Raises ValueError if not found."""
+    """Atomically decrement ``fork_count`` by 1 (floor at 0). Raises NotFoundError if not found."""
     from sqlalchemy import case
     rows = session.query(Article).filter(Article.id == article_id).update(
         {"fork_count": case((Article.fork_count > 0, Article.fork_count - 1), else_=0)},
         synchronize_session="fetch",
     )
     if rows == 0:
-        raise ValueError(f"Article {article_id} not found")
+        raise NotFoundError("Article not found", resource_type="article", resource_id=article_id)
     session.expire_all()
 
 
 def set_sink_start(session: Session, article_id: str, duration_days: int) -> None:
-    """Enter sedimentation and start the sink timer (targeted UPDATE)."""
+    """Enter sedimentation and start the sink timer (targeted UPDATE).
+
+    Raises NotFoundError if the article does not exist.
+    """
     from datetime import datetime, timezone
 
     rows = session.query(Article).filter(Article.id == article_id).update(
@@ -286,7 +292,7 @@ def set_sink_start(session: Session, article_id: str, duration_days: int) -> Non
         synchronize_session="fetch",
     )
     if rows == 0:
-        raise ValueError(f"Article {article_id} not found")
+        raise NotFoundError("Article not found", resource_type="article", resource_id=article_id)
     session.expire_all()
 
 
@@ -298,7 +304,7 @@ def delete_article(session: Session, article_id: str) -> None:
     should clean up the article's git directory separately via
     ``git_backend.delete_article_repo()``.
 
-    Raises ValueError if the article does not exist.
+    Raises NotFoundError if the article does not exist.
     """
     # Delete related records
     session.query(ArticleAuthor).filter(ArticleAuthor.article_id == article_id).delete()
@@ -312,7 +318,7 @@ def delete_article(session: Session, article_id: str) -> None:
 
     rows = session.query(Article).filter(Article.id == article_id).delete()
     if rows == 0:
-        raise ValueError(f"Article {article_id} not found")
+        raise NotFoundError("Article not found", resource_type="article", resource_id=article_id)
     session.flush()
     session.expire_all()
 
@@ -329,7 +335,7 @@ def extend_sink(session: Session, article_id: str, extra_days: int, max_days: in
         Article.id == article_id
     ).first()
     if row is None:
-        raise ValueError(f"Article {article_id} not found")
+        raise NotFoundError("Article not found", resource_type="article", resource_id=article_id)
     old_total, old_count = row
     new_total = min(old_total + extra_days, max_days)
     extended_count = old_count + 1 if new_total > old_total else old_count
@@ -362,7 +368,7 @@ def update_witnessed_at(session: Session, article_id: str) -> None:
     proves "this article had this commit by this time," defending against
     local clock manipulation for priority claims.
 
-    Raises ``ValueError`` if *article_id* does not exist.
+    Raises ``NotFoundError`` if *article_id* does not exist.
     """
     from datetime import datetime, timezone
 
@@ -371,22 +377,28 @@ def update_witnessed_at(session: Session, article_id: str) -> None:
         synchronize_session="fetch",
     )
     if rows == 0:
-        raise ValueError(f"Article {article_id} not found")
+        raise NotFoundError("Article not found", resource_type="article", resource_id=article_id)
     session.expire_all()
 
 
 # ── Publish consent ─────────────────────────────────────────────────────
 
 
+def _get_article_or_raise(session: Session, article_id: str) -> Article:
+    """Return an article or raise NotFoundError."""
+    article = session.get(Article, article_id)
+    if article is None:
+        raise NotFoundError("Article not found", resource_type="article", resource_id=article_id)
+    return article
+
+
 def add_publish_consent(session: Session, article_id: str, user_id: str) -> None:
     """Record a maintainer's consent to publish/merge.
 
     Appends *user_id* to ``publish_consents`` if not already present.
-    Raises ValueError if article not found.
+    Raises NotFoundError if article not found.
     """
-    article = session.get(Article, article_id)
-    if article is None:
-        raise NotFoundError("Article not found", resource_type="article", resource_id=article_id)
+    article = _get_article_or_raise(session, article_id)
     consents = list(article.publish_consents or [])
     if user_id not in consents:
         consents.append(user_id)
@@ -399,9 +411,7 @@ def remove_publish_consent(session: Session, article_id: str, user_id: str) -> N
 
     No-op if the consent was not recorded.  Raises NotFoundError if article not found.
     """
-    article = session.get(Article, article_id)
-    if article is None:
-        raise NotFoundError("Article not found", resource_type="article", resource_id=article_id)
+    article = _get_article_or_raise(session, article_id)
     consents = list(article.publish_consents or [])
     if user_id in consents:
         consents.remove(user_id)
@@ -410,10 +420,11 @@ def remove_publish_consent(session: Session, article_id: str, user_id: str) -> N
 
 
 def clear_publish_consents(session: Session, article_id: str) -> None:
-    """Clear all publish consents (e.g. after content edit or publish)."""
-    article = session.get(Article, article_id)
-    if article is None:
-        raise ValueError(f"Article {article_id} not found")
+    """Clear all publish consents (e.g. after content edit or publish).
+
+    Raises NotFoundError if article not found.
+    """
+    article = _get_article_or_raise(session, article_id)
     article.publish_consents = None
     session.flush()
 

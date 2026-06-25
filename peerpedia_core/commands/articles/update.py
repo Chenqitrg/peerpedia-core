@@ -6,22 +6,25 @@
 from __future__ import annotations
 
 from peerpedia_core.storage.db import Session
-from peerpedia_core.config.params import params
-from peerpedia_core.exceptions import BadRequestError, NotFoundError
+from peerpedia_core.config.params import make_peerpedia_email, params
+from peerpedia_core.exceptions import BadRequestError
 from peerpedia_core.frontmatter import make_article_frontmatter, strip_frontmatter
 from peerpedia_core.policies.articles import assert_can_edit_article, assert_not_folded
 from peerpedia_core.commands.integrity import assert_article_integrity
 from peerpedia_core.commands.trailers import parse_closes_trailer, validate_closes_target
 from peerpedia_core.storage.db.crud_article import (
     clear_publish_consents,
-    get_article as _get_article,
-    set_sink_start,
 )
 from peerpedia_core.storage.db.crud_maintainer import get_maintainer_ids
-from peerpedia_core.storage.db.crud_user import get_user
-from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, commit_article, commit_status_marker
-from peerpedia_core.crypto import write_key_to_tempfile
-from peerpedia_core.commands.articles._helpers import rebuild_article_authors
+from peerpedia_core.storage.git_backend import commit_article
+from peerpedia_core.crypto import temp_signing_key
+from peerpedia_core.commands.articles._helpers import (
+    _reset_sink,
+    rebuild_article_authors,
+    require_article,
+    require_article_repo,
+    require_user,
+)
 
 
 def update_article_content(
@@ -41,13 +44,8 @@ def update_article_content(
     """
     assert_article_integrity(db, article_id, level="light")
 
-    user = get_user(db, user_id)
-    if user is None:
-        raise NotFoundError("User not found")
-
-    a = _get_article(db, article_id)
-    if a is None:
-        raise NotFoundError("Article not found")
+    user = require_user(db, user_id)
+    a = require_article(db, article_id)
     mids = get_maintainer_ids(db, article_id)
     assert_not_folded(a, threshold=params.reputation.fold_score_threshold)
     assert_can_edit_article(a, mids, user)
@@ -72,9 +70,7 @@ def update_article_content(
                 f"Closes target not found: review/{reviewer_dir}/thread-{thread_num:03d}"
             )
 
-    rp = DEFAULT_ARTICLES_DIR / article_id
-    if not (rp / ".git").is_dir():
-        raise NotFoundError("Article repo not found")
+    rp = require_article_repo(article_id)
 
     ext = ".md"
     for e in [".md", ".typ"]:
@@ -92,15 +88,17 @@ def update_article_content(
     body = content if content is not None else strip_frontmatter(article_path.read_text())
     article_path.write_text(new_fm + body)
 
-    key_path = write_key_to_tempfile(signing_key_bytes) if signing_key_bytes else None
-    try:
+    if signing_key_bytes:
+        with temp_signing_key(signing_key_bytes) as key_path:
+            commit_hash = commit_article(
+                rp, message, user.name, make_peerpedia_email(user_id),
+                signing_key=key_path, pubkey_hex=pubkey_hex,
+            )
+    else:
         commit_hash = commit_article(
-            rp, message, user.name, f"{user_id}@peerpedia",
-            signing_key=key_path, pubkey_hex=pubkey_hex,
+            rp, message, user.name, make_peerpedia_email(user_id),
+            signing_key=None, pubkey_hex=pubkey_hex,
         )
-    finally:
-        if key_path:
-            key_path.unlink(missing_ok=True)
 
     if title is not None:
         a.title = title
@@ -119,8 +117,7 @@ def update_article_content(
     if old_status in ("sedimentation", "published"):
         # Reset sink: write status marker + set new timer.
         extra = params.sink.edit_article_default_days
-        commit_status_marker(rp, "sedimentation")
-        set_sink_start(db, article_id, extra)
+        _reset_sink(db, article_id, rp, extra)
         # Track cumulative days for the hard cap.
         if a.total_sink_days_accumulated + extra <= params.sink.max_total_sink_days:
             a.total_sink_days_accumulated += extra

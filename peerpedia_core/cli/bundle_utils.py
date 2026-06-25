@@ -19,6 +19,22 @@ from peerpedia_core.config.paths import DATA_ROOT
 from peerpedia_core.transport import is_online
 from peerpedia_core.transport.health import check_clock_skew
 
+
+def _require_online_server(args) -> str:
+    """Resolve server URL and die if unreachable.
+
+    Replaces the duplicated 7-line guard in ``_cmd_sync_push`` and
+    ``_cmd_sync_pull``.
+    """
+    server = _resolve_server_url(args)
+    if not is_online(server):
+        _die("Server unreachable",
+             suggestion=f"Cannot connect to {server}. Check: (1) is the server "
+                        "running? (2) is PEERPEDIA_SERVER set correctly? "
+                        "(3) is your network up?",
+             see_also=["sync status"])
+    return server
+
 def _try_sync(db, server: str | None = None) -> None:
     """Sync all local articles with the server if online.  No-op otherwise.
 

@@ -5,8 +5,9 @@
 
 from pathlib import Path
 
+from peerpedia_core.commands.articles._helpers import require_article_repo
 from peerpedia_core.storage.git_backend import (
-    DEFAULT_ARTICLES_DIR, get_commit_history, get_diff_between, get_head_hash,
+    get_commit_history, get_diff_between, get_head_hash,
 )
 
 
@@ -52,9 +53,7 @@ def diff_article(article_id: str, hash1: str, hash2: str) -> dict:
 
     Raises FileNotFoundError if the article repo does not exist.
     """
-    rp = DEFAULT_ARTICLES_DIR / article_id
-    if not (rp / ".git").is_dir():
-        raise FileNotFoundError(f"Article repo not found: {article_id}")
+    rp = require_article_repo(article_id)
 
     h1 = resolve_commit_ref(rp, hash1)
     h2 = resolve_commit_ref(rp, hash2)

@@ -5,24 +5,22 @@
 
 from sqlalchemy.orm import Session
 
-from peerpedia_core.storage.db.models import Alias, Follow, User
+from peerpedia_core.exceptions import BadRequestError
+from peerpedia_core.storage.db.crud_user import is_following
+from peerpedia_core.storage.db.models import Alias, User
 
 
 def set_alias(session: Session, owner_id: str, target_id: str, alias: str) -> Alias:
     """Set or update an alias for *target_id*.  Upsert — overwrites if exists.
 
-    Raises ``ValueError`` if *owner_id* does not follow *target_id*,
-    or if *alias* is empty.
+    Raises ``BadRequestError`` if *owner_id* does not follow *target_id*,
+    or ``ValueError`` if *alias* is empty.
     """
     alias = alias.strip()
     if not alias:
         raise ValueError("Alias must not be empty")
-    if not session.query(Follow).filter(
-        Follow.follower_id == owner_id,
-        Follow.followed_id == target_id,
-        Follow.deleted_at.is_(None),
-    ).first():
-        raise ValueError(f"You must follow {target_id} to set an alias")
+    if not is_following(session, owner_id, target_id):
+        raise BadRequestError(f"You must follow {target_id} to set an alias")
 
     a = session.query(Alias).filter(
         Alias.owner_id == owner_id, Alias.target_id == target_id,

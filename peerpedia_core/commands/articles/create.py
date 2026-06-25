@@ -9,6 +9,7 @@ import uuid
 
 from peerpedia_core.storage.db import Session
 from peerpedia_core.exceptions import BadRequestError, NotFoundError
+from peerpedia_core.config.params import make_peerpedia_email
 from peerpedia_core.frontmatter import make_article_frontmatter
 from peerpedia_core.storage.db.crud_article import create_article
 from peerpedia_core.storage.db.crud_maintainer import add_maintainer
@@ -18,7 +19,7 @@ from peerpedia_core.storage.git_backend import (
     commit_article,
     init_article_repo,
 )
-from peerpedia_core.crypto import write_key_to_tempfile
+from peerpedia_core.crypto import temp_signing_key
 
 
 def create_article_with_content(
@@ -52,15 +53,17 @@ def create_article_with_content(
     fm = make_article_frontmatter(title, abstract, keywords, categories)
     (rp / f"article{ext}").write_text(fm + content)
     user = get_user(db, author_ids[0])
-    key_path = write_key_to_tempfile(signing_key_bytes) if signing_key_bytes else None
-    try:
+    if signing_key_bytes:
+        with temp_signing_key(signing_key_bytes) as key_path:
+            commit_hash = commit_article(
+                rp, "Initial submission", user.name, make_peerpedia_email(user.id),
+                signing_key=key_path, pubkey_hex=pubkey_hex,
+            )
+    else:
         commit_hash = commit_article(
-            rp, "Initial submission", user.name, f"{user.id}@peerpedia",
-            signing_key=key_path, pubkey_hex=pubkey_hex,
+            rp, "Initial submission", user.name, make_peerpedia_email(user.id),
+            signing_key=None, pubkey_hex=pubkey_hex,
         )
-    finally:
-        if key_path:
-            key_path.unlink(missing_ok=True)
 
     a = create_article(
         db, id=article_id, title=title, abstract=abstract,

@@ -28,16 +28,26 @@ from peerpedia_core.transport import (
     push_follow, push_share, push_share_remove, push_unfollow,
 )
 
-def _pull_social(db, user_id: str) -> None:
-    """Pull social graph + articles for *user_id* from the peer server.  Best-effort.
+def _get_server_or_warn(label: str = "Social") -> str | None:
+    """Read PEERPEDIA_SERVER from env, warn and return None if not set.
 
-    Discovers who *user_id* follows, who follows *user_id*, and their
-    articles — merging everything into the local DB.  Reads
-    ``PEERPEDIA_SERVER`` from env.
+    Replaces the duplicated ``os.environ.get("PEERPEDIA_SERVER")`` + warn
+    pattern in ``_pull_social`` and ``_push_to_peer``.
     """
     server = os.environ.get("PEERPEDIA_SERVER")
     if not server:
-        console.print("[warning]⚠ No PEERPEDIA_SERVER set — social pull skipped. Set with: export PEERPEDIA_SERVER=https://your-peer.example.com[/]")
+        console.print(
+            f"[warning]⚠ No PEERPEDIA_SERVER set — {label} skipped. "
+            "Set with: export PEERPEDIA_SERVER=https://your-peer.example.com[/]"
+        )
+        return None
+    return server
+
+
+def _pull_social(db, user_id: str) -> None:
+    """Pull social graph + articles for *user_id* from the peer server.  Best-effort."""
+    server = _get_server_or_warn("social pull")
+    if not server:
         return
     try:
         discover_following(db, server, user_id)
@@ -49,18 +59,9 @@ def _pull_social(db, user_id: str) -> None:
 
 
 def _push_to_peer(label: str, push_fn) -> None:
-    """Best-effort push to PEERPEDIA_SERVER.  Warns on failure.
-
-    *push_fn* is called with ``(server)`` once the server URL and session
-    key are resolved.  If PEERPEDIA_SERVER is not set, prints a warning
-    and returns without calling *push_fn*.
-    """
-    server = os.environ.get("PEERPEDIA_SERVER")
+    """Best-effort push to PEERPEDIA_SERVER.  Warns on failure."""
+    server = _get_server_or_warn(f"{label} push")
     if not server:
-        console.print(
-            f"[warning]⚠ No PEERPEDIA_SERVER set — {label} push skipped. "
-            "Set with: export PEERPEDIA_SERVER=https://your-peer.example.com[/]"
-        )
         return
     try:
         push_fn(server)

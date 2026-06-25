@@ -17,6 +17,17 @@ EMAIL_SUFFIX = "@peerpedia"
 PLATFORM_EMAIL = f"system{EMAIL_SUFFIX}"
 
 
+def make_peerpedia_email(local_part: str) -> str:
+    """Build a PeerPedia email address from a local part.
+
+    >>> make_peerpedia_email("system")
+    'system@peerpedia'
+    >>> make_peerpedia_email("user-123")
+    'user-123@peerpedia'
+    """
+    return f"{local_part}{EMAIL_SUFFIX}"
+
+
 @dataclass
 class SinkParams:
     """Sedimentation pool timing parameters."""

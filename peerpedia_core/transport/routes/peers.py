@@ -19,7 +19,7 @@ from starlette.routing import Route
 
 from peerpedia_core.config.params import params
 
-_PEERS_FILE = Path.home() / ".peerpedia" / "known_peers.json"
+_PEERS_FILE = Path.home() / ".peerpedia" / "peers.json"
 
 
 def _load_peers() -> list[str]:

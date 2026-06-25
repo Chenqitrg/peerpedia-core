@@ -5,17 +5,18 @@
 
 from __future__ import annotations
 
-from peerpedia_core.cli.helpers import _with_db, _ok, _die
+from peerpedia_core.cli.helpers import _with_db, _ok, _die, _json_out
 from peerpedia_core.cli.display import _print_panel, console
-from peerpedia_core.cli.bundle_utils import _resolve_server_url
+from peerpedia_core.cli.bundle_utils import _require_online_server, _resolve_server_url
 from peerpedia_core.exceptions import ConflictError, ProtocolError, TransportError
+from peerpedia_core.transport import is_online
 from peerpedia_core.bundle.pending import list_all, remove as pop_pending
 from peerpedia_core.bundle import count as pending_count, sync_article
-from peerpedia_core.transport import is_online
 from peerpedia_core.commands import list_articles
 
 
-def _cmd_sync_status(args):
+@_with_db
+def _cmd_sync_status(db, args):
     """Check connection to a peer server and count pending sync operations.
 
     args: --server, --json
@@ -23,6 +24,9 @@ def _cmd_sync_status(args):
     server = _resolve_server_url(args)
     online = is_online(server)
     n = pending_count()
+    if args.json:
+        _json_out({"server": server, "online": online, "pending": n})
+        return
     status = "[success]online[/]" if online else "[error]offline[/]"
     body = (
         f"Server:  {server} ({status})\n"
@@ -73,13 +77,7 @@ def _cmd_sync_push(db, args):
 
     args: --server, --json
     """
-    server = _resolve_server_url(args)
-    if not is_online(server):
-        _die("Server unreachable",
-             suggestion=f"Cannot connect to {server}. Check: (1) is the server "
-                        "running? (2) is PEERPEDIA_SERVER set correctly? "
-                        "(3) is your network up?",
-             see_also=["sync status"])
+    server = _require_online_server(args)
     _sync_loop(db, server, list_all(), "Push", on_success=lambda op: pop_pending(op["id"]))
 
 
@@ -93,11 +91,5 @@ def _cmd_sync_pull(db, args):
     locally.  Add article *discovery* — fetch the server's article list
     and pull new articles that the user doesn't have yet.
     """
-    server = _resolve_server_url(args)
-    if not is_online(server):
-        _die("Server unreachable",
-             suggestion=f"Cannot connect to {server}. Check: (1) is the server "
-                        "running? (2) is PEERPEDIA_SERVER set correctly? "
-                        "(3) is your network up?",
-             see_also=["sync status"])
+    server = _require_online_server(args)
     _sync_loop(db, server, [{"id": a.id} for a in list_articles(db)], "Pull")

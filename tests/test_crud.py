@@ -634,53 +634,59 @@ class TestCitationCRUD:
 
 
 class TestUpdateNotFound:
-    """ValueError raised when updating non-existent entities."""
+    """NotFoundError raised when updating non-existent entities."""
 
     def test_update_article_compiled_not_found(self, engine):
+        from peerpedia_core.exceptions import NotFoundError
         from peerpedia_core.storage.db.crud_article import update_article_compiled
 
         session = get_session(engine)
-        with pytest.raises(ValueError, match="not found"):
+        with pytest.raises(NotFoundError, match="not found"):
             update_article_compiled(session, "no-such-id", "html", "hi", None)
         session.close()
 
     def test_update_article_status_not_found(self, engine):
+        from peerpedia_core.exceptions import NotFoundError
         from peerpedia_core.storage.db.crud_article import update_article_status
 
         session = get_session(engine)
-        with pytest.raises(ValueError):
+        with pytest.raises(NotFoundError):
             update_article_status(session, "no-such-id", "published")
         session.close()
 
     def test_increment_fork_count_not_found(self, engine):
+        from peerpedia_core.exceptions import NotFoundError
         from peerpedia_core.storage.db.crud_article import increment_fork_count
 
         session = get_session(engine)
-        with pytest.raises(ValueError):
+        with pytest.raises(NotFoundError):
             increment_fork_count(session, "no-such-id")
         session.close()
 
     def test_set_sink_start_not_found(self, engine):
+        from peerpedia_core.exceptions import NotFoundError
         from peerpedia_core.storage.db.crud_article import set_sink_start
 
         session = get_session(engine)
-        with pytest.raises(ValueError):
+        with pytest.raises(NotFoundError):
             set_sink_start(session, "no-such-id", 7)
         session.close()
 
     def test_delete_article_not_found(self, engine):
+        from peerpedia_core.exceptions import NotFoundError
         from peerpedia_core.storage.db.crud_article import delete_article
 
         session = get_session(engine)
-        with pytest.raises(ValueError):
+        with pytest.raises(NotFoundError):
             delete_article(session, "no-such-id")
         session.close()
 
     def test_extend_sink_not_found(self, engine):
+        from peerpedia_core.exceptions import NotFoundError
         from peerpedia_core.storage.db.crud_article import extend_sink
 
         session = get_session(engine)
-        with pytest.raises(ValueError):
+        with pytest.raises(NotFoundError):
             extend_sink(session, "no-such-id", 5)
         session.close()
 

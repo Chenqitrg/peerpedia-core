@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from peerpedia_core.cli.helpers import _with_db, _get_session_user, _ok, _json_out
+from peerpedia_core.cli.helpers import _with_db, _get_session_user, _ok, _json_out, _output_result
 from peerpedia_core.cli.display import _print_table, console
 from peerpedia_core.commands import (
     add_maintainer_to_article,
@@ -25,10 +25,8 @@ def _cmd_maintainer_add(db, args):
     caller_id = _get_session_user()
     result = add_maintainer_to_article(db, args.article_id, args.target_user, caller_id)
     db.commit()
-    if args.json:
-        _json_out(result)
-    else:
-        _ok(f"Maintainer [accent]{args.target_user[:8]}[/] added to article [accent]{args.article_id[:8]}[/]")
+    _output_result(args, result,
+                   f"Maintainer [accent]{args.target_user[:8]}[/] added to article [accent]{args.article_id[:8]}[/]")
 
 
 @_with_db
@@ -40,10 +38,8 @@ def _cmd_maintainer_remove(db, args):
     caller_id = _get_session_user()
     result = remove_maintainer_from_article(db, args.article_id, args.target_user, caller_id)
     db.commit()
-    if args.json:
-        _json_out(result)
-    else:
-        _ok(f"Maintainer [accent]{args.target_user[:8]}[/] removed from article [accent]{args.article_id[:8]}[/]")
+    _output_result(args, result,
+                   f"Maintainer [accent]{args.target_user[:8]}[/] removed from article [accent]{args.article_id[:8]}[/]")
 
 
 @_with_db
@@ -72,10 +68,8 @@ def _cmd_maintainer_consent(db, args):
     user_id = _get_session_user()
     result = consent_to_publish(db, args.article_id, user_id)
     db.commit()
-    if args.json:
-        _json_out(result)
-    else:
-        _ok(f"Consent recorded for article [accent]{args.article_id[:8]}[/]")
+    _output_result(args, result,
+                   f"Consent recorded for article [accent]{args.article_id[:8]}[/]")
 
 
 @_with_db
@@ -87,7 +81,5 @@ def _cmd_maintainer_revoke(db, args):
     user_id = _get_session_user()
     result = revoke_publish_consent(db, args.article_id, user_id)
     db.commit()
-    if args.json:
-        _json_out(result)
-    else:
-        _ok(f"Consent revoked for article [accent]{args.article_id[:8]}[/]")
+    _output_result(args, result,
+                   f"Consent revoked for article [accent]{args.article_id[:8]}[/]")

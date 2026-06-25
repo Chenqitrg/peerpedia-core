@@ -5,14 +5,66 @@
 
 from __future__ import annotations
 
-from peerpedia_core.storage.db import Session
-from peerpedia_core.exceptions import NotFoundError
+from pathlib import Path
+
+from peerpedia_core.storage.db import Session, crud_maintainer
+from peerpedia_core.exceptions import NotFoundError, NotAuthorizedError
 from peerpedia_core.storage.db.crud_article import (
     add_article_authors,
     get_article as _get_article,
     get_author_ids as _get_author_ids,
+    set_sink_start,
 )
-from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, get_commit_authors, get_head_hash
+from peerpedia_core.storage.db.crud_user import get_user as _get_user
+from peerpedia_core.storage.git_backend import (
+    DEFAULT_ARTICLES_DIR, commit_status_marker, get_commit_authors, get_head_hash,
+)
+from peerpedia_core.storage.db.models import Article, User
+
+
+def require_user(db: Session, user_id: str) -> User:
+    """Return the user or raise NotFoundError.
+
+    Eliminates the repeated ``user = get_user(db, uid); if user is None: raise``
+    pattern that appears in 11+ command functions.
+    """
+    user = _get_user(db, user_id)
+    if user is None:
+        raise NotFoundError("User not found", resource_type="user", resource_id=user_id)
+    return user
+
+
+def require_article(db: Session, article_id: str) -> Article:
+    """Return the article or raise NotFoundError.
+
+    Eliminates the repeated ``article = get_article(db, aid); if article is None: raise``
+    pattern that appears in 10+ command functions.
+    """
+    article = _get_article(db, article_id)
+    if article is None:
+        raise NotFoundError("Article not found", resource_type="article", resource_id=article_id)
+    return article
+
+
+def require_article_repo(article_id: str) -> Path:
+    """Return the article repo path or raise NotFoundError.
+
+    Eliminates the repeated ``rp = DEFAULT_ARTICLES_DIR / aid; if not (rp / ".git").is_dir(): raise``
+    pattern that appears in 9+ locations.
+    """
+    rp = DEFAULT_ARTICLES_DIR / article_id
+    if not (rp / ".git").is_dir():
+        raise NotFoundError("Article repo not found", resource_type="article", resource_id=article_id)
+    return rp
+
+
+def _reset_sink(db: Session, article_id: str, rp: Path, extra_days: int) -> None:
+    """Write status marker to git and reset sink timer.
+
+    Eliminates the repeated ``commit_status_marker + set_sink_start`` pair.
+    """
+    commit_status_marker(rp, "sedimentation")
+    set_sink_start(db, article_id, extra_days)
 
 
 def rebuild_article_authors(db: Session, article_id: str, since_hash: str | None = None) -> None:
@@ -42,3 +94,17 @@ def rebuild_article_authors(db: Session, article_id: str, since_hash: str | None
         add_article_authors(db, article_id, new_only)
 
     article.last_author_rebuild_hash = head_hash
+
+
+def _assert_caller_is_maintainer(db: Session, article_id: str, caller_id: str) -> None:
+    """Raise if *caller_id* is not a maintainer of *article_id*."""
+    caller = _get_user(db, caller_id)
+    if caller is None:
+        raise NotFoundError("Caller not found")
+    article = _get_article(db, article_id)
+    if article is None:
+        raise NotFoundError("Article not found")
+    if not crud_maintainer.is_maintainer(db, article_id, caller_id):
+        raise NotAuthorizedError(
+            f"User {caller_id} is not a maintainer of script {article_id}"
+        )

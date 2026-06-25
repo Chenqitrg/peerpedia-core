@@ -17,6 +17,7 @@ import getpass
 
 from peerpedia_core.cli.helpers import (
     _with_db, _read_session, _write_session, _ok, _die, _json_out,
+    _empty_state,
 )
 from peerpedia_core.cli.display import display_user as _render_user, console
 from peerpedia_core.commands import (
@@ -173,7 +174,7 @@ def _cmd_recover(db, args):
         _die(f"User '{user.name}' has no stored salt — key was not derived.",
              suggestion=f"Re-register: peerpedia account register --name {user.name}")
 
-    password = getpass.getpass("Password: ")
+    password = _get_password(args)
     private_key_bytes, pubkey_bytes = derive_key_pair(password, user.salt)
     if pubkey_bytes.hex() != user.public_key:
         _die("Wrong password.",
@@ -332,7 +333,7 @@ def _cmd_account_search(db, args):
         _json_out([{"id": u.id, "name": u.name} for u in users])
         return
     if not users:
-        console.print(f"[muted]No users match {args.query!r}[/]")
+        _empty_state(f"No users match {args.query!r}")
         return
     for u in users:
         _display_user(u)

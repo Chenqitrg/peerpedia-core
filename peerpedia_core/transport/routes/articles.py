@@ -39,7 +39,7 @@ from peerpedia_core.commands import (
     list_article_views,
 )
 from peerpedia_core.exceptions import BadRequestError, NotFoundError
-from peerpedia_core.transport.shared import _validate_id
+from peerpedia_core.transport.shared import _parse_pagination, _require_field, _validate_id
 
 MAX_BUNDLE_BYTES = 100 * 1024 * 1024  # 100 MB
 
@@ -92,10 +92,8 @@ async def _ancestor(request: Request) -> JSONResponse:
 
 async def _push_article_repo(request: Request) -> JSONResponse:
     payload = await request.json()
-    article_id = payload.get("id")
-    if not article_id:
-        raise BadRequestError("Missing required field: 'id'")
-    _validate_id(article_id, "id")
+    article_id = _require_field(payload, "id")
+    _validate_id(article_id, "article_id")
     if "repo_bundle" not in payload:
         raise BadRequestError("Missing required field: 'repo_bundle'")
     if not payload["repo_bundle"]:
@@ -122,10 +120,10 @@ async def _history(request: Request) -> JSONResponse:
     """GET /api/v1/articles/{id}/history?max= → commit history."""
     article_id = request.path_params["article_id"]
     _validate_id(article_id, "article_id")
-    max_count = min(int(request.query_params.get("max", 50)), 200)
+    limit, _ = _parse_pagination(request, default_limit=50, max_limit=200)
     since = request.query_params.get("since")
     try:
-        commits = get_article_commit_history(article_id, max_count=max_count, since_hash=since)
+        commits = get_article_commit_history(article_id, max_count=limit, since_hash=since)
     except ValueError:
         commits = []
     return JSONResponse(commits)
@@ -136,8 +134,7 @@ async def _search(request: Request) -> JSONResponse:
     db = request.state.db
     q = request.query_params.get("q")
     status = request.query_params.get("status")
-    limit = min(int(request.query_params.get("limit", 20)), 100)
-    offset = int(request.query_params.get("offset", 0))
+    limit, offset = _parse_pagination(request)
     return JSONResponse(list_article_views(
         db, search_query=q, status=status, limit=limit, offset=offset,
     ))

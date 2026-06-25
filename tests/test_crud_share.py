@@ -131,7 +131,8 @@ class TestAliasCrud:
         _make_user(db, "owner")
         _make_user(db, "target")
 
-        with pytest.raises(ValueError, match="must follow"):
+        from peerpedia_core.exceptions import BadRequestError
+        with pytest.raises(BadRequestError, match="must follow"):
             set_alias(db, "owner", "target", "my-alias")
 
     def test_set_alias_empty_raises(self, db):

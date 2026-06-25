@@ -5,6 +5,7 @@
 
 from peerpedia_core.cli.helpers import (
     _with_db, _get_session_user, _ok, _die, _json_out,
+    _empty_state,
 )
 from peerpedia_core.cli.display import console
 from peerpedia_core.commands import (
@@ -36,7 +37,7 @@ def _cmd_notifications(db, args):
         return
 
     if not notifs:
-        console.print("[muted]No notifications.[/]")
+        _empty_state("No notifications.")
         return
 
     if unread_only and unread_count > 0:

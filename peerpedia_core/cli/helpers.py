@@ -18,7 +18,10 @@ import tempfile
 from pathlib import Path
 
 from peerpedia_core.cli.display import console, theme, display_article as _render_article
-from peerpedia_core.commands import db_session, get_article, get_author_ids, list_articles, parse_frontmatter, resolve_username_or_alias
+from peerpedia_core.commands import (
+    assert_article_integrity, db_session, get_article, get_author_ids,
+    list_articles, parse_frontmatter, resolve_username_or_alias,
+)
 from peerpedia_core.config.paths import ARTICLES_DIR as DEFAULT_ARTICLES_DIR, DB_PATH, DB_URL, SESSION_FILE
 from peerpedia_core.crypto import load_private_key, _public_key_to_bytes
 from peerpedia_core.exceptions import PeerpediaError
@@ -370,3 +373,35 @@ def _open_editor(initial: str) -> str:
         f.flush()
         subprocess.call([editor, f.name])
         return Path(f.name).read_text()
+
+
+# ── Shared CLI patterns ───────────────────────────────────────────────────
+
+
+def _empty_state(message: str) -> None:
+    """Print a muted empty-state message."""
+    console.print(f"[muted]{message}[/]")
+
+
+def _output_result(args, result: dict, success_msg: str) -> None:
+    """Output a command result as JSON or a styled success message.
+
+    Replaces the repeated ``if args.json: _json_out(result); else: _ok(...)``
+    pattern that appears in 8+ handlers.
+    """
+    if getattr(args, "json", False):
+        _json_out(result)
+    else:
+        _ok(success_msg)
+
+
+def _require_resolved_article(db, args_id: str, *, check_integrity: bool = True):
+    """Resolve an article by ref, assert integrity, return (article, article_id).
+
+    Replaces the repeated triplet of ``_resolve_article_id`` +
+    ``article_id = article.id`` + ``assert_article_integrity``.
+    """
+    article = _resolve_article_id(db, args_id)
+    if check_integrity:
+        assert_article_integrity(db, article.id)
+    return article, article.id

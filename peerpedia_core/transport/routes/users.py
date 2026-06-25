@@ -32,7 +32,7 @@ from peerpedia_core.commands import (
 )
 from peerpedia_core.exceptions import BadRequestError
 from peerpedia_core.policies.articles import PUBLIC_READABLE_STATUSES
-from peerpedia_core.transport.shared import _validate_id
+from peerpedia_core.transport.shared import _ok_response, _parse_pagination, _require_field, _validate_id
 
 
 # ── Handlers ─────────────────────────────────────────────────────────────
@@ -54,22 +54,18 @@ async def _follow(request: Request) -> JSONResponse:
     user_id = request.path_params["user_id"]
     _validate_id(user_id, "user_id")
     payload = await request.json()
-    followed_id = payload.get("followed_id")
-    if not followed_id:
-        raise BadRequestError("Missing required field: 'followed_id'")
+    followed_id = _require_field(payload, "followed_id")
     follow_user(request.state.db, user_id, followed_id)
-    return JSONResponse({"ok": True})
+    return _ok_response()
 
 
 async def _unfollow(request: Request) -> JSONResponse:
     user_id = request.path_params["user_id"]
     _validate_id(user_id, "user_id")
     payload = await request.json()
-    followed_id = payload.get("followed_id")
-    if not followed_id:
-        raise BadRequestError("Missing required field: 'followed_id'")
+    followed_id = _require_field(payload, "followed_id")
     unfollow_user(request.state.db, user_id, followed_id)
-    return JSONResponse({"ok": True})
+    return _ok_response()
 
 
 async def _rotate_key(request: Request) -> JSONResponse:
@@ -81,9 +77,7 @@ async def _rotate_key(request: Request) -> JSONResponse:
     user_id = request.path_params["user_id"]
     _validate_id(user_id, "user_id")
     payload = await request.json()
-    new_pubkey = payload.get("public_key")
-    if not new_pubkey:
-        raise BadRequestError("Missing required field: 'public_key'")
+    new_pubkey = _require_field(payload, "public_key")
     if not isinstance(new_pubkey, str) or len(new_pubkey) != 64:
         raise BadRequestError(
             "public_key must be a 64-character hex string"
@@ -103,14 +97,13 @@ async def _rotate_key(request: Request) -> JSONResponse:
             f"public_key is not a valid Ed25519 key: {e}"
         )
     update_user_public_key(request.state.db, user_id, new_pubkey)
-    return JSONResponse({"ok": True})
+    return _ok_response()
 
 
 async def _articles(request: Request) -> JSONResponse:
     user_id = request.path_params["user_id"]
     _validate_id(user_id, "user_id")
-    limit = min(int(request.query_params.get("limit", 20)), 100)
-    offset = int(request.query_params.get("offset", 0))
+    limit, offset = _parse_pagination(request)
     # Policy: unauthenticated peers see only public-readable statuses.
     # The author sees all their own articles.
     requester = getattr(request.state, "user_id", None)
@@ -125,13 +118,11 @@ async def _push_share(request: Request) -> JSONResponse:
     user_id = request.path_params["user_id"]
     _validate_id(user_id, "user_id")
     payload = await request.json()
-    article_id = payload.get("article_id")
-    if not article_id:
-        raise BadRequestError("Missing required field: 'article_id'")
+    article_id = _require_field(payload, "article_id")
 
     if request.method == "DELETE":
         remove_share(request.state.db, user_id, article_id)
-        return JSONResponse({"ok": True})
+        return _ok_response()
 
     result = add_share(
         request.state.db, user_id, article_id,
@@ -150,7 +141,7 @@ async def _get_shares(request: Request) -> JSONResponse:
 
 async def _school(request: Request) -> JSONResponse:
     """GET /api/v1/school — top users by follower count (public, no auth)."""
-    limit = min(int(request.query_params.get("limit", 20)), 100)
+    limit, _ = _parse_pagination(request)
     return JSONResponse(get_top_users_by_followers(request.state.db, limit=limit))
 
 

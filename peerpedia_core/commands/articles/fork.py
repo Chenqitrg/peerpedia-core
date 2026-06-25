@@ -8,19 +8,17 @@ from __future__ import annotations
 import uuid
 
 from peerpedia_core.storage.db import Session
-from peerpedia_core.exceptions import NotFoundError
 from peerpedia_core.config.params import params
 from peerpedia_core.policies.articles import assert_can_fork_article, assert_not_folded
 from peerpedia_core.commands.integrity import assert_article_integrity
 from peerpedia_core.storage.db.crud_article import (
     create_article,
-    get_article as _get_article,
     get_article_by_fork_and_author,
     increment_fork_count,
 )
 from peerpedia_core.storage.db.crud_maintainer import add_maintainer
-from peerpedia_core.storage.db.crud_user import get_user
 from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, clone_article_repo, get_commit_authors
+from peerpedia_core.commands.articles._helpers import require_article, require_user
 
 
 def fork_article(db: Session, article_id: str, user_id: str) -> dict:
@@ -36,13 +34,8 @@ def fork_article(db: Session, article_id: str, user_id: str) -> dict:
     """
     assert_article_integrity(db, article_id, level="light")
 
-    user = get_user(db, user_id)
-    if user is None:
-        raise NotFoundError("User not found")
-
-    original = _get_article(db, article_id)
-    if original is None:
-        raise NotFoundError("Article not found")
+    user = require_user(db, user_id)
+    original = require_article(db, article_id)
     existing_fork = get_article_by_fork_and_author(db, forked_from=article_id, author_id=user.id)
     assert_not_folded(original, threshold=params.reputation.fold_score_threshold)
     assert_can_fork_article(original, existing_fork)

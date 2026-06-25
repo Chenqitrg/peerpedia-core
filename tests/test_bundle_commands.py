@@ -145,8 +145,8 @@ def articles_dir():
             "peerpedia_core.commands.articles.fork",
             "peerpedia_core.commands.articles.publish",
             "peerpedia_core.commands.articles.rollback",
-            "peerpedia_core.commands.articles.update",
             "peerpedia_core.commands.articles._helpers",
+            "peerpedia_core.commands.reviews",
             "peerpedia_core.commands.workflow",
         ]
         patches = [patch(f"{m}.DEFAULT_ARTICLES_DIR", Path(tmp)) for m in patch_modules]

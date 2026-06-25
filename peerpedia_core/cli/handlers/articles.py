@@ -11,6 +11,7 @@ from peerpedia_core.cli.helpers import (
     _with_db, _get_session_user, _get_session_key, _resolve_and_display_article, _resolve_article_id,
     _find_article_file, _open_editor,
     _prompt_commit_message, _parse_scores, _page, _ok, _die, _json_out,
+    _empty_state, _require_resolved_article,
 )
 from peerpedia_core.cli.display import console, display_diff
 from peerpedia_core.cli.bundle_utils import _resolve_server_url, _try_sync
@@ -19,8 +20,9 @@ from peerpedia_core.commands import (
     assert_article_integrity, create_article_with_content,
     diff_article, get_article, get_article_view, get_author_ids_batch,
     list_article_views, list_articles, publish_article,
-    publish_ready_articles, delete_article, update_article_content, get_user,
+    publish_ready_articles, delete_article, update_article_content,
 )
+from peerpedia_core.commands.articles._helpers import require_user
 
 
 @_with_db
@@ -37,12 +39,7 @@ def _cmd_article_create(db, args):
     """
     user_id = _get_session_user()
     key_bytes = _get_session_key()
-    user = get_user(db, user_id)
-    if user is None:
-        _die(f"User '{user_id}' not found in local database.",
-             suggestion="Your session references a user that no longer exists. "
-                        "Run 'peerpedia account recover' or 'account register'.",
-             see_also=["account recover", "account register"])
+    user = require_user(db, user_id)
     content = args.content or ""
     if not content and not args.no_editor:
         content = _open_editor("")
@@ -149,7 +146,7 @@ def _cmd_article_list(db, args):
         ))
         return
     if not articles:
-        console.print("[muted]No articles.[/]")
+        _empty_state("No articles.")
         return
     author_map = get_author_ids_batch(db, [a.id for a in articles])
     for a in articles:
@@ -162,16 +159,12 @@ def _cmd_article_edit(db, args):
 
     args: id [positional], --content, --title, --no-editor, --json
     """
-    article = _resolve_article_id(db, args.id)
-    article_id = article.id
-    assert_article_integrity(db, article_id)
+    article, article_id = _require_resolved_article(db, args.id)
     import difflib
 
     user_id = _get_session_user()
     key_bytes = _get_session_key()
-    user = get_user(db, user_id)
-    if user is None:
-        _die(f"User '{user_id}' not found — DB inconsistency.")
+    user = require_user(db, user_id)
     raw = _find_article_file(article_id).read_text()
 
     if args.content is not None:
@@ -219,14 +212,10 @@ def _cmd_article_publish(db, args):
 
     args: id [positional], --scores, --json
     """
-    article = _resolve_article_id(db, args.id)
-    article_id = article.id
-    assert_article_integrity(db, article_id)
+    article, article_id = _require_resolved_article(db, args.id)
     user_id = _get_session_user()
     key_bytes = _get_session_key()
-    user = get_user(db, user_id)
-    if user is None:
-        _die(f"User '{user_id}' not found — DB inconsistency.")
+    user = require_user(db, user_id)
     scores = _parse_scores(args.scores)
     result = publish_article(db, article_id, user_id, scores,
                              signing_key_bytes=key_bytes, pubkey_hex=user.public_key)

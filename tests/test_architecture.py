@@ -271,13 +271,14 @@ def test_leaf_modules_stay_leaves():
 
 
 def test_storage_db_only_imports_within_db():
-    """storage/db/ files may import each other + SQLAlchemy — nothing else."""
+    """storage/db/ files may import each other + SQLAlchemy + exceptions."""
+    _allowed = {"peerpedia_core.exceptions"}
     for f in _all_modules():
         rel = _rel(f)
         if "storage/db/" not in rel:
             continue
         for m in _imports_peerpedia_modules(f):
-            if "storage.db" not in m and "storage/db" not in m:
+            if "storage.db" not in m and "storage/db" not in m and m not in _allowed:
                 raise AssertionError(
                     f"{rel}: imports {m} — storage/db/ is a closed layer, "
                     "only import from within storage/db/"

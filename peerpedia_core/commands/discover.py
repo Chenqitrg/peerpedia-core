@@ -28,7 +28,9 @@ from peerpedia_core.storage.db.crud_article import get_article, insert_article
 from peerpedia_core.storage.db.crud_bookmark import add_bookmark, is_bookmarked
 from peerpedia_core.storage.db.crud_maintainer import add_maintainer, is_maintainer
 from peerpedia_core.storage.db.crud_share import add_share as _add_share, is_shared
-from peerpedia_core.storage.db.crud_user import follow_user, get_user, is_following
+from peerpedia_core.storage.db.crud_user import (
+    create_user_stub, follow_user, get_user, is_following,
+)
 from peerpedia_core.storage.db.models import Article, Follow, User
 
 logger = logging.getLogger(__name__)
@@ -47,25 +49,24 @@ def _require_keys(entries: list[dict], *keys: str, label: str) -> None:
 def merge_users(db: Session, entries: list[dict]) -> int:
     """Insert new users discovered from a peer — lazy social discovery.
 
-    Only writes users that do not already exist locally.  Existing users
-    with a missing address raise ``ValueError`` (data inconsistency —
-    the local record should have been created with an address).
-
-    Raises ValueError if any entry is missing *id*, *name*, or *address*.
+    Only writes users that do not already exist locally.  The *address*
+    field (peer URL) is optional — not all users run their own server.
+    Raises only when two peers disagree on a user's address.
     """
-    _require_keys(entries, "id", "name", "address", label="users")
+    _require_keys(entries, "id", "name", label="users")
 
     added = 0
     for e in entries:
         u = get_user(db, e["id"])
         if u is None:
-            u = User(id=e["id"], name=e["name"], address=e["address"])
+            u = User(id=e["id"], name=e["name"],
+                     address=e.get("address", ""))
             db.add(u)
             added += 1
-        elif not u.address:
+        elif u.address and e.get("address") and u.address != e["address"]:
             raise ValueError(
-                f"merge_users: existing user {e['id']} has no address; "
-                f"peer data has address={e['address']!r}. Data inconsistency."
+                f"merge_users: address conflict for {e['id']}: "
+                f"local={u.address!r}, peer={e['address']!r}"
             )
     db.flush()
     return added
@@ -163,6 +164,11 @@ def merge_article_meta(db: Session, entries: list[dict]) -> int:
             if isinstance(val, str):
                 e[field] = datetime.fromisoformat(val)
         author_ids = e.get("authors", [])
+        # Ensure authors exist locally before inserting FK rows.
+        for aid in author_ids:
+            if get_user(db, aid) is None:
+                create_user_stub(db, user_id=aid, name=aid[:8],
+                                 public_key="", salt="")
         article = Article(**{k: v for k, v in e.items() if k != "authors"})
         insert_article(db, article, author_ids)
         added += 1

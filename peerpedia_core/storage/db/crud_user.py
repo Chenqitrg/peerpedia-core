@@ -23,6 +23,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
+from peerpedia_core.exceptions import BadRequestError, NotFoundError
 from peerpedia_core.storage.db.models import Follow, User
 
 
@@ -172,7 +173,7 @@ def get_users_by_ids(session: Session, user_ids: set[str]) -> list[User]:
     found = {u.id for u in users}
     missing = user_ids - found
     if missing:
-        raise ValueError(f"Users not found: {', '.join(sorted(missing))}")
+        raise NotFoundError(f"Users not found: {', '.join(sorted(missing))}", resource_type="user")
     return users
 
 
@@ -182,7 +183,7 @@ def update_user_public_key(session: Session, user_id: str, pubkey_hex: str) -> N
         {"public_key": pubkey_hex}, synchronize_session="fetch"
     )
     if rows == 0:
-        raise ValueError(f"User {user_id} not found")
+        raise NotFoundError(f"User {user_id} not found", resource_type="user", resource_id=user_id)
     session.expire_all()
 
 
@@ -192,7 +193,7 @@ def update_user_salt(session: Session, user_id: str, salt_hex: str) -> None:
         {"salt": salt_hex}, synchronize_session="fetch"
     )
     if rows == 0:
-        raise ValueError(f"User {user_id} not found")
+        raise NotFoundError(f"User {user_id} not found", resource_type="user", resource_id=user_id)
     session.expire_all()
 
 
@@ -202,7 +203,7 @@ def update_user_reputation(session: Session, user_id: str, reputation: dict) -> 
         {"reputation": reputation}, synchronize_session="fetch"
     )
     if rows == 0:
-        raise ValueError(f"User {user_id} not found")
+        raise NotFoundError(f"User {user_id} not found", resource_type="user", resource_id=user_id)
     session.expire_all()
 
 
@@ -216,7 +217,7 @@ def follow_user(session: Session, follower_id: str, followed_id: str) -> Follow:
     Otherwise inserts a new row.
     """
     if follower_id == followed_id:
-        raise ValueError("A user cannot follow themselves")
+        raise BadRequestError("A user cannot follow themselves")
     f = session.query(Follow).filter(
         Follow.follower_id == follower_id,
         Follow.followed_id == followed_id,

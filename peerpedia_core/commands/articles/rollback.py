@@ -25,6 +25,7 @@ from peerpedia_core.commands.articles._helpers import (
     require_article_repo,
     require_user,
 )
+from peerpedia_core.types import short_id
 from peerpedia_core.commands.workflow import recompute_article_score
 
 
@@ -56,7 +57,7 @@ def rollback_article(
 
     if not is_repo_dirty(rp):
         return {"commit_hash": get_head_hash(rp),
-                "message": f"Already at {target_hash[:8]} (no changes needed)"}
+                "message": f"Already at {short_id(target_hash)} (no changes needed)"}
 
     if signing_key_bytes is None or not pubkey_hex:
         raise ValueError("signing_key_bytes and pubkey_hex are required for rollback")
@@ -64,7 +65,7 @@ def rollback_article(
     with temp_signing_key(signing_key_bytes) as key_path:
         new_hash = commit_article(
             rp,
-            f"Rollback to {target_hash[:8]}",
+            f"Rollback to {short_id(target_hash)}",
             user.name, make_peerpedia_email(user_id),
             signing_key=key_path, pubkey_hex=pubkey_hex,
         )
@@ -77,6 +78,6 @@ def rollback_article(
     rebuild_article_authors(db, article_id)
     recompute_article_score(db, article_id)
 
-    msg = f"Rollback to {target_hash[:8]}"
+    msg = f"Rollback to {short_id(target_hash)}"
     return {"id": article.id, "title": article.title, "status": article.status,
             "commit_hash": new_hash, "message": msg}

@@ -632,7 +632,7 @@ class TestSpecForkMergeWorkflow:
         forker_id, forker_name, forker_priv, *_ = _register("DraftForker")
         _session(forker_id, forker_name, forker_priv)
         output = _call_handler(_cmd_fork, capsys, article_id=art["id"], json=False)
-        assert "published" in output
+        assert "maintainer" in output
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

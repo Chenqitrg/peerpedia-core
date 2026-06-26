@@ -110,3 +110,23 @@ def _clean_article_repos():
         for d in articles_dir.iterdir():
             if d.is_dir() and (d / ".git").is_dir():
                 shutil.rmtree(str(d))
+
+
+@pytest.fixture(autouse=True)
+def _isolate_health_cache(monkeypatch, tmp_path):
+    """Redirect the health-check file cache to a temp directory.
+
+    Without this, tests that call ``is_online()`` or ``check_clock_skew()``
+    would write to the real ``~/.peerpedia/server_health.json``, potentially
+    deleting or corrupting the user's production health cache.
+    """
+    monkeypatch.setattr(
+        "peerpedia_core.transport.health._CACHE_FILE",
+        tmp_path / "server_health.json",
+    )
+    monkeypatch.setattr(
+        "peerpedia_core.transport.health._DATA_ROOT",
+        tmp_path,
+    )
+    from peerpedia_core.transport.health import clear_health_cache
+    clear_health_cache()

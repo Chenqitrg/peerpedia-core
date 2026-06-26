@@ -63,7 +63,8 @@ def _load_help(name: str) -> str:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 _COMMON_ARGS = [
-    (("--json",), {"action": "store_true", "help": "Output as JSON"}),
+    (("--json",), {"action": "store_true", "help": "Output as JSON (explicit; default is JSON for AI consumption)"}),
+    (("--rich",), {"action": "store_true", "help": "Output as human-readable Rich text"}),
 ]
 
 
@@ -151,6 +152,7 @@ COMMAND_GROUPS = [
         ], {"epilog": _load_help("article_publish")}),
         ("delete", _cmd_article_delete, [
             (("id",), {"metavar": "ref", "help": "Article UUID, prefix, or title keyword"}),
+            (("--force",), {"action": "store_true", "help": "Delete without confirmation"}),
         ], {"epilog": _load_help("article_delete")}),
         ("scan", _cmd_article_scan, [], {"epilog": _load_help("article_scan")}),
         ("diff", _cmd_article_diff, [

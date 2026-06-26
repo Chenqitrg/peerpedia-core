@@ -50,12 +50,12 @@ from pathlib import Path
 
 from peerpedia_core.exceptions import ConflictError
 from peerpedia_core.storage.db import Session
-from peerpedia_core.storage.git_backend import get_commit_history, read_article_source
 
-from peerpedia_core.commands import apply_sync_bundle
+from peerpedia_core.commands import apply_sync_bundle, get_commit_history, read_article_source
 from peerpedia_core.bundle.git_bundle import (
     create_bundle,
     get_head as _git_get_head,
+    ingest_article,
     ingest_article_repo,
     ingest_bundle,
     is_ancestor,
@@ -111,15 +111,6 @@ def check_ancestor(repo_path: Path, hash: str) -> bool:
     Returns True (200) or False (404).
     """
     return is_ancestor(repo_path, hash)
-
-
-def ingest_article(repo_path: Path, payload: dict) -> str:
-    """Receive and unpack a full article repo upload (delegates to git_bundle).
-    Raises ConflictError if the article already exists locally."""
-    try:
-        return ingest_article_repo(repo_path, payload)
-    except FileExistsError:
-        raise ConflictError(f"Article already exists locally: {repo_path.name}") from None
 
 
 # ── Article-ID-based wrappers ────────────────────────────────────────────

@@ -1,30 +1,59 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""REPL interactive browsing — full-screen article and user selection views."""
+"""REPL interactive browsing — full-screen article and user selection views.
+
+Architecture: all data access goes through ``cli.helpers`` — no direct
+``commands/`` or ``storage/`` imports.  All imports are at module level
+(no lazy imports needed — zero circular dependency).
+"""
 
 from __future__ import annotations
 
 from prompt_toolkit.application import Application
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.layout import HSplit, Layout, Window
-
-from peerpedia_core.repl.typography import title as _T_raw, status as _St_raw
-
-def _T(s):
-    import peerpedia_core.repl.state as _st
-    return _T_raw(s) if _st._repl_unicode else s
-
-def _St(s):
-    import peerpedia_core.repl.state as _st
-    return _St_raw(s) if _st._repl_unicode else s
 from prompt_toolkit.layout.controls import FormattedTextControl
 
+from peerpedia_core.cli.display import _stars
+from peerpedia_core.cli.helpers import (
+    _get_article_head_hash, _get_session_user_id,
+    get_reviews_for_article, get_top_users_by_followers,
+    get_user, get_users_by_ids, list_articles,
+)
+
 from peerpedia_core.repl.state import (
-    _ensure_db, _get_stars, _get_session_user_id,
     _repl_compact, _repl_article_id, _repl_article_title, _repl_article_commit,
     console, repl_style,
 )
+from peerpedia_core.repl.typography import styled, title as _T_raw, status as _St_raw
+
+_T = styled(_T_raw)
+_St = styled(_St_raw)
+
+
+def _build_browser(title: str, render_fn, status_fn, kb):
+    """Build and run a full-screen prompt_toolkit Application.
+
+    Args:
+        title: Header text for the top bar.
+        render_fn: () → list of (style, text) tuples for the list area.
+        status_fn: () → str for the status bar.
+        kb: KeyBindings instance.
+
+    Returns the result of ``app.run()``.
+    """
+    header = Window(height=1, content=FormattedTextControl(
+        [("class:prompt", f"▔▔▔ {title} " + "▔" * 50)]
+    ))
+    list_view = Window(content=FormattedTextControl(render_fn), always_hide_cursor=True)
+    status_bar = Window(height=1, content=FormattedTextControl(status_fn), style="class:status-bar")
+    root = HSplit([header, list_view, Window(height=1), status_bar])
+    app = Application(
+        layout=Layout(root), key_bindings=kb,
+        full_screen=True, mouse_support=True, style=repl_style,
+    )
+    return app.run()
 
 
 def _set_article_context(article):
@@ -32,23 +61,13 @@ def _set_article_context(article):
     global _repl_article_id, _repl_article_title, _repl_article_commit
     _repl_article_id = article.id
     _repl_article_title = article.title
-    try:
-        from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, get_head_hash
-        rp = DEFAULT_ARTICLES_DIR / article.id
-        if (rp / ".git").is_dir():
-            _repl_article_commit = get_head_hash(rp)
-        else:
-            _repl_article_commit = ""
-    except Exception:
-        _repl_article_commit = ""
+    _repl_article_commit = _get_article_head_hash(article.id)
 
 
 def _browse_articles(db, viewer_id: str | None = None) -> str | None:
     """Launch a full-screen article browser.  Returns the selected article ID
     or 'action:id' string, or None if cancelled."""
-    from peerpedia_core.commands import list_articles as _la
-
-    articles = _la(db)
+    articles = list_articles(db)
     if not articles:
         console.print("[muted]No articles.[/]")
         return None
@@ -66,7 +85,7 @@ def _browse_articles(db, viewer_id: str | None = None) -> str | None:
                 status_badge = _St(a.status[:4].upper()) if a.status else a.status
                 lines.append((style_class, f"{prefix} {a.id[:8]}  {_T(a.title[:45]):<45} {status_badge:<15} {star_val}\n"))
             else:
-                star = _get_stars()(a.score) if a.score else "[muted]  —  [/]"
+                star = _stars(a.score) if a.score else "[muted]  —  [/]"
                 status_badge = _St(a.status[:4].upper()) if a.status else a.status
                 lines.append((style_class, f"{prefix} {a.id[:8]}  {_T(a.title):<40} {status_badge:<15} {star}\n"))
         return lines
@@ -113,23 +132,11 @@ def _browse_articles(db, viewer_id: str | None = None) -> str | None:
     def _(event):
         event.app.exit(result=None)
 
-    header = Window(height=1, content=FormattedTextControl(
-        [("class:prompt", "▔▔▔ Articles ▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔")]
-    ))
-    list_view = Window(content=FormattedTextControl(_render), always_hide_cursor=True)
-    status_bar = Window(height=1, content=FormattedTextControl(_status_text), style="class:status-bar")
-    root = HSplit([header, list_view, Window(height=1), status_bar])
-
-    app = Application(
-        layout=Layout(root), key_bindings=browse_kb,
-        full_screen=True, mouse_support=True, style=repl_style,
-    )
-    return app.run()
+    return _build_browser("Articles", _render, _status_text, browse_kb)
 
 
 def _browse_school(db) -> str | None:
     """Launch an interactive user leaderboard.  Returns 'follow:<id>' or None."""
-    from peerpedia_core.commands import get_top_users_by_followers
     users = get_top_users_by_followers(db, limit=20)
     if not users:
         console.print("[muted]No users found.[/]")
@@ -176,25 +183,12 @@ def _browse_school(db) -> str | None:
     def _(event):
         event.app.exit(result=None)
 
-    header = Window(height=1, content=FormattedTextControl(
-        [("class:prompt", "▔▔▔ School — Top Users ▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔")]
-    ))
-    list_view = Window(content=FormattedTextControl(_render), always_hide_cursor=True)
-    status_bar = Window(height=1, content=FormattedTextControl(_status_text), style="class:status-bar")
-    root = HSplit([header, list_view, Window(height=1), status_bar])
-
-    app = Application(
-        layout=Layout(root), key_bindings=kb,
-        full_screen=True, mouse_support=True, style=repl_style,
-    )
-    return app.run()
+    return _build_browser("School — Top Users", _render, _status_text, kb)
 
 
 def _browse_reviews(db, article_id: str) -> str | None:
     """Launch an interactive review viewer. Returns the selected reviewer ID
     or 'reply:<id>' for reply action, or None if cancelled."""
-    from peerpedia_core.commands import get_reviews_for_article, get_user, get_users_by_ids
-
     reviews = get_reviews_for_article(db, article_id)
     if not reviews:
         console.print("[muted]No reviews yet.[/]")
@@ -255,15 +249,4 @@ def _browse_reviews(db, article_id: str) -> str | None:
     def _(event):
         event.app.exit(result=None)
 
-    header = Window(height=1, content=FormattedTextControl(
-        [("class:prompt", "▔▔▔ Reviews ▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔")]
-    ))
-    list_view = Window(content=FormattedTextControl(_render), always_hide_cursor=True)
-    status_bar = Window(height=1, content=FormattedTextControl(_status_text), style="class:status-bar")
-    root = HSplit([header, list_view, Window(height=1), status_bar])
-
-    app = Application(
-        layout=Layout(root), key_bindings=kb,
-        full_screen=True, mouse_support=True, style=repl_style,
-    )
-    return app.run()
+    return _build_browser("Reviews", _render, _status_text, kb)

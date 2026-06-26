@@ -10,17 +10,15 @@ Usage::
 
 Architecture
 ------------
-::
-
-    repl/
-      __init__.py     run() entry point + dashboard
-      state.py        theme defs, session vars, prompt, DB helpers
-      commands.py     meta-commands (:help, :user, :article, …) + dispatch
-      browse.py       interactive full-screen views (articles, school)
+``repl/`` only imports from ``cli/`` (helpers, display, parser).  All data
+access goes through ``cli.helpers`` — no direct ``commands/`` or ``storage/``
+imports.  ``cli/`` never imports from ``repl/``, so there is zero circular
+dependency.  No lazy imports are needed.
 """
 
 from __future__ import annotations
 
+import os as _os
 import sys
 import time
 
@@ -30,19 +28,25 @@ from prompt_toolkit.history import FileHistory
 from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.lexers import PygmentsLexer
 from pygments.lexers.shell import BashLexer
+from rich.panel import Panel
+from rich.text import Text
 
+from peerpedia_core.cli import build_parser
+from peerpedia_core.cli.display import console, theme
+from peerpedia_core.cli.helpers import (
+    _close_db, _ensure_db, _read_session,
+    count_articles, publish_ready_articles,
+)
 from peerpedia_core.cli.parser import get_cmd_map
-from peerpedia_core.commands import publish_ready_articles
 from peerpedia_core.config.params import params
 from peerpedia_core.config.paths import REPL_HISTORY_FILE
 
+from peerpedia_core.repl.commands import _dispatch, _META_COMMANDS, _meta_theme
 from peerpedia_core.repl.state import (
-    _ensure_db, _prompt_text, _refresh_completions,
-    _repl_user, _repl_theme, _repl_completion_words,
-    theme, repl_style, console,
-    _get_parser,
+    _get_parser, _prompt_text, _refresh_completions, _repl_user,
+    _repl_completion_words, console as _repl_console, repl_style,
+    theme as _repl_theme_obj,
 )
-from peerpedia_core.repl.commands import _dispatch, _META_COMMANDS
 
 FLAGS = ["--title", "--format", "--content", "--user", "--json", "--rich", "--force",
          "--scores", "--comment", "--commit-hash", "--target", "--status",
@@ -54,16 +58,10 @@ def run():
     # Gracefully exit if stdin is not a TTY — scripting/piping should use
     # the CLI directly (peerpedia <command>), not the REPL.
     if not sys.stdin.isatty():
-        from peerpedia_core.cli import build_parser
         parser = build_parser()
         parser.print_help()
         print("\n[muted]REPL requires a terminal. Use 'peerpedia <command>' for scripting.[/]")
         return
-
-    from rich.panel import Panel
-    from rich.text import Text
-    from peerpedia_core.cli.helpers import _read_session
-    from peerpedia_core.commands import count_articles
 
     global _repl_user
     db = _ensure_db()
@@ -74,14 +72,11 @@ def run():
         _st._repl_user = session_data.get("name")
 
     # ── Auto-detect terminal background ────────────────────────────────
-    import os as _os
     if _os.environ.get("COLORFGBG"):
         try:
             bg_hex = _os.environ["COLORFGBG"].split(";")[-1]
             bg_int = int(bg_hex)
             if bg_int < 8:  # dark background
-                import peerpedia_core.repl.state as _st
-                from peerpedia_core.repl.commands import _meta_theme
                 _meta_theme("dark")
         except (ValueError, IndexError):
             pass
@@ -101,6 +96,10 @@ def run():
             if published: parts.append(f"[bold]{published}[/] published")
             status_line = " · ".join(parts) if parts else "no articles yet"
         except Exception:
+            import logging
+            logging.getLogger(__name__).warning(
+                "Failed to load REPL dashboard stats", exc_info=True
+            )
             status_line = "?"
         greeting = Text()
         greeting.append("✧ ", style=theme.styles['accent'])
@@ -124,15 +123,15 @@ def run():
     # ── REPL session setup ──────────────────────────────────────────────
     REPL_HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
     COMMANDS = sorted(get_cmd_map().keys()) + _META_COMMANDS
+    # Static completion words — computed once, never change.
+    _STATIC_WORDS = frozenset(COMMANDS + FLAGS)
     _refresh_completions()
 
     class _ReplCompleter(WordCompleter):
         """Dynamic completer: commands + flags + live article IDs and @names."""
         def get_completions(self, document, complete_event):
-            # Merge static + dynamic words
-            words = set(COMMANDS + FLAGS + list(_repl_completion_words))
-            self.words = sorted(words)
-            self.words_changed = True  # force re-sort
+            self.words = sorted(_STATIC_WORDS | set(_repl_completion_words))
+            self.words_changed = True
             yield from super().get_completions(document, complete_event)
 
     completer = _ReplCompleter([], ignore_case=True, sentence=True)
@@ -188,9 +187,9 @@ def run():
             # Periodic scan: check for publishable articles
             now = time.time()
             if now - _last_scan > params.sink.scan_interval_seconds:
-                db = _ensure_db()
-                count = publish_ready_articles(db)
-                db.commit()
+                db2 = _ensure_db()
+                count = publish_ready_articles(db2)
+                db2.commit()
                 if count > 0:
                     console.print(f"[info]{count} 篇文章已自动发布[/]")
                 _last_scan = now
@@ -199,6 +198,4 @@ def run():
                 console.print("[muted]Bye.[/]")
                 break
     finally:
-        from peerpedia_core.repl.state import _repl_db
-        if _repl_db is not None:
-            _repl_db.close()
+        _close_db()

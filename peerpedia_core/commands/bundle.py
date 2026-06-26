@@ -50,7 +50,7 @@ from pathlib import Path
 from peerpedia_core.storage.db import Session
 
 from peerpedia_core.config.params import EMAIL_SUFFIX, PLATFORM_EMAIL
-from peerpedia_core.types.status import VALID_ARTICLE_STATUSES
+from peerpedia_core.types.status import VALID_ARTICLE_STATUSES, parse_status_tag
 from peerpedia_core.exceptions import BadRequestError, NotAuthorizedError, SignatureVerificationError
 from peerpedia_core.storage.db.crud_article import get_article, update_article_status, update_witnessed_at
 from peerpedia_core.storage.db.crud_maintainer import get_maintainer_ids
@@ -76,25 +76,6 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-_PLATFORM_EMAIL = PLATFORM_EMAIL
-_VALID_STATUSES = set(VALID_ARTICLE_STATUSES)
-
-
-def _parse_status_tag(message: str, author_email: str) -> str | None:
-    """Return the article status if *message* is a valid platform status commit.
-
-    Only accepts commits authored by the PeerPedia platform (system@peerpedia)
-    whose message has the form ``[status] <valid_status>``.
-    """
-    if author_email != _PLATFORM_EMAIL:
-        return None
-    msg = message.strip()
-    prefix = "[status] "
-    if not msg.startswith(prefix):
-        return None
-    status = msg[len(prefix):]
-    return status if status in _VALID_STATUSES else None
-
 
 def sync_status_from_git(db: Session, article_id: str) -> None:
     """Read status transitions from commit messages and update DB.
@@ -116,7 +97,7 @@ def sync_status_from_git(db: Session, article_id: str) -> None:
 
     since = article.last_author_rebuild_hash
     for commit in get_commit_history(rp, since_hash=since):
-        new_status = _parse_status_tag(
+        new_status = parse_status_tag(
             commit["message"], commit["author_email"]
         )
         if new_status:
@@ -193,6 +174,17 @@ def apply_sync_bundle(
 
     Raises:
         MergeConflictError: merge conflict (ff-only rejected).
+
+    .. todo::
+       Add explicit rollback / transaction management.  This function
+       orchestrates 9 sequential steps (merge → verify signatures →
+       rebuild authors → sync reviews → sync status → update witnessed_at →
+       integrity check → recompute score → publish).  If any intermediate
+       step fails, prior steps have already mutated DB/git state with no
+       automatic rollback.  Consider a ``SyncContext`` context manager that
+       wraps each step in try/except with logging and exposes a rollback
+       path for the caller.  The caller currently owns ``commit()``, but
+       mid-sequence failures can leave the DB inconsistent.
     """
     rp = DEFAULT_ARTICLES_DIR / article_id
 
@@ -272,13 +264,13 @@ def _verify_new_commits(db: Session, repo_path: Path, *, since_hash: str) -> Non
     user_ids = {
         _extract_user_id_from_email(c["author_email"])
         for c in commits
-        if c["author_email"] != _PLATFORM_EMAIL
+        if c["author_email"] != PLATFORM_EMAIL
     }
     users_by_id = {u.id: u for u in get_users_by_ids(db, user_ids)}
 
     for commit in commits:
         author_email = commit["author_email"]
-        if author_email == _PLATFORM_EMAIL:
+        if author_email == PLATFORM_EMAIL:
             continue
 
         commit_hash = commit["hash"]

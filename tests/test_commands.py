@@ -90,7 +90,7 @@ def test_fork_fails_for_draft_article(db, test_signing_key_bytes, test_pubkey_he
     create_article(db, id="art-1", title="Draft", authors=["alice"], status="draft")
     db.flush()
 
-    with pytest.raises(NotAuthorizedError, match="Only published articles can be forked"):
+    with pytest.raises(NotAuthorizedError, match="Only maintainers can fork a draft"):
         fork_article(db, "art-1", "bob")
 
 def test_fork_fails_for_duplicate(db, test_signing_key_bytes, test_pubkey_hex):

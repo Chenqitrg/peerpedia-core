@@ -34,7 +34,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next):
         """Rate-limit by client IP; return 429 if exceeded."""
-        ip = request.client.host if request.client else "unknown"
+        ip = request.client.host if (request.client and request.client.host) else "unknown"
         now = time.monotonic()
         bucket = [t for t in self._buckets[ip] if now - t < self._window]
         bucket.append(now)

@@ -204,9 +204,10 @@ def commit_article(
     # Build commit kwargs
     if signing_key:
         pub_path = signing_key.with_suffix(signing_key.suffix + ".pub")
-        _write_ssh_pubkey(signing_key, pub_path)
-        allowed_signers = _write_allowed_signers(author_email, pub_path)
+        allowed_signers = None
         try:
+            _write_ssh_pubkey(signing_key, pub_path)
+            allowed_signers = _write_allowed_signers(author_email, pub_path)
             repo.git.commit(
                 S=True,
                 gpg_sign=str(pub_path),
@@ -217,7 +218,8 @@ def commit_article(
             )
         finally:
             pub_path.unlink(missing_ok=True)
-            allowed_signers.unlink(missing_ok=True)
+            if allowed_signers:
+                allowed_signers.unlink(missing_ok=True)
     else:
         repo.git.commit(
             m=full_message,
@@ -417,10 +419,7 @@ def get_diff_between(repo_path: Path, hash1: str, hash2: str) -> dict:
 # ── Merge ─────────────────────────────────────────────────────────────────
 
 
-from peerpedia_core.exceptions import ConflictError
-
-class MergeConflictError(ConflictError):
-    """Raised when a git merge encounters conflicts that can't auto-resolve."""
+from peerpedia_core.exceptions import ConflictError, MergeConflictError
 
 
 def merge_git_repos(target: Path, fork: Path, author_name: str) -> str:

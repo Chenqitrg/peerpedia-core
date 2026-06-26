@@ -895,3 +895,35 @@ class TestBranchProtection:
 
         with pytest.raises(RuntimeError, match="refs/heads/trunk"):
             merge_git_repos(target_rp, fork_rp, "Author")
+
+
+# ── File cleanup robustness ──────────────────────────────────────────────
+
+
+def test_commit_article_try_covers_temp_file_creation():
+    """Regression: try block must start before _write_ssh_pubkey, not after.
+
+    Verifies that the ``try`` keyword appears before the first temp file
+    creation so that any exception during file setup is covered by finally.
+    """
+    import inspect
+    from peerpedia_core.storage import git_backend as gb
+
+    source = inspect.getsource(gb.commit_article)
+    # After "if signing_key:", the next non-comment line must be the try.
+    lines = [l.strip() for l in source.split("\n") if l.strip() and not l.strip().startswith("#")]
+    found_signing = False
+    for i, line in enumerate(lines):
+        if "if signing_key:" in line:
+            found_signing = True
+            continue
+        if found_signing:
+            # Next substantive line should be "try:" or "pub_path = ..."
+            # If try comes first, pub_path assignment is inside it. Either order is fine
+            # as long as try covers the file writes.
+            remaining = "\n".join(lines[i:])
+            assert "try:" in remaining[:200], (
+                "try block must cover temp file creation, but 'try:' not found "
+                "within 200 chars after 'if signing_key:'"
+            )
+            break

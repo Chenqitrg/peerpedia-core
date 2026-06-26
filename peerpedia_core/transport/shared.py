@@ -9,19 +9,22 @@ call this before touching the filesystem or DB.
 """
 
 import re
+import uuid
 
 from starlette.responses import JSONResponse
 
 from peerpedia_core.exceptions import BadRequestError
 
-_UUID_RE = re.compile(
-    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
-)
-
 
 def _validate_id(value: str, label: str) -> None:
-    """Raise BadRequestError if *value* is not a valid UUID."""
-    if not _UUID_RE.match(value):
+    """Raise BadRequestError if *value* is not a valid UUID.
+
+    Accepts any standard UUID format: hyphenated (8-4-4-4-12),
+    unhyphenated (32 hex chars), and uppercase hex.
+    """
+    try:
+        uuid.UUID(value)
+    except (ValueError, AttributeError):
         raise BadRequestError(f"Invalid {label}: {value[:50]!r}")
 
 

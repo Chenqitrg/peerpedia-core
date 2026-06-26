@@ -40,7 +40,8 @@ Permission matrix
 | Delete      | assert_can_delete_article     | Maintainer only  | draft                   |
 | Publish     | assert_can_publish_article    | Maintainer only  | draft, published        |
 | Rollback    | assert_can_rollback_article   | Maintainer only  | draft, published        |
-| Fork        | assert_can_fork_article       | Anyone (no dupe) | published               |
+| Fork        | assert_can_fork_article       | Anyone (no dupe) | published, rejected     |
+|             |                               | Maintainer       | draft                   |
 | Review      | assert_can_submit_review      | Anyone           | sedimentation, published|
 | Extend sink | assert_can_extend_sink        | Maintainer only  | sedimentation           |
 | Sync        | assert_can_sync_article       | Maintainer only  | draft, published        |
@@ -75,7 +76,7 @@ from peerpedia_core.types.scores import FiveDimScores, SCORE_DIMENSIONS
 # ═══════════════════════════════════════════════════════════════════════════════
 
 PUBLIC_READABLE_STATUSES = {"sedimentation", "published", "rejected"}
-FORKABLE_STATUSES = {"published", "rejected"}
+FORKABLE_STATUSES = {"draft", "published", "rejected"}
 PUBLIC_DOWNLOADABLE_STATUSES = {"published", "rejected"}
 
 # Sedimentation articles are editable by maintainers (with Closes: requirement).
@@ -328,15 +329,27 @@ def assert_can_sync_article(article: Article, maintainer_ids: list[str], user: U
 def assert_can_fork_article(
     article: Article,
     existing_fork: Article | None,
+    user: User | None = None,
+    maintainer_ids: list[str] | None = None,
 ) -> Article:
     """Raise if the article cannot be forked by *user*.
 
     Checks (in order):
-    1. Status is forkable (``published`` only)
-    2. User has not already forked this article
+    1. Draft articles: only maintainers can fork
+    2. Other statuses: must be in FORKABLE_STATUSES
+    3. User has not already forked this article
     """
-    if article.status not in FORKABLE_STATUSES:
-        raise NotAuthorizedError("Only published articles can be forked")
+    if article.status == "draft":
+        if not maintainer_ids or user is None or not _is_maintainer(maintainer_ids, user):
+            raise NotAuthorizedError(
+                "Only maintainers can fork a draft article. "
+                "Wait for it to be published, or ask a maintainer to fork it."
+            )
+    elif article.status not in FORKABLE_STATUSES:
+        raise NotAuthorizedError(
+            f"Articles with status '{article.status}' cannot be forked. "
+            f"Only {', '.join(sorted(FORKABLE_STATUSES))} articles can be forked."
+        )
 
     if existing_fork is not None:
         raise ConflictError("Already forked this article")

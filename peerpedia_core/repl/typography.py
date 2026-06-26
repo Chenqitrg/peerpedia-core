@@ -25,6 +25,8 @@ Design constraints:
 
 from __future__ import annotations
 
+import peerpedia_core.repl.state as _st
+
 # ── Character mapping tables ─────────────────────────────────────────────
 
 # Math Bold Serif: title
@@ -160,3 +162,19 @@ def styled_date(s: str) -> str:
 def styled_score_val(n: float, color: str = "accent") -> str:
     """Return a Rich-markup-safe styled numeric score."""
     return f"[{color}]{score(f'{n:.1f}')}[/]"
+
+
+def styled(raw_func):
+    """Return a wrapper that applies unicode typography only when enabled.
+
+    Reads ``_st._repl_unicode`` at call time so the toggle takes effect
+    immediately — no lazy import needed (zero circular dependency).
+
+    Usage::
+
+        from peerpedia_core.repl.typography import styled, title as _T_raw
+        _T = styled(_T_raw)
+    """
+    def wrapper(s, *args, **kwargs):
+        return raw_func(s, *args, **kwargs) if _st._repl_unicode else s
+    return wrapper

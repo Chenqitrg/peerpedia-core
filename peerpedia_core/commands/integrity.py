@@ -24,6 +24,7 @@ from peerpedia_core.storage.db import Session
 from peerpedia_core.commands.workflow import recompute_article_score
 from peerpedia_core.storage.db.crud_article import get_article, get_author_ids, update_article_status
 from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, get_commit_history, verify_commit_signature
+from peerpedia_core.types.status import parse_status_tag
 
 
 def assert_article_integrity(db: Session, article_id: str, *, level: str = "light") -> None:
@@ -114,13 +115,11 @@ def _repair_from_git(db: Session, article_id: str, repo_path: Path) -> None:
 def _read_status_from_git(repo_path: Path) -> str | None:
     """Read the latest [status] tag from platform commit messages.
 
-    Delegates parsing to ``commands.bundle._parse_status_tag`` — the
+    Delegates parsing to ``types.status.parse_status_tag`` — the
     single canonical parser for status markers in git history.
     """
-    from peerpedia_core.commands.bundle import _parse_status_tag  # noqa: PLC0415
-
     for commit in get_commit_history(repo_path):
-        status = _parse_status_tag(commit["message"], commit["author_email"])
+        status = parse_status_tag(commit["message"], commit["author_email"])
         if status is not None:
             return status
     return None

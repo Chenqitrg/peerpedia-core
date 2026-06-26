@@ -20,11 +20,11 @@ from peerpedia_core.commands import (
     list_aliases, remove_alias, remove_bookmark, remove_share, set_alias,
     follow_user, unfollow_user,
     get_follower_views, get_followers, get_following, get_following_views,
-    create_user_stub, get_article, get_top_users_by_followers, get_user, merge_article_meta,
+    create_user_stub, get_top_users_by_followers, get_user,
 )
 from peerpedia_core.social import discover_articles, discover_followers, discover_following, discover_notifications, discover_shares
 from peerpedia_core.transport import (
-    fetch_article_meta, fetch_school,
+    fetch_school,
     push_follow, push_share, push_share_remove, push_unfollow,
 )
 
@@ -211,25 +211,6 @@ def _cmd_bookmark_add(db, args):
     article_id = article.id
     add_bookmark(db, user_id, article_id)
     db.commit()
-
-    # Pull article metadata + source + compile it so it's readable offline.
-    existing = get_article(db, article_id)
-    if existing is None:
-        server = os.environ.get("PEERPEDIA_SERVER")
-        if server:
-            try:
-                meta = fetch_article_meta(server, article_id)
-                if meta:
-                    merge_article_meta(db, [meta])
-                    db.commit()
-                    console.print(
-                        f"[dim]Pulled metadata for [accent]{article_id[:8]}[/] "
-                        f"from {server}[/]"
-                    )
-            except Exception as e:
-                console.print(
-                    f"[warning]⚠ Could not pull metadata for {article_id[:8]}: {e}[/]"
-                )
 
     if args.json:
         _json_out({"bookmarked": True})

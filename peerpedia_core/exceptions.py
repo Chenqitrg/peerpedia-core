@@ -98,6 +98,15 @@ class ConflictError(PeerpediaError):
         super().__init__(detail, conflicting_entity=conflicting_entity)
 
 
+class MergeConflictError(ConflictError):
+    """Raised when a git merge encounters conflicts that can't auto-resolve.
+
+    Canonical definition — imported by both ``storage/git_backend`` and
+    ``bundle/git_bundle`` so callers can catch a single type regardless of
+    which layer raises it.
+    """
+
+
 class BadRequestError(PeerpediaError):
     """Input is invalid or missing required data.
 

@@ -1,48 +1,50 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""REPL meta-commands and command dispatch."""
+"""REPL meta-commands and command dispatch.
+
+Architecture: all data access goes through ``cli.helpers`` — no direct
+``commands/`` or ``storage/`` imports.  No lazy imports needed because
+``cli/`` never imports from ``repl/`` (zero circular dependency).
+"""
 
 from __future__ import annotations
 
 import shlex
 import sys
+from datetime import datetime, timezone
 
+from rich.panel import Panel
+from rich.table import Table
+from rich.text import Text
+from rich.prompt import Prompt
+
+from peerpedia_core.cli.display import console as _cli_console, _stars
+from peerpedia_core.cli.helpers import (
+    _ensure_db, _get_article_head_hash, _read_session, _resolve_article_id,
+    get_notifications_for_user, get_user, get_user_by_name, list_articles,
+)
+from peerpedia_core.cli.parser import get_cmd_map
+
+from peerpedia_core.repl.state import (
+    _EMBER_THEME, _EMBER_STYLE, _PARCHMENT_THEME, _PARCHMENT_STYLE,
+    _repl_user, _repl_article_id, _repl_article_title, _repl_article_commit,
+    _repl_theme, _repl_compact, _repl_unicode,
+    _get_parser, console, repl_style, theme,
+)
 from peerpedia_core.repl.typography import (
+    styled,
     styled_title as _T_raw, styled_author as _A_raw, styled_date as _D_raw,
     styled_status as _S_raw, styled_score_val as _SC_raw,
 )
 
-def _T(s, *args, **kwargs):
-    import peerpedia_core.repl.state as _st
-    return _T_raw(s, *args, **kwargs) if _st._repl_unicode else s
+# ── Typography wrappers ──────────────────────────────────────────────────
 
-def _A(s, *args, **kwargs):
-    import peerpedia_core.repl.state as _st
-    return _A_raw(s, *args, **kwargs) if _st._repl_unicode else s
-
-def _D(s, *args, **kwargs):
-    import peerpedia_core.repl.state as _st
-    return _D_raw(s, *args, **kwargs) if _st._repl_unicode else s
-
-def _S(s, *args, **kwargs):
-    import peerpedia_core.repl.state as _st
-    return _S_raw(s, *args, **kwargs) if _st._repl_unicode else s
-
-def _SC(s, *args, **kwargs):
-    import peerpedia_core.repl.state as _st
-    return _SC_raw(s, *args, **kwargs) if _st._repl_unicode else s
-
-from peerpedia_core.cli.parser import get_cmd_map
-from peerpedia_core.commands import get_user, get_user_by_name, list_articles
-from peerpedia_core.storage.db.models import Article
-
-from peerpedia_core.repl.state import (
-    _ensure_db, _repl_user, _repl_article_id, _repl_article_title,
-    _repl_article_commit, _repl_theme, _repl_compact,
-    _PARCHMENT_THEME, _EMBER_THEME, _PARCHMENT_STYLE, _EMBER_STYLE,
-    theme, repl_style, console,
-)
+_T = styled(_T_raw)
+_A = styled(_A_raw)
+_D = styled(_D_raw)
+_S = styled(_S_raw)
+_SC = styled(_SC_raw)
 
 _META_COMMANDS = [":help", ":h", ":user", ":u", ":article", ":a", ":theme",
                   ":compact", ":unicode", ":write", ":feed", ":school", ":inbox", ":quit", ":q"]
@@ -52,10 +54,6 @@ _META_COMMANDS = [":help", ":h", ":user", ":u", ":article", ":a", ":theme",
 
 
 def _meta_help():
-    from rich.panel import Panel
-    from rich.table import Table
-    from rich.text import Text
-
     cmd_table = Table(show_header=False, border_style="muted", padding=(0, 1))
     cmd_table.add_column("cmd", style=f"bold {theme.styles['accent']}", width=14)
     cmd_table.add_column("desc", style="muted")
@@ -104,9 +102,9 @@ def _meta_help():
     console.print(Panel(cmd_table, title="Commands", border_style="muted", title_align="left"))
     console.print(Panel(meta_table, title="Meta", border_style="muted", title_align="left"))
     keys = Text()
-    keys.append("Ctrl+J", style="bold")
-    keys.append(" submit  ·  ")
     keys.append("Enter", style="bold")
+    keys.append(" submit  ·  ")
+    keys.append("Ctrl+J", style="bold")
     keys.append(" newline  ·  ")
     keys.append("--json", style="accent")
     keys.append(" for machine output")
@@ -122,7 +120,6 @@ def _meta_user(name):
         if len(users) == 1:
             u = users[0]
         elif len(users) > 1:
-            from rich.table import Table
             t = Table(title=f"Multiple users matching '{name}'", border_style="muted")
             t.add_column("#", style="muted", width=3)
             t.add_column("ID", style="accent", width=10)
@@ -148,46 +145,29 @@ def _meta_article(ref: str):
         _repl_article_commit = ""
         console.print("[muted]Article context cleared.[/]")
         return
-    article = db.query(Article).filter(
-        (Article.id == ref) | (Article.id.startswith(ref))
-    ).first()
-    if article is None:
-        articles = list_articles(db, search_query=ref, limit=5)
-        if len(articles) == 1:
-            article = articles[0]
-        elif len(articles) > 1:
-            console.print(f"[warning]Multiple matches for '{ref}':[/]")
-            for a in articles:
-                console.print(f"  {a.id[:8]}  {a.title}")
-            return
-    if article:
-        _repl_article_id = article.id
-        _repl_article_title = article.title
-        try:
-            from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, get_head_hash
-            rp = DEFAULT_ARTICLES_DIR / article.id
-            if (rp / ".git").is_dir():
-                _repl_article_commit = get_head_hash(rp)
-            else:
-                _repl_article_commit = ""
-        except Exception:
-            _repl_article_commit = ""
-        commit_str = f" @{_repl_article_commit[:7]}" if _repl_article_commit else ""
-        # Sedimentation countdown
-        sink_info = ""
-        if article.status == "sedimentation" and article.sink_start:
-            from datetime import datetime, timezone
-            now = datetime.now(timezone.utc)
-            start = article.sink_start.replace(tzinfo=timezone.utc) if article.sink_start.tzinfo is None else article.sink_start
-            elapsed = (now - start).days
-            total = article.sink_duration_days or 7
-            remaining = max(0, total - elapsed)
-            bar_filled = min(total, max(0, elapsed))
-            bar = "█" * bar_filled + "░" * (total - bar_filled)
-            sink_info = f"  [{theme.styles['muted']}]{bar}[/] {remaining}d left"
-        console.print(f"[success]▸[/] {_T(article.title)} [muted]({article.id[:8]}{commit_str})[/]{sink_info}")
-    else:
+    # Use cli.helpers._resolve_article_id — same logic as CLI handlers.
+    try:
+        article = _resolve_article_id(db, ref)
+    except SystemExit:
+        # _resolve_article_id calls _die on not-found; catch and display.
         console.print(f"[error]✗[/] Article '{ref}' not found.")
+        return
+    _repl_article_id = article.id
+    _repl_article_title = article.title
+    _repl_article_commit = _get_article_head_hash(article.id)
+    commit_str = f" @{_repl_article_commit[:7]}" if _repl_article_commit else ""
+    # Sedimentation countdown
+    sink_info = ""
+    if article.status == "sedimentation" and article.sink_start:
+        now = datetime.now(timezone.utc)
+        start = article.sink_start.replace(tzinfo=timezone.utc) if article.sink_start.tzinfo is None else article.sink_start
+        elapsed = (now - start).days
+        total = article.sink_duration_days or 7
+        remaining = max(0, total - elapsed)
+        bar_filled = min(total, max(0, elapsed))
+        bar = "█" * bar_filled + "░" * (total - bar_filled)
+        sink_info = f"  [{theme.styles['muted']}]{bar}[/] {remaining}d left"
+    console.print(f"[success]▸[/] {_T(article.title)} [muted]({article.id[:8]}{commit_str})[/]{sink_info}")
 
 
 def _meta_theme(mode: str):
@@ -210,8 +190,6 @@ def _meta_theme(mode: str):
 
 
 def _show_inbox():
-    from peerpedia_core.cli.helpers import _read_session
-    from peerpedia_core.commands import get_notifications_for_user
     db = _ensure_db()
     session_data = _read_session()
     if not session_data:
@@ -221,7 +199,6 @@ def _show_inbox():
     if not notifications:
         console.print("[muted]No notifications.[/]")
         return
-    from rich.table import Table
     t = Table(title="Notifications", border_style="muted")
     t.add_column("Time", style="muted", width=16)
     t.add_column("Event", style="accent")
@@ -235,8 +212,6 @@ def _show_inbox():
 
 def _meta_write(parser) -> bool:
     """Guided article creation wizard. Returns True to continue REPL."""
-    from rich.prompt import Prompt
-
     console.print(f"[bold {theme.styles['info']}]▔▔▔ New Article ▔▔▔[/]")
     try:
         title = Prompt.ask(f"  [{theme.styles['accent']}]Title[/]")
@@ -322,9 +297,9 @@ def _dispatch(cmd_str: str, parser) -> bool:
             console.print(f"[muted]Output mode: {mode}.[/]")
             return True
         elif meta == ":unicode":
-            import peerpedia_core.repl.state as _st
-            _st._repl_unicode = not _st._repl_unicode
-            status = "on" if _st._repl_unicode else "off"
+            global _repl_unicode
+            _repl_unicode = not _repl_unicode
+            status = "on" if _repl_unicode else "off"
             console.print(f"[muted]Unicode typography: {status}.[/]")
             return True
         elif meta == ":feed":
@@ -457,7 +432,6 @@ def _dispatch(cmd_str: str, parser) -> bool:
         else:
             parser.print_help()
     except Exception as e:
-        from rich.panel import Panel
         console.print(Panel(str(e), title="Error", border_style="error", title_align="left"))
 
     return True

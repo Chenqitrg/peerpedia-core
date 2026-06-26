@@ -47,7 +47,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from peerpedia_core.exceptions import ProtocolError
+from peerpedia_core.exceptions import ProtocolError, TransportError
 from peerpedia_core.storage.db import Session
 
 from peerpedia_core.commands import apply_sync_bundle
@@ -55,10 +55,10 @@ from peerpedia_core.bundle.git_bundle import (
     create_bundle,
     find_common_ancestor,
     get_head,
+    ingest_article,
     ingest_bundle,
     pack_article_repo,
 )
-from peerpedia_core.bundle.server import ingest_article
 
 from peerpedia_core.config.paths import ARTICLES_DIR as DEFAULT_ARTICLES_DIR
 from peerpedia_core.transport import (
@@ -66,6 +66,7 @@ from peerpedia_core.transport import (
     fetch_article_repo,
     fetch_incremental_bundle,
     fetch_head,
+    is_online,
     push_article_repo,
     push_bundle,
 )
@@ -99,6 +100,16 @@ def sync_article(db: Session, server: str, article_id: str) -> dict:
         local_head: str = get_head(rp)
     except (FileNotFoundError, ValueError):
         return {"synced": False, "head": None}
+
+    # Check reachability first — a cached "offline" result from the health
+    # cache would otherwise let check_clock_skew return None (no HTTP call),
+    # and the subsequent fetch_head would fail with a confusing TransportError.
+    # This gives the user a clear "Server unreachable" message instead.
+    if not is_online(server):
+        raise TransportError(
+            f"Server {server} unreachable. "
+            "Check that the server is running and your network is up."
+        )
 
     # Check clock sync before any sync operations — if the local clock is
     # far from the server, commit timestamps are untrustworthy for priority

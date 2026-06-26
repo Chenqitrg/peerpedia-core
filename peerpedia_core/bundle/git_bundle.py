@@ -61,10 +61,7 @@ import git
 from peerpedia_core.bundle.monotonic import search_monotonic_boundary
 
 
-from peerpedia_core.exceptions import ConflictError
-
-class MergeConflictError(ConflictError):
-    """Raised when a git merge encounters conflicts that can't auto-resolve."""
+from peerpedia_core.exceptions import ConflictError, MergeConflictError
 
 
 # ── Bundle operations ────────────────────────────────────────────────────────
@@ -239,6 +236,21 @@ def find_common_ancestor(
 
 
 # ── Full-repo pack / unpack (tar.gz) ──────────────────────────────────────
+
+
+def ingest_article(repo_path: Path, payload: dict) -> str:
+    """Receive and unpack a full article repo upload.
+
+    Thin wrapper around ``ingest_article_repo`` that converts
+    ``FileExistsError`` to ``ConflictError`` for the caller.
+
+    Raises:
+        ConflictError: if the article already exists locally.
+    """
+    try:
+        return ingest_article_repo(repo_path, payload)
+    except FileExistsError:
+        raise ConflictError(f"Article already exists locally: {repo_path.name}") from None
 
 
 def ingest_article_repo(repo_path: Path, payload: dict) -> str:

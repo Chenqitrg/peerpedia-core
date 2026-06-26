@@ -21,7 +21,6 @@ from peerpedia_core.transport.health import check_clock_skew
 from peerpedia_core.social import discover_articles
 from peerpedia_core.social.discovery import get_known_peers, record_peer_result
 from peerpedia_core.transport import fetch_head
-from peerpedia_core.transport.health import check_clock_skew
 
 
 def _require_online_server(args) -> str:
@@ -63,14 +62,14 @@ def _sync_articles_to_peer(db, server: str, *, pre_check: bool = True) -> int:
             try:
                 if fetch_head(server, article_id) is None:
                     continue
-            except Exception:
+            except (TransportError, ProtocolError, ConflictError, ConnectionError):
                 continue
         try:
             result = sync_article(db, server, article_id)
             if result["synced"]:
                 db.commit()
                 synced += 1
-        except Exception:
+        except (TransportError, ProtocolError, ConflictError, ConnectionError):
             continue
     return synced
 
@@ -152,7 +151,7 @@ def _try_sync_all(db) -> None:
                     console.print(
                         f"[dim]✓ {server}: discovered {n} article(s).[/]"
                     )
-            except Exception:
+            except (TransportError, ProtocolError, ConflictError, ConnectionError):
                 pass
 
             if synced:
@@ -160,7 +159,7 @@ def _try_sync_all(db) -> None:
                     f"[dim]✓ Synced {synced} article(s) with {server}.[/]"
                 )
             record_peer_result(server, success=True)
-        except Exception:
+        except (TransportError, ProtocolError, ConflictError, ConnectionError):
             record_peer_result(server, success=False)
 
 
@@ -184,7 +183,11 @@ def _resolve_server_url(args) -> str:
     if not srv:
         _die("No peer server configured.  Set PEERPEDIA_SERVER or pass --server.")
 
-    _save_default_server(srv)
+    # Only write to disk if the URL actually changed — avoids unnecessary
+    # filesystem I/O on every network-touching command.
+    default_file = DATA_ROOT / "server_default"
+    if not default_file.is_file() or default_file.read_text().strip() != srv:
+        _save_default_server(srv)
 
     # Warn if the saved default server has been unreachable for 3+ consecutive
     # calls — the user may not realize it's a stale server from a past session.

@@ -2,8 +2,9 @@ EXAMPLES
   # Fork a published article to start your own version
   peerpedia fork abc12345
 
-Only published articles can be forked.  The fork starts as a draft
-with the original's full git history.  You become the fork's maintainer.
+Published and rejected articles can be forked by anyone.  Draft articles
+can only be forked by their maintainers.  The fork starts as a draft with
+the original's full git history.  You become the fork's maintainer.
 
 After editing your fork, use "merge propose" to suggest merging
 your changes back into the original.

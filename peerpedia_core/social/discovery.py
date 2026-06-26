@@ -17,15 +17,25 @@ import time
 from pathlib import Path
 
 from peerpedia_core.config.params import params
+from peerpedia_core.config.paths import DATA_ROOT
 from peerpedia_core.transport import fetch_peers
 
-_PEERS_FILE = Path.home() / ".peerpedia" / "peers.json"
+_PEERS_FILE = DATA_ROOT / "peers.json"
 
 # ── Backoff state ────────────────────────────────────────────────────────────
 
 # In-memory cache of per-peer failure state: {url: {"fail_count": N, "last_failed_at": ts}}.
 # Persisted to peers.json alongside the URL list.
 _backoff: dict[str, dict] = {}
+_backoff_hydrated = False
+
+
+def _ensure_backoff_hydrated() -> None:
+    """Lazily hydrate backoff state from peers.json on first access."""
+    global _backoff_hydrated
+    if not _backoff_hydrated:
+        _hydrate_backoff()
+        _backoff_hydrated = True
 
 
 def _load_peers_raw() -> list:
@@ -50,6 +60,7 @@ def _save_peers_raw(peers: list) -> None:
 
 def _is_peer_backoff(url: str) -> bool:
     """Return True if *url* is in exponential backoff and should be skipped."""
+    _ensure_backoff_hydrated()
     if url not in _backoff:
         return False
     state = _backoff[url]
@@ -64,6 +75,7 @@ def _is_peer_backoff(url: str) -> bool:
 
 def _peer_failed(url: str) -> None:
     """Record a failure for *url*, incrementing backoff."""
+    _ensure_backoff_hydrated()
     now = time.time()
     if url not in _backoff:
         _backoff[url] = {"fail_count": 1, "last_failed_at": now}
@@ -76,6 +88,7 @@ def _peer_failed(url: str) -> None:
 
 def _peer_succeeded(url: str) -> None:
     """Reset backoff for *url* after a successful connection."""
+    _ensure_backoff_hydrated()
     if url in _backoff:
         del _backoff[url]
         _persist_backoff()
@@ -156,6 +169,10 @@ def merge_peers(server_url: str) -> int:
     try:
         remote = fetch_peers(server_url)
     except Exception:
+        import logging
+        logging.getLogger(__name__).warning(
+            "Failed to fetch peers from %s", server_url, exc_info=True
+        )
         return 0
 
     local_urls = set(get_known_peers(skip_backoff=False))
@@ -177,5 +194,5 @@ def record_peer_result(url: str, success: bool) -> None:
         _peer_failed(url)
 
 
-# Hydrate backoff state on module load.
-_hydrate_backoff()
+# Backoff state is now hydrated lazily on first access via
+# ``_ensure_backoff_hydrated()`` — no module-level I/O side effect.

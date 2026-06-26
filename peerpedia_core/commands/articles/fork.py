@@ -16,7 +16,7 @@ from peerpedia_core.storage.db.crud_article import (
     get_article_by_fork_and_author,
     increment_fork_count,
 )
-from peerpedia_core.storage.db.crud_maintainer import add_maintainer
+from peerpedia_core.storage.db.crud_maintainer import add_maintainer, get_maintainer_ids
 from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, clone_article_repo, get_commit_authors
 from peerpedia_core.commands.articles._helpers import require_article, require_user
 
@@ -36,9 +36,10 @@ def fork_article(db: Session, article_id: str, user_id: str) -> dict:
 
     user = require_user(db, user_id)
     original = require_article(db, article_id)
+    maintainer_ids = get_maintainer_ids(db, article_id)
     existing_fork = get_article_by_fork_and_author(db, forked_from=article_id, author_id=user.id)
     assert_not_folded(original, threshold=params.reputation.fold_score_threshold)
-    assert_can_fork_article(original, existing_fork)
+    assert_can_fork_article(original, existing_fork, user=user, maintainer_ids=maintainer_ids)
 
     fork_id = str(uuid.uuid4())
     src = DEFAULT_ARTICLES_DIR / article_id

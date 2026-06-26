@@ -118,33 +118,16 @@ def test_no_internal_peerpedia_imports():
         ("peerpedia_core/cli/helpers.py",
          "peerpedia_core.bundle"):
             "heavy optional: lazy pull of article content from peer server; only needed when source file is missing",
-        ("peerpedia_core/cli/__init__.py",
+        ("peerpedia_core/__main__.py",
          "peerpedia_core.repl"):
-            "circular: cli/__init__.py imports from repl, repl imports from cli (parser, helpers)",
-        ("peerpedia_core/repl/__init__.py",
-         "peerpedia_core.cli.helpers"):
-            "circular: repl → cli.helpers; cli/__init__.py → repl",
-        ("peerpedia_core/repl/__init__.py",
+            "heavy: prompt_toolkit is heavy, only loaded for REPL mode; __main__ is the top-level router",
+        # ── REPL heavy optional deps ────────────────────────────────────
+        ("peerpedia_core/repl/state.py",
          "peerpedia_core.cli"):
-            "circular: repl → cli (build_parser for non-TTY fallback)",
-        ("peerpedia_core/repl/state.py",
-         "peerpedia_core.cli.helpers"):
-            "circular: repl state accesses session data from cli.helpers",
-        ("peerpedia_core/repl/state.py",
-         "peerpedia_core.commands"):
-            "circular: repl state loads articles/users for completions from commands",
-        ("peerpedia_core/repl/__init__.py",
-         "peerpedia_core.commands"):
-            "circular: repl init publishes ready articles and counts on startup",
-        ("peerpedia_core/repl/__init__.py",
-         "peerpedia_core.repl.state"):
-            "circular: repl init mutates repl state (_repl_user, theme) from run()",
-        ("peerpedia_core/repl/__init__.py",
-         "peerpedia_core.repl.commands"):
-            "circular: repl init imports _META_COMMANDS for completer setup",
-        ("peerpedia_core/repl/browse.py",
-         "peerpedia_core.commands"):
-            "circular: repl browse uses commands for article/user data",
+            "heavy: parser (argparse registration) only needed when _get_parser is first called",
+        ("peerpedia_core/repl/commands.py",
+         "peerpedia_core.repl.browse"):
+            "heavy: prompt_toolkit Application — only loaded for interactive browse views",
     }
 
     for f in _all_modules():
@@ -235,19 +218,24 @@ def test_policies_only_imports_allowed_modules():
 
 
 def test_bundle_client_server_never_import_each_other():
-    """bundle_client ↔ bundle_server communicate via HTTP, never by import."""
+    """bundle_client ↔ bundle_server communicate via HTTP, never by import.
+
+    Checks for both ``bundle_server`` (legacy flat module name) and
+    ``bundle.server`` (current dotted module name) to prevent false
+    negatives.
+    """
     _CLIENT = "peerpedia_core/bundle/client.py"
     _SERVER = "peerpedia_core/bundle/server.py"
     for f in _all_modules():
         rel = _rel(f)
         if rel == _CLIENT:
             for m in _imports_peerpedia_modules(f):
-                if "bundle_server" in m:
-                    raise AssertionError(f"{rel}: imports bundle_server — use HTTP")
+                if "bundle_server" in m or "bundle.server" in m:
+                    raise AssertionError(f"{rel}: imports {m} — use HTTP, not direct import")
         if rel == _SERVER:
             for m in _imports_peerpedia_modules(f):
-                if "bundle_client" in m:
-                    raise AssertionError(f"{rel}: imports bundle_client — use HTTP")
+                if "bundle_client" in m or "bundle.client" in m:
+                    raise AssertionError(f"{rel}: imports {m} — use HTTP, not direct import")
 
 
 def test_commands_never_imports_bundle_or_social():
@@ -783,3 +771,54 @@ def test_no_inline_db_filtering():
                             f"so push the filter into the SQL query (JOIN / WHERE) "
                             f"instead of filtering in Python after fetching all rows"
                         )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# O. CLI — may import storage.db.models, nothing else from storage/
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def test_cli_only_imports_models_from_storage():
+    """``cli/`` may import ``storage.db.models`` (ORM entities) but NOT
+    ``storage.db``, ``storage.git_backend``, or any other storage submodule.
+    All data access must go through ``commands/``."""
+    for f in _all_modules():
+        rel = _rel(f)
+        if not rel.startswith("peerpedia_core/cli/"):
+            continue
+        for m in _imports_peerpedia_modules(f):
+            if m.startswith("peerpedia_core.storage"):
+                if m != "peerpedia_core.storage.db.models":
+                    raise AssertionError(
+                        f"{rel}: imports {m} — "
+                        "cli/ may only import storage.db.models (ORM entities); "
+                        "all other storage access must go through commands/"
+                    )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# P. REPL — only imports from cli/ (and within repl/)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def test_repl_only_imports_from_cli():
+    """``repl/`` is a pure UI layer — it must only import from ``cli/``
+    (helpers, display, parser) and from within ``repl/`` itself.
+    No direct ``commands/``, ``storage/``, ``bundle/``, ``social/``,
+    or ``transport/`` imports."""
+    _FORBIDDEN_PREFIXES = (
+        "peerpedia_core.commands",
+        "peerpedia_core.storage",
+        "peerpedia_core.bundle",
+        "peerpedia_core.social",
+        "peerpedia_core.transport",
+    )
+    for f in _all_modules():
+        rel = _rel(f)
+        if not rel.startswith("peerpedia_core/repl/"):
+            continue
+        for m in _imports_peerpedia_modules(f):
+            if any(m.startswith(p) for p in _FORBIDDEN_PREFIXES):
+                raise AssertionError(
+                    f"{rel}: imports {m} — "
+                    "repl/ is a pure UI layer; import from cli/helpers, "
+                    "cli/display, or cli/parser instead"
+                )

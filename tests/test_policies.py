@@ -50,8 +50,8 @@ class TestVisibilityRules:
     def test_public_readable_includes_sedimentation_and_published(self):
         assert PUBLIC_READABLE_STATUSES == {"sedimentation", "published", "rejected"}
 
-    def test_forkable_statuses_includes_published_and_rejected(self):
-        assert FORKABLE_STATUSES == {"published", "rejected"}
+    def test_forkable_statuses_includes_draft_published_and_rejected(self):
+        assert FORKABLE_STATUSES == {"draft", "published", "rejected"}
 
     def test_visible_statuses_anonymous(self):
         result = visible_statuses_for_user(None)
@@ -120,20 +120,37 @@ class TestWritePermissions:
 
 class TestForkPermissions:
     def test_can_fork_published(self):
+        """Anyone can fork a published article."""
         a = _article(id="a-fork", status="published")
         result = assert_can_fork_article(a, None)
         assert result.id == "a-fork"
 
-    def test_cannot_fork_draft(self):
-        a = _article(id="a-nofork", status="draft")
-        with pytest.raises(NotAuthorizedError, match="Only published articles can be forked"):
+    def test_maintainer_can_fork_draft(self):
+        """A maintainer can fork their own draft article."""
+        u = _user(id="u-maint")
+        a = _article(id="a-draft", status="draft")
+        result = assert_can_fork_article(a, None, user=u, maintainer_ids=[u.id])
+        assert result.id == "a-draft"
+
+    def test_non_maintainer_cannot_fork_draft(self):
+        """A non-maintainer cannot fork someone else's draft."""
+        u = _user(id="u-stranger")
+        a = _article(id="a-draft", status="draft")
+        with pytest.raises(NotAuthorizedError, match="Only maintainers can fork a draft"):
+            assert_can_fork_article(a, None, user=u, maintainer_ids=["someone-else"])
+
+    def test_cannot_fork_sedimentation(self):
+        """Articles in sedimentation cannot be forked by anyone."""
+        a = _article(id="a-sed", status="sedimentation")
+        with pytest.raises(NotAuthorizedError, match="cannot be forked"):
             assert_can_fork_article(a, None)
 
     def test_cannot_fork_twice(self):
+        u = _user(id="u-dup")
         a = _article(id="a-dup-fork", status="published")
         existing_fork = _article(id="fork-existing", status="draft", forked_from="a-dup-fork")
         with pytest.raises(ConflictError, match="Already forked"):
-            assert_can_fork_article(a, existing_fork)
+            assert_can_fork_article(a, existing_fork, user=u, maintainer_ids=[u.id])
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

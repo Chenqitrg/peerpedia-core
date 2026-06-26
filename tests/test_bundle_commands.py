@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""Tests for sync orchestration — _parse_status_tag, sync_reviews_from_worktree,
+"""Tests for sync orchestration — parse_status_tag, sync_reviews_from_worktree,
 sync_status_from_git, and apply_sync_bundle."""
 
 from __future__ import annotations
@@ -15,11 +15,11 @@ import pytest
 from sqlalchemy.orm import Session
 
 from peerpedia_core.commands.bundle import (
-    _parse_status_tag,
     apply_sync_bundle,
     sync_reviews_from_worktree,
     sync_status_from_git,
 )
+from peerpedia_core.types.status import parse_status_tag
 from peerpedia_core.storage.db.crud_article import create_article, get_article
 from peerpedia_core.storage.db.crud_maintainer import add_maintainer
 from peerpedia_core.storage.db.crud_review import get_reviews_for_article
@@ -159,47 +159,47 @@ def articles_dir():
                 p.stop()
 
 
-# ── _parse_status_tag ────────────────────────────────────────────────────────
+# ── parse_status_tag ────────────────────────────────────────────────────────
 
 
 class TestParseStatusTag:
     def test_platform_commit_sedimentation(self):
-        result = _parse_status_tag("[status] sedimentation", "system@peerpedia")
+        result = parse_status_tag("[status] sedimentation", "system@peerpedia")
         assert result == "sedimentation"
 
     def test_platform_commit_published(self):
-        result = _parse_status_tag("[status] published", "system@peerpedia")
+        result = parse_status_tag("[status] published", "system@peerpedia")
         assert result == "published"
 
     def test_platform_commit_draft(self):
-        result = _parse_status_tag("[status] draft", "system@peerpedia")
+        result = parse_status_tag("[status] draft", "system@peerpedia")
         assert result == "draft"
 
     def test_non_platform_email_returns_none(self):
-        result = _parse_status_tag("[status] published", "alice@peerpedia")
+        result = parse_status_tag("[status] published", "alice@peerpedia")
         assert result is None
 
     def test_invalid_status_returns_none(self):
-        result = _parse_status_tag("[status] foobar", "system@peerpedia")
+        result = parse_status_tag("[status] foobar", "system@peerpedia")
         assert result is None
 
     def test_empty_message_returns_none(self):
-        result = _parse_status_tag("   ", "system@peerpedia")
+        result = parse_status_tag("   ", "system@peerpedia")
         assert result is None
 
     def test_message_with_whitespace_stripped(self):
         """Whitespace around the [status] message is stripped before matching."""
-        result = _parse_status_tag("  [status] sedimentation\n", "system@peerpedia")
+        result = parse_status_tag("  [status] sedimentation\n", "system@peerpedia")
         assert result == "sedimentation"
 
     def test_old_format_without_prefix_returns_none(self):
         """Old format (no [status] prefix) is rejected — no backward compat."""
-        result = _parse_status_tag("sedimentation", "system@peerpedia")
+        result = parse_status_tag("sedimentation", "system@peerpedia")
         assert result is None
 
     def test_message_without_status_prefix_returns_none(self):
         """Messages that don't start with [status] are rejected."""
-        result = _parse_status_tag("[review] published", "system@peerpedia")
+        result = parse_status_tag("[review] published", "system@peerpedia")
         assert result is None
 
 

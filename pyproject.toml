@@ -38,7 +38,7 @@ dependencies = [
 dev = ["pytest>=8.0"]
 
 [project.scripts]
-peerpedia = "peerpedia_core.cli:main"
+peerpedia = "peerpedia_core.__main__:main"
 
 [project.urls]
 Homepage = "https://github.com/Chenqitrg/peerpedia-core"

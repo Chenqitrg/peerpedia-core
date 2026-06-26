@@ -59,9 +59,11 @@ def _show_dashboard() -> None:
                 console.print(f"    Drafts:      {drafts}")
                 console.print(f"    In review:   {in_review}")
                 console.print(f"    Published:   {published}")
-        except Exception as e:
+        except Exception:
             import logging
-            logging.getLogger(__name__).debug("dashboard stats failed: %s", e)
+            logging.getLogger(__name__).warning(
+                "Failed to load dashboard stats", exc_info=True
+            )
     else:
         console.print("  [dim]Not logged in.[/]")
 
@@ -91,17 +93,16 @@ def _show_welcome() -> None:
 
 
 def main():
-    """CLI entry point — parse args, dispatch to handler, or launch REPL."""
+    """CLI entry point — parse args and dispatch to handler.
+
+    The top-level router (``__main__.py``) calls this when subcommand
+    arguments are present; otherwise it launches the REPL directly.
+    ``cli/`` has zero knowledge of ``repl/`` — no circular dependency.
+    """
     # Startup scan — publish any articles whose sink time has elapsed
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     with db_session(DB_URL) as session:
         publish_ready_articles(session)
-
-    # If no arguments, enter the REPL (it has its own startup banner).
-    if len(sys.argv) == 1:
-        from peerpedia_core.repl import run
-        run()
-        return
 
     parser = build_parser()
     try:
@@ -110,11 +111,11 @@ def main():
     except ImportError:
         pass
     args = parser.parse_args()
-    # Default is human-readable (Rich) output.
-    # Use --json for machine-readable output (AI agents, scripts).
-    # --rich is also accepted as an explicit alias.
+    # Default to JSON output for AI consumption; --rich enables human-readable.
     if getattr(args, "rich", False):
         args.json = False
+    else:
+        args.json = True   # default: JSON for AI
     if hasattr(args, "func"):
         args.func(args)
     else:

@@ -19,8 +19,12 @@ from pathlib import Path
 
 from peerpedia_core.cli.display import console, theme, display_article as _render_article
 from peerpedia_core.commands import (
-    assert_article_integrity, db_session, get_article, get_author_ids,
-    get_users_by_ids, list_articles, parse_frontmatter, resolve_username_or_alias,
+    assert_article_integrity, count_articles, count_unread_notifications,
+    db_repl_setup, db_session, get_article, get_author_ids,
+    get_head_hash, get_notifications_for_user,
+    get_reviews_for_article, get_top_users_by_followers,
+    get_user, get_user_by_name, get_users_by_ids, list_articles, list_users,
+    parse_frontmatter, publish_ready_articles, resolve_username_or_alias,
 )
 from peerpedia_core.config.paths import ARTICLES_DIR as DEFAULT_ARTICLES_DIR, DB_PATH, DB_URL, SESSION_FILE
 from peerpedia_core.crypto import load_private_key, _public_key_to_bytes
@@ -30,6 +34,50 @@ from peerpedia_core.types.scores import SCORE_DIMENSIONS
 
 
 _data_dir_ready = False
+
+# Cached DB engine for REPL (REPL keeps a persistent session, unlike CLI's
+# one-shot _with_db).  None until first call.
+_repl_engine = None
+_repl_db = None
+
+
+def _ensure_db():
+    """Return a persistent database session for the REPL.
+
+    Creates the engine on first call; returns the cached session thereafter.
+    The REPL owns commit/rollback — this is NOT a context manager.
+    """
+    global _repl_engine, _repl_db
+    if _repl_db is None:
+        DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+        _repl_engine, _repl_db = db_repl_setup(DB_URL)
+    return _repl_db
+
+
+def _close_db():
+    """Close the persistent REPL database session."""
+    global _repl_db, _repl_engine
+    if _repl_db is not None:
+        _repl_db.close()
+        _repl_db = None
+    if _repl_engine is not None:
+        _repl_engine.dispose()
+        _repl_engine = None
+
+
+def _get_article_head_hash(article_id: str) -> str:
+    """Return the short HEAD hash for *article_id*, or '' if unavailable."""
+    rp = DEFAULT_ARTICLES_DIR / article_id
+    if (rp / ".git").is_dir():
+        try:
+            return get_head_hash(rp)
+        except Exception:
+            import logging
+            logging.getLogger(__name__).warning(
+                "Failed to read HEAD for article %s", article_id, exc_info=True
+            )
+            return ""
+    return ""
 
 
 def _with_db(func):
@@ -234,7 +282,10 @@ def _resolve_and_display_article(db, article, *, author_ids: list[str] | None = 
 def _read_session() -> dict | None:
     """Read the session file, or None if not logged in."""
     if SESSION_FILE.exists():
-        return json.loads(SESSION_FILE.read_text())
+        try:
+            return json.loads(SESSION_FILE.read_text())
+        except (json.JSONDecodeError, OSError):
+            return None
     return None
 
 
@@ -247,6 +298,19 @@ def _write_session(user_id: str, name: str, private_key_hex: str) -> None:
         "private_key_hex": private_key_hex,
     }))
     os.chmod(SESSION_FILE, 0o600)
+
+
+def _get_session_user_id() -> str:
+    """Return the current user ID from session, or '' if not logged in."""
+    try:
+        s = _read_session()
+        return s["user_id"] if s else ""
+    except Exception:
+        import logging
+        logging.getLogger(__name__).warning(
+            "Failed to read session file", exc_info=True
+        )
+        return ""
 
 
 def _get_session_user() -> str:

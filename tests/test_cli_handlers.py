@@ -331,3 +331,24 @@ class TestSocialHandlers:
         _cmd_share_add(Namespace(article_id=aid, to=None, comment="Check", json=False))
         out = capsys.readouterr().out
         assert "Shared" in out
+
+
+# ── Session file robustness ──────────────────────────────────────────────
+
+
+def test_read_session_returns_none_for_corrupted_json(tmp_path, monkeypatch):
+    """Corrupted session file should return None, not crash."""
+    bad_file = tmp_path / "session.json"
+    bad_file.write_text("{not valid json")
+    monkeypatch.setattr("peerpedia_core.cli.helpers.SESSION_FILE", bad_file)
+    from peerpedia_core.cli.helpers import _read_session
+    assert _read_session() is None
+
+
+def test_read_session_returns_none_for_empty_file(tmp_path, monkeypatch):
+    """Empty session file should return None, not crash."""
+    empty_file = tmp_path / "session.json"
+    empty_file.write_text("")
+    monkeypatch.setattr("peerpedia_core.cli.helpers.SESSION_FILE", empty_file)
+    from peerpedia_core.cli.helpers import _read_session
+    assert _read_session() is None

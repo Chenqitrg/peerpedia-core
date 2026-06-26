@@ -74,7 +74,7 @@ def _cmd_article_create(db, args):
         _json_out(result)
     else:
         article = get_article(db, result["id"])
-        _resolve_and_display_article(db, article)
+        _resolve_and_display_article(db, article, author_ids=[user_id])
         console.print(
             f"[dim]Created [accent]{result['id'][:8]}[/] \"{result['title']}\" (draft)[/]"
         )
@@ -292,7 +292,7 @@ def _cmd_article_delete(db, args):
     user_id = _get_session_user()
     article, article_id = _require_resolved_article(db, args.id)
 
-    if args.json:
+    if args.json and getattr(args, 'force', False):
         delete_article(db, article_id, user_id=user_id)
         _json_out({"id": article_id, "deleted": True})
         return

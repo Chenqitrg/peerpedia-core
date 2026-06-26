@@ -43,11 +43,11 @@ def _make_json_type():
     return _JSONType
 
 
-JSONList = _make_json_type()
-"""Store Python list as JSON string in SQLite."""
+JSONType = _make_json_type()
+"""Store Python list or dict as JSON string in SQLite."""
 
-JSONDict = _make_json_type()
-"""Store Python dict as JSON string in SQLite."""
+JSONList = JSONType   # alias for backward compat
+JSONDict = JSONType   # alias for backward compat
 
 
 # ── Base + Engine ────────────────────────────────────────────────────────────

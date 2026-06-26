@@ -176,6 +176,7 @@ from peerpedia_core.storage.db.crud_alias import (
     list_aliases, remove_alias, resolve_username_or_alias, set_alias,
 )
 from peerpedia_core.storage.db.crud_user import get_users_by_ids
+from peerpedia_core.storage.git_backend import get_commit_history, get_head_hash, read_article_source
 
 
 def db_session(database_url: str):

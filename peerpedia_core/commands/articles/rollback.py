@@ -7,26 +7,25 @@ from __future__ import annotations
 
 from peerpedia_core.storage.db import Session
 from peerpedia_core.config.params import make_peerpedia_email, params
-from peerpedia_core.policies.articles import assert_can_rollback_article, assert_not_folded
+from peerpedia_core.policies.articles import assert_can_rollback_article
 from peerpedia_core.commands.integrity import assert_article_integrity
-from peerpedia_core.storage.db.crud_maintainer import get_maintainer_ids
+from peerpedia_core.storage.db.crud_article import clear_publish_consents
 from peerpedia_core.storage.git_backend import (
-    DEFAULT_ARTICLES_DIR,
-    checkout_files,
-    commit_article,
-    get_head_hash,
-    is_repo_dirty,
+    checkout_files, commit_article, get_head_hash, is_repo_dirty,
 )
 from peerpedia_core.crypto import temp_signing_key
 from peerpedia_core.commands.articles._helpers import (
-    reset_sink,
-    rebuild_article_authors,
-    require_article,
+    authorize_article_action, reset_sink, rebuild_article_authors,
     require_article_repo,
-    require_user,
 )
 from peerpedia_core.types import short_id
 from peerpedia_core.commands.workflow import recompute_article_score
+
+
+def _require_signing_key(key_bytes, pubkey_hex, action: str) -> None:
+    """Raise ValueError if signing key material is missing."""
+    if key_bytes is None or not pubkey_hex:
+        raise ValueError(f"signing_key_bytes and pubkey_hex are required for {action}")
 
 
 def rollback_article(
@@ -43,41 +42,39 @@ def rollback_article(
     Raises NotFoundError if the user, article, or repo is not found.
     Raises ValueError if signing key is missing.
     """
+    # ── Authorization ──────────────────────────────────────────────────────
     assert_article_integrity(db, article_id, level="light")
-
-    user = require_user(db, user_id)
-    article = require_article(db, article_id)
-    mids = get_maintainer_ids(db, article_id)
+    user, article, mids = authorize_article_action(db, article_id, user_id)
     assert_can_rollback_article(article, mids, user)
-    assert_not_folded(article, threshold=params.reputation.fold_score_threshold)
-    old_status = article.status
     rp = require_article_repo(article_id)
 
+    # ── Checkout target ────────────────────────────────────────────────────
     checkout_files(rp, target_hash)
-
     if not is_repo_dirty(rp):
-        return {"commit_hash": get_head_hash(rp),
-                "message": f"Already at {short_id(target_hash)} (no changes needed)"}
+        return {
+            "id": article.id, "title": article.title, "status": article.status,
+            "commit_hash": get_head_hash(rp),
+            "message": f"Already at {short_id(target_hash)} (no changes needed)",
+        }
 
-    if signing_key_bytes is None or not pubkey_hex:
-        raise ValueError("signing_key_bytes and pubkey_hex are required for rollback")
-
+    # ── Commit ─────────────────────────────────────────────────────────────
+    _require_signing_key(signing_key_bytes, pubkey_hex, "rollback")
     with temp_signing_key(signing_key_bytes) as key_path:
         new_hash = commit_article(
-            rp,
-            f"Rollback to {short_id(target_hash)}",
+            rp, f"Rollback to {short_id(target_hash)}",
             user.name, make_peerpedia_email(user_id),
             signing_key=key_path, pubkey_hex=pubkey_hex,
         )
 
-    # G3: write a platform [status] marker so integrity repair can detect
-    # divergence if the process dies before set_sink_start.
-    if old_status == "published":
+    # ── Post-rollback effects ──────────────────────────────────────────────
+    clear_publish_consents(db, article_id)
+    if article.status == "published":
         reset_sink(db, article_id, rp, params.sink.edit_article_default_days)
-
     rebuild_article_authors(db, article_id)
     recompute_article_score(db, article_id)
 
-    msg = f"Rollback to {short_id(target_hash)}"
-    return {"id": article.id, "title": article.title, "status": article.status,
-            "commit_hash": new_hash, "message": msg}
+    return {
+        "id": article.id, "title": article.title, "status": article.status,
+        "commit_hash": new_hash,
+        "message": f"Rollback to {short_id(target_hash)}",
+    }

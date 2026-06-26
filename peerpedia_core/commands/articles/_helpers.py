@@ -8,7 +8,9 @@ from __future__ import annotations
 from pathlib import Path
 
 from peerpedia_core.storage.db import Session, crud_maintainer
+from peerpedia_core.config.params import params
 from peerpedia_core.exceptions import NotFoundError, NotAuthorizedError
+from peerpedia_core.policies.articles import assert_not_folded
 from peerpedia_core.storage.db.crud_article import (
     add_article_authors,
     get_article as _get_article,
@@ -16,8 +18,9 @@ from peerpedia_core.storage.db.crud_article import (
     set_sink_start,
 )
 from peerpedia_core.storage.db.crud_user import get_user as _get_user
+from peerpedia_core.config.paths import article_repo_path
 from peerpedia_core.storage.git_backend import (
-    DEFAULT_ARTICLES_DIR, commit_status_marker, get_commit_authors, get_head_hash,
+    commit_status_marker, get_commit_authors, get_head_hash,
     read_review_scores,
 )
 from peerpedia_core.storage.db.models import Article, User
@@ -50,13 +53,28 @@ def require_article(db: Session, article_id: str) -> Article:
 def require_article_repo(article_id: str) -> Path:
     """Return the article repo path or raise NotFoundError.
 
-    Eliminates the repeated ``rp = DEFAULT_ARTICLES_DIR / aid; if not (rp / ".git").is_dir(): raise``
+    Eliminates the repeated ``rp = article_repo_path(aid); if not (rp / ".git").is_dir(): raise``
     pattern that appears in 9+ locations.
     """
-    rp = DEFAULT_ARTICLES_DIR / article_id
+    rp = article_repo_path(article_id)
     if not (rp / ".git").is_dir():
         raise NotFoundError("Article repo not found", resource_type="article", resource_id=article_id)
     return rp
+
+
+def authorize_article_action(
+    db: Session, article_id: str, user_id: str,
+) -> tuple[User, Article, list[str]]:
+    """Resolve user, article, and maintainer_ids; block if article is folded.
+
+    Eliminates the repeated 4-line authorization preamble that appears in
+    update/rollback/publish/fork (but not delete, which skips fold check).
+    """
+    user = require_user(db, user_id)
+    article = require_article(db, article_id)
+    mids = crud_maintainer.get_maintainer_ids(db, article_id)
+    assert_not_folded(article, threshold=params.reputation.fold_score_threshold)
+    return user, article, mids
 
 
 def require_review_scores(repo_path: Path, reviewer_dir: str, article_id: str) -> dict:
@@ -101,7 +119,7 @@ def rebuild_article_authors(db: Session, article_id: str, since_hash: str | None
     if article is None:
         raise NotFoundError(f"Article not found: {article_id}")
 
-    rp = DEFAULT_ARTICLES_DIR / article_id
+    rp = article_repo_path(article_id)
     head_hash = get_head_hash(rp)
     new_ids = get_commit_authors(rp, since_hash=since_hash)
 

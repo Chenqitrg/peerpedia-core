@@ -218,6 +218,7 @@ def assert_can_delete_article(article: Article, maintainer_ids: list[str], user:
     sedimentation, the article is part of the permanent record.
     """
     _assert_maintainer(article, maintainer_ids, user, "delete", allowed_statuses={"draft"})
+    _assert_all_maintainers_consented(article, maintainer_ids)
     return article
 
 

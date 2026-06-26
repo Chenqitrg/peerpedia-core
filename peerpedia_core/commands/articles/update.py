@@ -13,21 +13,19 @@ from peerpedia_core.config.params import (
 )
 from peerpedia_core.exceptions import BadRequestError
 from peerpedia_core.frontmatter import make_article_frontmatter, strip_frontmatter
-from peerpedia_core.policies.articles import assert_can_edit_article, assert_not_folded
+from peerpedia_core.policies.articles import assert_can_edit_article
 from peerpedia_core.commands.integrity import assert_article_integrity
 from peerpedia_core.commands.trailers import parse_closes_trailer, validate_closes_target
 from peerpedia_core.storage.db.crud_article import (
     clear_publish_consents,
 )
-from peerpedia_core.storage.db.crud_maintainer import get_maintainer_ids
 from peerpedia_core.storage.git_backend import commit_article, resolve_article_format
 from peerpedia_core.crypto import temp_signing_key
 from peerpedia_core.commands.articles._helpers import (
+    authorize_article_action,
     reset_sink,
     rebuild_article_authors,
-    require_article,
     require_article_repo,
-    require_user,
 )
 
 def _require_closes_trailer(message: str, article_id: str) -> None:
@@ -87,10 +85,7 @@ def update_article_content(
     """
     # ── Authorization ──────────────────────────────────────────────────────
     assert_article_integrity(db, article_id, level="light")
-    user = require_user(db, user_id)
-    a = require_article(db, article_id)
-    mids = get_maintainer_ids(db, article_id)
-    assert_not_folded(a, threshold=params.reputation.fold_score_threshold)
+    user, a, mids = authorize_article_action(db, article_id, user_id)
     assert_can_edit_article(a, mids, user)
     old_status = a.status
 

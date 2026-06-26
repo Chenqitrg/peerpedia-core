@@ -12,7 +12,8 @@ from peerpedia_core.storage.db.crud_article import (
     delete_article as _delete,
 )
 from peerpedia_core.storage.db.crud_maintainer import get_maintainer_ids
-from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, delete_article_repo
+from peerpedia_core.config.paths import article_repo_path
+from peerpedia_core.storage.git_backend import delete_article_repo
 from peerpedia_core.commands.articles._helpers import require_article, require_user
 from peerpedia_core.commands.integrity import assert_article_integrity
 
@@ -37,4 +38,4 @@ def delete_article(db: Session, article_id: str, *, user_id: str) -> None:
     if article.forked_from:
         decrement_fork_count(db, article.forked_from)
 
-    delete_article_repo(DEFAULT_ARTICLES_DIR / article_id)
+    delete_article_repo(article_repo_path(article_id))

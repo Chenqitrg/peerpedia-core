@@ -9,16 +9,19 @@ import uuid
 
 from peerpedia_core.storage.db import Session
 from peerpedia_core.config.params import params
-from peerpedia_core.policies.articles import assert_can_fork_article, assert_not_folded
+from peerpedia_core.policies.articles import assert_can_fork_article
 from peerpedia_core.commands.integrity import assert_article_integrity
 from peerpedia_core.storage.db.crud_article import (
     create_article,
     get_article_by_fork_and_author,
     increment_fork_count,
 )
-from peerpedia_core.storage.db.crud_maintainer import add_maintainer, get_maintainer_ids
-from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, clone_article_repo, get_commit_authors
-from peerpedia_core.commands.articles._helpers import require_article, require_article_repo, require_user
+from peerpedia_core.storage.db.crud_maintainer import add_maintainer
+from peerpedia_core.config.paths import article_repo_path
+from peerpedia_core.storage.git_backend import clone_article_repo, get_commit_authors
+from peerpedia_core.commands.articles._helpers import (
+    authorize_article_action, require_article_repo,
+)
 
 
 def fork_article(db: Session, article_id: str, user_id: str) -> dict:
@@ -34,16 +37,13 @@ def fork_article(db: Session, article_id: str, user_id: str) -> dict:
     """
     assert_article_integrity(db, article_id, level="light")
 
-    user = require_user(db, user_id)
-    original = require_article(db, article_id)
-    maintainer_ids = get_maintainer_ids(db, article_id)
+    user, original, maintainer_ids = authorize_article_action(db, article_id, user_id)
     existing_fork = get_article_by_fork_and_author(db, forked_from=article_id, author_id=user.id)
-    assert_not_folded(original, threshold=params.reputation.fold_score_threshold)
     assert_can_fork_article(original, existing_fork, user=user, maintainer_ids=maintainer_ids)
 
     fork_id = str(uuid.uuid4())
     src = require_article_repo(article_id)  # validates repo exists on disk
-    dst = DEFAULT_ARTICLES_DIR / fork_id
+    dst = article_repo_path(fork_id)
 
     clone_article_repo(src, dst)
 

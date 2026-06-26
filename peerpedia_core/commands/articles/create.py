@@ -6,20 +6,34 @@
 from __future__ import annotations
 
 import uuid
+from contextlib import nullcontext
 
 from peerpedia_core.storage.db import Session
-from peerpedia_core.exceptions import BadRequestError, NotFoundError
-from peerpedia_core.config.params import make_peerpedia_email
+from peerpedia_core.exceptions import BadRequestError
+from peerpedia_core.config.params import (
+    article_filename, article_format_to_ext, make_peerpedia_email,
+)
+from peerpedia_core.config.paths import article_repo_path
 from peerpedia_core.frontmatter import make_article_frontmatter
 from peerpedia_core.storage.db.crud_article import create_article
 from peerpedia_core.storage.db.crud_maintainer import add_maintainer
-from peerpedia_core.storage.db.crud_user import get_user
-from peerpedia_core.storage.git_backend import (
-    DEFAULT_ARTICLES_DIR,
-    commit_article,
-    init_article_repo,
-)
+from peerpedia_core.storage.git_backend import commit_article, init_article_repo
 from peerpedia_core.crypto import temp_signing_key
+from peerpedia_core.commands.articles._helpers import require_user
+
+
+def _require_authors_exist(db: Session, author_ids: list[str]) -> None:
+    """Raise NotFoundError if any author in *author_ids* does not exist."""
+    for aid in author_ids:
+        require_user(db, aid)
+
+
+def _write_initial_article(rp, *, title, content, abstract, keywords, categories, format) -> str:
+    """Write the initial article file. Returns the file extension used."""
+    ext = article_format_to_ext(format)
+    fm = make_article_frontmatter(title, abstract, keywords, categories)
+    (rp / article_filename(ext)).write_text(fm + content)
+    return ext
 
 
 def create_article_with_content(
@@ -39,32 +53,31 @@ def create_article_with_content(
     Raises BadRequestError if the title is empty.
     Raises NotFoundError if any author is not found.
     """
+    # ── Validate ────────────────────────────────────────────────────────────
     if not title.strip():
         raise BadRequestError("Title is required")
+    _require_authors_exist(db, author_ids)
 
-    for aid in author_ids:
-        if get_user(db, aid) is None:
-            raise NotFoundError(f"Author '{aid}' not found")
-
+    # ── Create git repo ─────────────────────────────────────────────────────
     article_id = str(uuid.uuid4())
-    rp = DEFAULT_ARTICLES_DIR / article_id
+    rp = article_repo_path(article_id)
     init_article_repo(rp)
-    ext = ".typ" if format == "typst" else ".md"
-    fm = make_article_frontmatter(title, abstract, keywords, categories)
-    (rp / f"article{ext}").write_text(fm + content)
-    user = get_user(db, author_ids[0])
-    if signing_key_bytes:
-        with temp_signing_key(signing_key_bytes) as key_path:
-            commit_hash = commit_article(
-                rp, "Initial submission", user.name, make_peerpedia_email(user.id),
-                signing_key=key_path, pubkey_hex=pubkey_hex,
-            )
-    else:
+
+    # ── Write initial file ──────────────────────────────────────────────────
+    _write_initial_article(
+        rp, title=title, content=content, abstract=abstract,
+        keywords=keywords, categories=categories, format=format,
+    )
+
+    # ── Commit ──────────────────────────────────────────────────────────────
+    user = require_user(db, author_ids[0])
+    with (temp_signing_key(signing_key_bytes) if signing_key_bytes else nullcontext()) as key_path:
         commit_hash = commit_article(
             rp, "Initial submission", user.name, make_peerpedia_email(user.id),
-            signing_key=None, pubkey_hex=pubkey_hex,
+            signing_key=key_path, pubkey_hex=pubkey_hex,
         )
 
+    # ── Create DB record ────────────────────────────────────────────────────
     a = create_article(
         db, id=article_id, title=title, abstract=abstract,
         keywords=keywords, categories=categories,
@@ -72,6 +85,7 @@ def create_article_with_content(
     )
     a.last_author_rebuild_hash = commit_hash
 
+    # ── Seed maintainers ────────────────────────────────────────────────────
     for aid in author_ids:
         add_maintainer(db, article_id, aid)
 

@@ -11,33 +11,28 @@ from peerpedia_core.storage.git_backend import (
 )
 
 
-def resolve_commit_ref(repo_path: Path, ref: str) -> str:
-    """Resolve a commit reference to a full hash.
+def _resolve_head(repo_path: Path) -> str:
+    """Return the full hash of HEAD."""
+    return get_head_hash(repo_path)
 
-    *ref* can be: full 40-char hash, short hash prefix, ``HEAD``,
-    or ``~N`` (N commits back, e.g. ``~1`` for parent, ``~3`` for HEAD~3).
 
-    Raises ValueError if the ref cannot be resolved.
-    """
+def _resolve_offset(repo_path: Path, ref: str) -> str:
+    """Resolve ``~N`` — return hash of the Nth commit back from HEAD."""
+    try:
+        n = int(ref[1:])
+    except ValueError:
+        raise ValueError(f"Invalid commit ref: {ref!r} — use ~N (e.g. ~1)")
+    history = get_commit_history(repo_path, max_count=n + 1)
+    if len(history) <= n:
+        raise ValueError(
+            f"Cannot resolve {ref}: repo only has {len(history)} commit(s)"
+        )
+    return history[n]["hash"]
 
-    if ref.upper() == "HEAD":
-        return get_head_hash(repo_path)
 
-    if ref.startswith("~"):
-        try:
-            n = int(ref[1:])
-        except ValueError:
-            raise ValueError(f"Invalid commit ref: {ref!r} — use ~N (e.g. ~1)")
-        history = get_commit_history(repo_path, max_count=n + 1)
-        if len(history) <= n:
-            raise ValueError(
-                f"Cannot resolve {ref}: repo only has {len(history)} commit(s)"
-            )
-        return history[n]["hash"]
-
-    # Try as hash prefix
-    history = get_commit_history(repo_path)
-    matches = [c for c in history if c["hash"].startswith(ref)]
+def _resolve_hash_prefix(repo_path: Path, ref: str) -> str:
+    """Resolve a full or partial commit hash — one exact prefix match required."""
+    matches = [c for c in get_commit_history(repo_path) if c["hash"].startswith(ref)]
     if len(matches) == 0:
         raise ValueError(f"No commit found matching {ref!r}")
     if len(matches) > 1:
@@ -46,6 +41,21 @@ def resolve_commit_ref(repo_path: Path, ref: str) -> str:
             "Use more characters or a full hash."
         )
     return matches[0]["hash"]
+
+
+def resolve_commit_ref(repo_path: Path, ref: str) -> str:
+    """Resolve a commit reference to a full hash.
+
+    *ref* can be: full 40-char hash, short hash prefix, ``HEAD``,
+    or ``~N`` (N commits back, e.g. ``~1`` for parent, ``~3`` for HEAD~3).
+
+    Raises ValueError if the ref cannot be resolved.
+    """
+    if ref.upper() == "HEAD":
+        return _resolve_head(repo_path)
+    if ref.startswith("~"):
+        return _resolve_offset(repo_path, ref)
+    return _resolve_hash_prefix(repo_path, ref)
 
 
 def diff_article(article_id: str, hash1: str, hash2: str) -> dict:

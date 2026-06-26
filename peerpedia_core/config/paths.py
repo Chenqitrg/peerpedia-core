@@ -31,6 +31,15 @@ DB_URL = f"sqlite:///{DB_PATH}"
 
 ARTICLES_DIR = DATA_ROOT / "articles"
 
+
+def article_repo_path(article_id: str) -> Path:
+    """Return the filesystem path for *article_id*'s git repository.
+
+    Does NOT check whether the repo exists — use ``require_article_repo``
+    for callers that need a guard.
+    """
+    return ARTICLES_DIR / article_id
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # Session
 # ═══════════════════════════════════════════════════════════════════════════════

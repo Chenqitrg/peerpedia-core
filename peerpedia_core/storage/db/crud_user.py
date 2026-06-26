@@ -87,9 +87,15 @@ def list_users(session: Session, limit: int | None = 100) -> list[User]:
     return q.all()
 
 
-def search_users(session: Session, query: str, limit: int | None = None, offset: int = 0) -> list[User]:
-    """Fuzzy search active users by name (case-insensitive ILIKE)."""
-    q = session.query(User).filter(User.name.ilike(f"%{query}%"), User.deleted_at.is_(None))
+def search_users(session: Session, query: str = "", *,
+                 id_prefix: str = "", limit: int | None = None,
+                 offset: int = 0) -> list[User]:
+    """Search active users by name (ILIKE), UUID prefix, or both."""
+    q = session.query(User).filter(User.deleted_at.is_(None))
+    if id_prefix:
+        q = q.filter(User.id.startswith(id_prefix))
+    elif query:
+        q = q.filter(User.name.ilike(f"%{query}%"))
     q = q.order_by(User.created_at.desc())
     if limit is not None:
         q = q.limit(limit).offset(offset)
@@ -227,6 +233,87 @@ def follow_user(session: Session, follower_id: str, followed_id: str) -> Follow:
     return f
 
 
+def _soft_delete_follow_row(row: Follow) -> None:
+    """Mark a Follow row as soft-deleted.  Caller owns flush."""
+    row.deleted_at = datetime.now(timezone.utc)
+
+
+def follow_users(session: Session, follower_id: str, followed_ids: set[str]) -> int:
+    """*follower_id* follows everyone in *followed_ids* (idempotent).
+
+    Skips pairs that already exist.  Returns count of new rows inserted.
+    """
+    added = 0
+    for other_id in followed_ids:
+        if is_following(session, follower_id, other_id):
+            continue
+        follow_user(session, follower_id=follower_id, followed_id=other_id)
+        added += 1
+    return added
+
+
+def add_followers(session: Session, followed_id: str, follower_ids: set[str]) -> int:
+    """Everyone in *follower_ids* follows *followed_id* (idempotent).
+
+    Skips pairs that already exist.  Returns count of new rows inserted.
+    """
+    added = 0
+    for other_id in follower_ids:
+        if is_following(session, other_id, followed_id):
+            continue
+        follow_user(session, follower_id=other_id, followed_id=followed_id)
+        added += 1
+    return added
+
+
+def set_following(session: Session, follower_id: str, followed_ids: set[str]) -> int:
+    """Soft-delete any ``follower_id → *`` rows whose target is not in *followed_ids*.
+
+    After this call, *follower_id* follows exactly the users in *followed_ids*
+    (plus any follows not managed by this peer).  An empty *followed_ids* is a
+    no-op — returns 0.  Returns count removed.
+    """
+    if not followed_ids:
+        return 0
+    rows = (
+        session.query(Follow)
+        .filter(Follow.follower_id == follower_id, Follow.deleted_at.is_(None))
+        .all()
+    )
+    removed = 0
+    for row in rows:
+        if row.followed_id not in followed_ids:
+            _soft_delete_follow_row(row)
+            removed += 1
+    if removed:
+        session.flush()
+    return removed
+
+
+def set_followers(session: Session, followed_id: str, follower_ids: set[str]) -> int:
+    """Soft-delete any ``* → followed_id`` rows whose source is not in *follower_ids*.
+
+    After this call, exactly the users in *follower_ids* follow *followed_id*
+    (plus any followers not managed by this peer).  An empty *follower_ids* is a
+    no-op — returns 0.  Returns count removed.
+    """
+    if not follower_ids:
+        return 0
+    rows = (
+        session.query(Follow)
+        .filter(Follow.followed_id == followed_id, Follow.deleted_at.is_(None))
+        .all()
+    )
+    removed = 0
+    for row in rows:
+        if row.follower_id not in follower_ids:
+            _soft_delete_follow_row(row)
+            removed += 1
+    if removed:
+        session.flush()
+    return removed
+
+
 def unfollow_user(session: Session, follower_id: str, followed_id: str) -> None:
     """Soft-delete a follow relationship.  Idempotent — no-op if not following."""
     f = session.query(Follow).filter(
@@ -235,7 +322,7 @@ def unfollow_user(session: Session, follower_id: str, followed_id: str) -> None:
         Follow.deleted_at.is_(None),
     ).first()
     if f:
-        f.deleted_at = datetime.now(timezone.utc)
+        _soft_delete_follow_row(f)
         session.flush()
 
 

@@ -1,26 +1,66 @@
 Follow another researcher.  Their papers will appear in your personal
 feed (article list --feed), and you'll be notified of their new work.
 
+HOW TO READ THIS HELP
+  The examples below show real commands you can copy and paste.
+  Everything you should type is shown — just replace the example values
+  with your own.
+
+    <angle brackets>   Replace with your own value.  Do NOT type the brackets.
+                       peerpedia article show <id>
+                       → you actually type:  peerpedia article show abc12345
+
+    [square brackets]  This part is optional.  You can skip it entirely.
+                       peerpedia article list [--mine]
+                       → you can type:  peerpedia article list
+                       → or:            peerpedia article list --mine
+
+    --double-dashes    A "flag" (option) that changes what the command does.
+                       --title means "the title comes next"
+                       --scores means "the scores come next"
+                       Some flags take a value (--title "My Paper")
+                       Others work alone (--mine, --force, --feed).
+
+  The prompt character > or $ in examples means "type this in your terminal."
+  Don't type the prompt itself.
+
+
 EXAMPLES
   # Follow by @name (easiest — use their display name with @)
   peerpedia follow @marie_curie
+  # → Now following Marie Curie
 
   # Follow by user ID
   peerpedia follow abc12345
+  # → Now following Albert Einstein
 
   # Follow by partial ID
   peerpedia follow abc1
+  # → Now following Albert Einstein
 
   # Follow by alias (if you set one)
   peerpedia follow marie
+  # → Now following Marie Curie
 
-Following is the main way to build your reading list.  Follow researchers
-whose work you respect — their papers populate your feed.  The followed
-user gets a notification that you're following them.
+WHAT "FOLLOWING" MEANS
+  • The user's papers appear in your feed (article list --feed).
+  • You get notified when they publish something new.
+  • The followed user gets a notification that you followed them.
+  • Following is how you build your reading list — it's like
+    subscribing to a researcher's work.
 
 Don't know who to follow?  Try:
   peerpedia school          — most-followed users (popular in the community)
   peerpedia account search  — find specific people by name
+
+HOW TO UNFOLLOW
+  Use 'peerpedia unfollow @name' to stop following someone.
+  Unfollowing is private — they are not notified.
+
+FLAGS
+  This command takes one required piece of information: who to follow.
+  Provide it as an @name, user ID, or UUID prefix. No flags needed.
+  --json      Print output as machine-readable JSON. Default: off.
 
 SEE ALSO
   unfollow           Stop following someone

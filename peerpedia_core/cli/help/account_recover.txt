@@ -2,18 +2,95 @@ Recover your signing key from your password and salt.  Use this after
 "account bootstrap" to verify your password and load your session, or
 if your session file was lost.
 
+HOW TO READ THIS HELP
+  The examples below show real commands you can copy and paste.
+  Everything you should type is shown — just replace the example values
+  with your own.
+
+    <angle brackets>   Replace with your own value.  Do NOT type the brackets.
+                       peerpedia article show <id>
+                       -> you actually type:  peerpedia article show abc12345
+
+    [square brackets]  This part is optional.  You can skip it entirely.
+                       peerpedia article list [--mine]
+                       -> you can type:  peerpedia article list
+                       -> or:            peerpedia article list --mine
+
+    --double-dashes    A "flag" (option) that changes what the command does.
+                       --name means "the name comes next"
+                       --json means "show the output as JSON"
+                       Some flags take a value (--name "My Name")
+                       Others work alone (--json, --rich).
+
+  The prompt character > or $ in examples means "type this in your terminal."
+  Don't type the prompt itself.
+
 EXAMPLES
-  # Recover by name
+  # Recover by name — PeerPedia will prompt you for your password.
   peerpedia account recover --name "Marie Curie"
 
-  # Recover by user ID (if multiple users share the name)
+  # Recover by user ID when multiple users share the same name.
   peerpedia account recover --user-id abc12345
 
-You will be prompted for your password.  PeerPedia uses scrypt to
-re-derive your Ed25519 key from the password and salt.  If the
-derived key matches the stored public key, your session is loaded.
+  # Recover with machine-readable output (for scripts).
+  peerpedia account recover --name "Marie Curie" --json
+  # -> {"id": "abc12345-...", "name": "Marie Curie", "pubkey": "..."}
+
+  # Recover without interactive prompts (for scripts)
+  PEERPEDIA_PASSWORD='s3kr1t!' peerpedia account recover --name "Marie Curie"
+  # -> Same as the first example, but PeerPedia reads the password from the
+  #   environment variable instead of prompting you.  Use this in scripts
+  #   or automated workflows.
+
+  # Recover after bootstrap on a brand-new device
+  peerpedia account bootstrap --from '<json from whoami>'
+  peerpedia account recover --name "Marie Curie"
+  # → Enter your password.  PeerPedia re-derives your key and logs you in.
+  #   Run "account whoami" to confirm.
+
+  # What happens when the password is wrong
+  peerpedia account recover --name "Marie Curie"
+  # → PeerPedia replies: "Wrong password."
+  #   If you forgot your password, you must re-register — the salt+password
+  #   combination is the only way to derive your signing key.  There is no
+  #   back door and no password reset.
+
+WHAT HAPPENS DURING RECOVERY
+  • PeerPedia uses scrypt to re-derive your Ed25519 key from your
+    password and the stored salt.
+  • If the derived key matches the stored public key, your session is
+    loaded and you are logged in.
+  • If the derived key does not match, the password was wrong.  PeerPedia
+    does not reveal which part (password or stored key) was wrong — this
+    is a security measure.
+
+WHEN TO USE RECOVER vs LOGIN
+  • Use "login" when your session file is still intact and you just want
+    to sign in normally.
+  • Use "recover" after "bootstrap" on a new device, or if your session
+    file was deleted or corrupted.  Recover does the same thing as login
+    but can find you by user ID alone (you do not need to know your name).
+
+TIPS
+  • Recovery works on any device — you only need your password.  The salt
+    is fetched from the local database.
+  • On a brand-new device, run "account bootstrap" first to populate the
+    user record, then "account recover" to verify your password.
+  • After recovery, run "account whoami" to confirm you are logged in.
+
+FLAGS
+  --name       Your display name.  One of --name or --user-id is required.
+               Shown in the "Recover by name" example.
+  --user-id    Your user UUID.  Use this when multiple users share your
+               name, or when you do not remember your exact display name.
+               One of --name or --user-id is required.
+               Shown in the "Recover by user ID" example.
+  --json       Print the result as JSON instead of human-friendly text.
+               Default: off.  Shown in the "Recover with --json" example.
+  --rich       Print the result as formatted Rich text (the default).
 
 SEE ALSO
   account bootstrap  Set up your identity on a new device
   account whoami     See your current session
   account register   Create a new identity
+  account login      Sign in

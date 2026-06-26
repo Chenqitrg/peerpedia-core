@@ -1,20 +1,73 @@
 Show your current session identity — who you are logged in as.
 
+HOW TO READ THIS HELP
+  The examples below show real commands you can copy and paste.
+  Everything you should type is shown — just replace the example values
+  with your own.
+
+    <angle brackets>   Replace with your own value.  Do NOT type the brackets.
+                       peerpedia article show <id>
+                       -> you actually type:  peerpedia article show abc12345
+
+    [square brackets]  This part is optional.  You can skip it entirely.
+                       peerpedia article list [--mine]
+                       -> you can type:  peerpedia article list
+                       -> or:            peerpedia article list --mine
+
+    --double-dashes    A "flag" (option) that changes what the command does.
+                       --verbose means "show more details"
+                       --json means "show the output as JSON"
+                       Some flags take a value (--name "My Name")
+                       Others work alone (--verbose, --json, --rich).
+
+  The prompt character > or $ in examples means "type this in your terminal."
+  Don't type the prompt itself.
+
 EXAMPLES
-  # Basic info (name and user ID)
+  # Basic — shows your name and user ID.
   peerpedia account whoami
-  # → Logged in as Marie Curie (abc12345)
+  # -> Logged in as Marie Curie (abc12345)
 
-  # Show full details for device setup
+  # Full details for setting up PeerPedia on another device.
+  # Shows your public key and salt alongside your name and ID.
   peerpedia account whoami --verbose
-  # → Includes public key and salt for bootstrap
+  # -> Marie Curie (abc12345)
+  # -> Public key: abcdef...
+  # -> Salt:       012345...
 
-  # Machine-readable output for copying to another device
+  # Export your identity as JSON for "account bootstrap --from" on
+  # another device.  Copy the output and paste it on your new machine.
   peerpedia account whoami --verbose --json
-  # → JSON you can paste into "account bootstrap --from"
+  # -> {"user_id": "abc12345-...", "name": "Marie Curie",
+  #     "public_key": "...", "salt": "..."}
 
-Use --verbose --json when you need to export your identity to set up
-PeerPedia on another computer.
+  # Check whether you are logged in at all.
+  peerpedia account whoami
+  # -> Not logged in. Use register or login.
+
+WHEN TO USE --verbose AND --json TOGETHER
+  Combine --verbose --json when you need to move your identity to a
+  different computer.  The JSON output contains everything needed for
+  "account bootstrap --from '<json>'" to set up a minimal user stub on
+  the new machine.
+
+TIPS
+  • Run "account whoami" any time you are unsure which account is
+    currently active — for example, if you share a computer or are
+    testing multiple identities.
+  • If it says "not logged in", run "account login" or "account recover".
+  • The user ID shown (abc12345) is a shortened version of your full UUID.
+    It is enough for most commands that ask for a user ID.
+
+FLAGS
+  --verbose   Show full details: public key and salt in addition to name
+              and user ID.  Use this when exporting your identity to
+              another device.  Default: off (shows name and ID only).
+              Shown in the "Full details" example.
+  --json      Print the result as JSON instead of human-friendly text.
+              Combine with --verbose for bootstrap export.
+              Default: off.  Shown in the "Export identity as JSON" example.
+  --rich      Print the result as formatted Rich text (the default).
 
 SEE ALSO
   account register   Create a new identity

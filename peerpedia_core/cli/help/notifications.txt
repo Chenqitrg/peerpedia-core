@@ -6,20 +6,80 @@ View your notifications.  PeerPedia sends you notifications when:
   • Someone follows you
   • Your paper transitions from sedimentation to published
 
+HOW TO READ THIS HELP
+  The examples below show real commands you can copy and paste.
+  Everything you should type is shown — just replace the example values
+  with your own.
+
+    <angle brackets>   Replace with your own value.  Do NOT type the brackets.
+                       peerpedia article show <id>
+                       → you actually type:  peerpedia article show abc12345
+
+    [square brackets]  This part is optional.  You can skip it entirely.
+                       peerpedia article list [--mine]
+                       → you can type:  peerpedia article list
+                       → or:            peerpedia article list --mine
+
+    --double-dashes    A "flag" (option) that changes what the command does.
+                       --title means "the title comes next"
+                       --scores means "the scores come next"
+                       Some flags take a value (--title "My Paper")
+                       Others work alone (--mine, --force, --feed).
+
+  The prompt character > or $ in examples means "type this in your terminal."
+  Don't type the prompt itself.
+
+
 EXAMPLES
-  # Show unread notifications (default)
+  # Show unread notifications (default — shows only unread)
   peerpedia notifications
-  # → 3 unread:
-  #   [1] @pierre reviewed your paper "Radioactivity"
-  #   [2] @marie replied to your review on "Quantum Error Correction"
-  #   [3] @einstein started following you
+  # → 3 unread notification(s)
+  #
+  #   abcdef01  2026-06-26 14:30  @pierre reviewed your paper "Radioactivity"  NEW
+  #   abcdef02  2026-06-26 13:15  @marie replied to your review on "Quantum Error Correction"  NEW
+  #   abcdef03  2026-06-26 12:00  @einstein started following you  NEW
 
   # Show all notifications, including read ones
   peerpedia notifications --all
+  # Shows everything. Read notifications have no "NEW" tag.
+
+  # No notifications yet
+  peerpedia notifications
+  # → No notifications.
+
+  # What each notification type means
+  # NEW  @pierre reviewed your paper "Radioactivity"
+  #       Someone submitted a peer review of your paper.
+  #       See their scores with: peerpedia review list <article_id>
+  #
+  # NEW  @marie replied to your review on "Quantum Error Correction"
+  #       The author responded to feedback you gave on their paper.
+  #
+  # NEW  @einstein started following you
+  #       Another user is now following your work.
+  #       See their profile with: peerpedia account search Einstein
+
+  # Show notifications as JSON (for scripts)
+  peerpedia notifications --json
+  # → [{"id": "abcdef01", "event": "review_submitted", ...}, ...]
 
 Notifications are local — they appear in your terminal.  There is
 no email or push notification.  Check them regularly to stay up
 to date with your papers and reviews.
+
+TIPS
+  • Notifications with "NEW" are unread. Mark them read with
+    "peerpedia notifications read <id>".
+  • The notification ID is the short code at the start of each line
+    (abcdef01). You need this to mark a notification as read.
+  • Notifications are stored locally, so they persist even when
+    you're offline. They sync when you connect to a peer server.
+
+FLAGS
+  --all     Show all notifications, including ones already marked as
+            read. Default: off (shows only unread). Shown in example above.
+  --json    Print output as machine-readable JSON. Default: off.
+            Shown in example above.
 
 SEE ALSO
   notifications read   Mark a notification as read

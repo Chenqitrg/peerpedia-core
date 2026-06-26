@@ -1,10 +1,36 @@
 Write a new paper.  It starts as a private draft — only you (and any
 co-authors you add later) can see it until you publish.
 
+HOW TO READ THIS HELP
+  The examples below show real commands you can copy and paste.
+  Everything you should type is shown — just replace the example values
+  with your own.
+
+    <angle brackets>   Replace with your own value.  Do NOT type the brackets.
+                       peerpedia article show <id>
+                       → you actually type:  peerpedia article show abc12345
+
+    [square brackets]  This part is optional.  You can skip it entirely.
+                       peerpedia article list [--mine]
+                       → you can type:  peerpedia article list
+                       → or:            peerpedia article list --mine
+
+    --double-dashes    A "flag" (option) that changes what the command does.
+                       --title means "the title comes next"
+                       --scores means "the scores come next"
+                       Some flags take a value (--title "My Paper")
+                       Others work alone (--mine, --force, --feed).
+
+  The prompt character > or $ in examples means "type this in your terminal."
+  Don't type the prompt itself.
+
+
 EXAMPLES
   # Write interactively (recommended for beginners)
   peerpedia article create --title "Quantum Error Correction in Noisy Channels"
   # → Opens your default text editor.  Write your paper, save, and close.
+  #   (Your editor is set by the $EDITOR variable.  Try:
+  #    export EDITOR=vim   or   export EDITOR=nano)
 
   # Write with inline content (good for short announcements)
   peerpedia article create --title "A Short Proof" \
@@ -13,6 +39,12 @@ EXAMPLES
 
   # Create an empty draft to fill in later
   peerpedia article create --title "Work in Progress" --no-editor
+
+  # Create in Typst format (great for equations and formulas)
+  peerpedia article create --title "Tensor Networks" \
+      --format typst --no-editor
+  # → Creates a paper in Typst instead of Markdown.  Typst handles math
+  #   natively — ideal for papers with lots of equations.
 
   # Write and immediately submit for peer review
   peerpedia article create --title "My Results" \
@@ -29,6 +61,34 @@ WRITING FORMAT
     Blank lines      → separate paragraphs
 
   To see which editor will open:  echo $EDITOR
+
+FLAGS
+  Each flag is shown in at least one example above.  This is the full
+  reference — come back here after you have tried the examples.
+
+  --title "text"       The paper's title (required).  Use quotes around it if
+                       your title has spaces or special characters.
+
+  --content "text"     The paper's body, in Markdown format.  Omit this to
+                       open your default text editor instead.
+                       Example: --content "# Abstract\n\n..."
+
+  --no-editor          Skip opening the text editor.  Use this when you are
+                       providing --content inline or creating an empty draft.
+
+  --format markdown    The writing format.  Choices: "markdown" (default)
+                       or "typst".  Use "typst" for math-heavy papers
+                       with lots of equations.
+                       Example: shown in "Create in Typst format" above.
+
+  --publish            Immediately submit the paper for peer review after
+                       creating it.  Without this flag, the paper stays a
+                       private draft.  If you use --publish, you must also
+                       give --scores.
+
+  --scores "dim=val"   Self-review scores, 5 dimensions, each 1–5.
+                       Format: "orig=4,rigor=3,comp=4,ped=3,imp=3"
+                       Required only with --publish.
 
 SEE ALSO
   article edit       Revise your draft

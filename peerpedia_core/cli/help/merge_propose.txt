@@ -2,16 +2,79 @@ Propose merging your fork's changes back into the original paper.
 After forking a paper, editing it, and improving it, use this to
 suggest the original author adopt your changes.
 
+HOW TO READ THIS HELP
+  The examples below show real commands you can copy and paste.
+  Everything you should type is shown — just replace the example values
+  with your own.
+
+    <angle brackets>   Replace with your own value.  Do NOT type the brackets.
+                       peerpedia article show <id>
+                       → you actually type:  peerpedia article show abc12345
+
+    [square brackets]  This part is optional.  You can skip it entirely.
+                       peerpedia article list [--mine]
+                       → you can type:  peerpedia article list
+                       → or:            peerpedia article list --mine
+
+    --double-dashes    A "flag" (option) that changes what the command does.
+                       --title means "the title comes next"
+                       --scores means "the scores come next"
+                       Some flags take a value (--title "My Paper")
+                       Others work alone (--mine, --force, --feed).
+
+  The prompt character > or $ in examples means "type this in your terminal."
+  Don't type the prompt itself.
+
+
 EXAMPLES
-  # Propose a merge
+  # Propose a merge (your fork → original paper)
   peerpedia merge propose def67890 --target abc12345
+  # → def67890 is your fork (the improved version).
+  #   abc12345 is the original paper "Radioactivity".
+  #   The original author (Pierre) receives a notification.
 
-  # def67890 = your fork (the improved version)
-  # abc12345 = the original paper (where changes should go)
+  # Propose by matching the title instead of the ID
+  peerpedia merge propose "Radioactivity fork" --target "Radioactivity"
+  # → PeerPedia finds your fork by the title "Radioactivity fork" and the
+  #   original by "Radioactivity". If more than one match, you pick from
+  #   a list. Both arguments accept title keywords the same way.
 
-The original paper's maintainers will be notified.  They can accept
-your proposal with "merge accept" or let it sit.  If you change your
-mind, use "merge withdraw".
+  # What Pierre sees after you propose
+  # The original author's notification panel shows:
+  #   New proposal from @marie (proposal-1)
+  #     Fork:   def67890 "Radioactivity (corrected version)"
+  #     Target: abc12345 "Radioactivity"
+  # Pierre can review the differences first:
+  peerpedia article diff def67890 abc12345
+  # → Shows every change between your fork and the original.
+  #   If they look good, Pierre accepts with:
+  #     peerpedia merge accept proposal-1 --target abc12345
+
+  # What to do if the author is not interested
+  peerpedia merge withdraw proposal-1
+  # → If the original author says no, or simply does not respond, you can
+  #   withdraw your proposal. Your fork stays exactly as it is — all your
+  #   changes remain. You can re-propose later if you make more edits.
+
+  # Error: proposing to a paper that is not the source
+  peerpedia merge propose def67890 --target xyz99999
+  # → Error: xyz99999 is not the parent of fork def67890.
+  #   You can only merge a fork back to the paper it was forked from.
+  #   Check the parent ID with "peerpedia article show def67890".
+
+WHEN TO USE THIS COMMAND
+  • You have forked a paper and made significant improvements.
+  • You want the original author to consider adopting your changes.
+  • You want to be credited as a contributor to the original paper.
+
+FLAGS
+  Each flag is shown in the examples above.  This reference explains it
+  in full — come back after you have tried the examples.
+
+  --target <id>        The original paper you want your changes merged
+                       into.  This is the paper you forked from, not
+                       your fork.  Default: (required, no default).
+                       Shown in all examples above.
 
 SEE ALSO
   fork               Fork a paper first

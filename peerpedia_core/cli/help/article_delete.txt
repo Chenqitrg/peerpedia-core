@@ -2,6 +2,30 @@ Delete a draft paper.  This removes the paper and its entire history
 from your machine.  Only the paper's maintainers can delete it, and
 only drafts can be deleted (published papers are permanent).
 
+HOW TO READ THIS HELP
+  The examples below show real commands you can copy and paste.
+  Everything you should type is shown — just replace the example values
+  with your own.
+
+    <angle brackets>   Replace with your own value.  Do NOT type the brackets.
+                       peerpedia article show <id>
+                       → you actually type:  peerpedia article show abc12345
+
+    [square brackets]  This part is optional.  You can skip it entirely.
+                       peerpedia article list [--mine]
+                       → you can type:  peerpedia article list
+                       → or:            peerpedia article list --mine
+
+    --double-dashes    A "flag" (option) that changes what the command does.
+                       --title means "the title comes next"
+                       --scores means "the scores come next"
+                       Some flags take a value (--title "My Paper")
+                       Others work alone (--mine, --force, --feed).
+
+  The prompt character > or $ in examples means "type this in your terminal."
+  Don't type the prompt itself.
+
+
 EXAMPLES
   # Delete a draft (asks for confirmation)
   peerpedia article delete abc12345
@@ -12,10 +36,32 @@ EXAMPLES
   # Delete by title keyword
   peerpedia article delete "Radioactivity"
 
+  # Trying to delete a published paper (will fail)
+  peerpedia article delete abc12345
+  # → PeerPedia refuses and shows an error like "Cannot delete a published
+  #   paper."  Published papers are permanent — they cannot be removed.
+
+  # Delete multiple old drafts (use --force to skip confirmation)
+  peerpedia article delete draft-paper-1 --force
+  peerpedia article delete old-experiment-2 --force
+  # → With --force, each deletion happens immediately without asking "are
+  #   you sure?"  Useful for cleaning up many drafts at once.
+
 WARNING
   Deletion removes the paper's database record AND its git repository
   on disk.  This cannot be undone.  Published papers cannot be deleted
   — they are part of the permanent peer-reviewed record.
+
+  Can I recover a deleted draft?  No.  Deletion is permanent.  Make sure
+  you want to remove a draft before you delete it.
+
+FLAGS
+  Each flag is shown in an example above.  This is the full reference.
+
+  --force             Skip the "are you sure?" confirmation prompt.
+                      Use this when scripting or deleting many drafts.
+                      Example: shown in "Delete without confirmation
+                      prompt" above.
 
 SEE ALSO
   article list --mine    Find your papers and their statuses

@@ -1,19 +1,81 @@
 Create your PeerPedia identity.  You only need to do this once.
 Your name is how other researchers will find and cite you.
 
+HOW TO READ THIS HELP
+  The examples below show real commands you can copy and paste.
+  Everything you should type is shown — just replace the example values
+  with your own.
+
+    <angle brackets>   Replace with your own value.  Do NOT type the brackets.
+                       peerpedia article show <id>
+                       -> you actually type:  peerpedia article show abc12345
+
+    [square brackets]  This part is optional.  You can skip it entirely.
+                       peerpedia article list [--mine]
+                       -> you can type:  peerpedia article list
+                       -> or:            peerpedia article list --mine
+
+    --double-dashes    A "flag" (option) that changes what the command does.
+                       --name means "the name comes next"
+                       --json means "show the output as JSON"
+                       Some flags take a value (--name "My Name")
+                       Others work alone (--json, --rich).
+
+  The prompt character > or $ in examples means "type this in your terminal."
+  Don't type the prompt itself.
+
 EXAMPLES
-  # Register with your real name
+  # Register with your real name — the simplest way to get started.
   peerpedia account register --name "Marie Curie"
 
-  # Use a shorter name if you prefer
+  # Register with a shorter name if you prefer brevity.
   peerpedia account register --name "M. Curie"
 
-PeerPedia derives a signing key from your password using scrypt.
-This key signs every paper and review you create — it proves your
-work is really yours.  Keep your password safe.  There is no
-password reset.  If you lose it, you must re-register.
+  # Register without typing your password interactively.
+  # Use this in scripts or when setting up a new machine automatically.
+  PEERPEDIA_PASSWORD='s3kr1t!' peerpedia account register --name "Marie Curie"
+
+  # Register and get machine-readable output for bootstrapping another device.
+  peerpedia account register --name "Marie Curie" --json
+  # -> {"id": "abc12345-...", "name": "Marie Curie", "pubkey": "..."}
+
+  # What happens if the name is already taken
+  peerpedia account register --name "Marie Curie"
+  # -> PeerPedia tells you: "The name 'Marie Curie' is already registered."
+  #   If that is you, use "account recover" to regain access.  If someone
+  #   else registered the name first, pick a different display name —
+  #   for example, "Marie Curie (Lab)" or your full name with initials.
+
+WHAT HAPPENS WHEN YOU REGISTER
+  • PeerPedia asks you for a password (and a confirmation to catch typos).
+  • It derives your signing key from that password using scrypt.
+  • That key signs every paper and review you create — it proves your
+    work is really yours.
+  • Your session is saved so you are logged in immediately.
+
+TIPS
+  • Keep your password safe.  There is no password reset.
+    If you lose it, you must re-register with a new account.
+  • Your password never leaves your machine.  Other peers never see it.
+  • Use the PEERPEDIA_PASSWORD environment variable when scripting so
+    PeerPedia does not prompt you.
+  • After registering, try `peerpedia article create --title "My First Paper"`
+    to start writing.
+
+FLAGS
+  --name       Your display name.  Other researchers will see this.
+               Required.  Shown in the "Register with your real name" example.
+  --password   Your password.  If you omit this, PeerPedia will prompt you
+               interactively.  You can also set the PEERPEDIA_PASSWORD
+               environment variable instead.  Shown in the "Register without
+               typing your password" example (using the env var form).
+  --json       Print the result as JSON (machine-readable) instead of
+               human-friendly text.  Handy for scripts or for piping into
+               "account bootstrap --from".  Default: off.  Shown in the
+               "Register with --json" example.
+  --rich       Print the result as formatted Rich text (the default).
 
 SEE ALSO
-  account login      Sign in on this device
+  account login      Sign in on this device after you have registered
   account whoami     See your current identity
   account bootstrap  Set up the same identity on another device

@@ -1,28 +1,83 @@
 Find researchers by name.  Use this to discover people before following
 them, inviting them as reviewers, or adding them as co-authors.
 
+HOW TO READ THIS HELP
+  The examples below show real commands you can copy and paste.
+  Everything you should type is shown — just replace the example values
+  with your own.
+
+    <angle brackets>   Replace with your own value.  Do NOT type the brackets.
+                       peerpedia article show <id>
+                       -> you actually type:  peerpedia article show abc12345
+
+    [square brackets]  This part is optional.  You can skip it entirely.
+                       peerpedia article list [--mine]
+                       -> you can type:  peerpedia article list
+                       -> or:            peerpedia article list --mine
+
+    --double-dashes    A "flag" (option) that changes what the command does.
+                       --json means "show the output as JSON"
+                       Some flags take a value (query — the name to search)
+                       Others work alone (--json, --rich).
+
+  The prompt character > or $ in examples means "type this in your terminal."
+  Don't type the prompt itself.
+
 EXAMPLES
-  # Search by full or partial name
+  # Search by full or partial name.
   peerpedia account search "Marie Curie"
   peerpedia account search Marie
 
-  # Search is case-insensitive
+  # Search is case-insensitive — capitalisation does not matter.
   peerpedia account search marie     # same as "Marie"
 
-  # Search by name fragment
-  peerpedia account search Chen      # matches "Chenqi Meng", "Chen Li", ...
+  # Search by name fragment — matches anyone whose name contains "Chen".
+  peerpedia account search Chen      # matches "Chenqi Meng", "Chen Li", etc.
 
-  # Machine-readable output
+  # Machine-readable output for scripts.
   peerpedia account search Marie --json
-  # → [{"id": "abc12345-...", "name": "Marie Curie"}, ...]
+  # -> [{"id": "abc12345-...", "name": "Marie Curie"}, ...]
 
-After finding someone, you can:
-  • peerpedia follow @marie_curie          — add them to your feed
+  # Formatted text output for readability.
+  peerpedia account search Marie --rich
+
+HOW SEARCH WORKS
+  • PeerPedia searches display names in your local database.
+  • The search is fuzzy and case-insensitive — "marie cur" will match
+    "Marie Curie".
+  • Results are ranked by relevance.  The closest matches appear first.
+  • Only users known to your local database are searched.  To find users
+    on a peer server, use "sync discover" first.
+
+WHAT TO DO WITH SEARCH RESULTS
+  After finding someone, you can:
+  • peerpedia follow @marie_curie              — add them to your feed
   • peerpedia review invite mypaper --user @marie_curie  — ask for a review
   • peerpedia maintainer add mypaper --target-user @marie_curie  — add as co-author
 
+TIPS
+  • Search does NOT require an exact match — type a few letters and
+    PeerPedia will find close matches.
+  • If search returns no results, try "sync discover" to pull user
+    records from your peer servers.  Local search only finds users
+    your device knows about.
+  • Use @mentions (like @marie_curie) in other commands to refer to
+    users you have found through search.
+
+FLAGS
+  query       The name or partial name to search for.  This is a
+              positional value — you type it directly after "search",
+              not as --query.  Required.
+              Shown in the "Search by full or partial name" example.
+  --json      Print the results as a JSON array instead of formatted
+              text.  Useful when piping results into scripts.
+              Default: off.  Shown in the "Machine-readable output" example.
+  --rich      Print the results as formatted Rich text (the default).
+              Shown in the "Formatted text output" example.
+
 SEE ALSO
-  follow             Follow a researcher
-  review invite      Invite someone to review
-  maintainer add     Add a co-author
+  follow             Follow a researcher to see their papers in your feed
+  review invite      Invite someone to review a paper
+  maintainer add     Add a co-author to one of your articles
   whoami             See your own account
+  sync discover      Pull user records from peer servers

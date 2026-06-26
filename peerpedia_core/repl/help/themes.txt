@@ -1,0 +1,64 @@
+Customize how PeerPedia looks in your terminal.  You can switch between
+light and dark themes, toggle between compact tables and rich panels,
+and control Unicode typography for math symbols.
+
+HOW TO READ THIS HELP
+  In the examples below, `peerpedia>` is the REPL prompt — don't type it.
+  Meta-commands start with a colon `:`.  They take effect immediately.
+
+  Themes and settings are per-session — they reset when you exit the REPL.
+  PeerPedia auto-detects your terminal's background on startup.
+
+EXAMPLES
+  # Switch to dark theme (easier on the eyes in low light)
+  peerpedia> :theme dark
+  🌙  Ember (dark) theme.
+
+  # Switch back to light
+  peerpedia> :theme light
+  ☀   Parchment (light) theme.
+
+  # You can also use these names for the same effect:
+  peerpedia> :theme ember        # same as dark
+  peerpedia> :theme parchment    # same as light
+  peerpedia> :theme night        # same as dark
+  peerpedia> :theme day          # same as light
+
+  # Compact mode — shows results as dense tables instead of rich panels
+  peerpedia> :compact
+  Output mode: compact table.
+
+  # Switch back to rich panels
+  peerpedia> :compact
+  Output mode: rich panels.
+
+  # Unicode typography — math symbols in titles get special rendering
+  # (Greek letters, superscripts, math script characters)
+  peerpedia> :unicode
+  Unicode typography: on.
+
+  # Turn it off if your terminal font doesn't support the symbols
+  peerpedia> :unicode
+  Unicode typography: off.
+
+WHEN TO CHANGE THEME
+  • Dark theme (:theme dark)   — easier on eyes at night or in dim rooms.
+  • Light theme (:theme light) — better contrast in bright environments.
+  • Compact mode (:compact)    — when you want to scan lots of data quickly.
+  • Unicode off (:unicode)     — if your font renders math symbols as boxes.
+
+  PeerPedia auto-detects your terminal's background color when the REPL
+  starts (via the COLORFGBG environment variable).  This means most users
+  get the right theme automatically — :theme is for overrides.
+
+WHAT CHANGES WITH EACH SETTING
+  Theme:       background color, text colors, borders, accent hues
+               (Parchment = warm beige, Ember = dark with amber accents)
+  Compact:     article/review lists switch between Rich panels and tables
+  Unicode:     paper titles with math symbols (like 𝒜, ℬ, 𝟙) get styled
+
+  None of these affect your data — only how it's displayed.
+
+SEE ALSO
+  :help             All REPL commands and keyboard shortcuts
+  :help context     Sticky user and paper context

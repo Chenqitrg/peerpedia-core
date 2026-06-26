@@ -1,0 +1,78 @@
+PeerPedia REPL has three full-screen interactive browsers.  Instead of
+reading long tables of text, you navigate with arrow keys and press
+single letters to act.  This is the fastest way to explore papers,
+reviews, and researchers.
+
+HOW TO READ THIS HELP
+  In the examples below, `peerpedia>` is the REPL prompt — don't type it.
+  The browsers use single-key shortcuts.  Just press the key, no Enter needed.
+
+    ↑ ↓ arrows    Move the highlight up and down.
+    Enter         Select the highlighted item or view details.
+    q / Esc       Quit the browser and return to the REPL prompt.
+
+  Each browser has its own extra keys — they're shown in the bottom bar
+  while you browse.
+
+EXAMPLES
+  # Browse all papers (just type "list" with no arguments)
+  peerpedia> list
+  # → Full-screen paper list opens:
+  #   ┌──── Paper Browser ──────────────────────────────┐
+  #   │ ▸ Quantum Error Correction  ★4.2  sedimentation │
+  #   │   On the Electrodynamics...  ★4.8  published    │
+  #   │   A Short Proof              ★3.1  draft        │
+  #   │   ...                                           │
+  #   ├─────────────────────────────────────────────────┤
+  #   │ ↑↓:navigate  Enter:view  p:publish  e:edit      │
+  #   │ r:review  b:bookmark  q:quit                    │
+  #   └─────────────────────────────────────────────────┘
+  #
+  # Available keys in the paper browser:
+  #   p         Publish the highlighted paper (asks for scores)
+  #   e         Edit the highlighted paper
+  #   r         Review the highlighted paper (asks for scores + comment)
+  #   b         Bookmark the highlighted paper
+  #   Enter     View the paper details and set it as article context
+
+  # Browse reviews for a paper (when you have a sticky paper or give an ID)
+  peerpedia> :article abc12345
+  peerpedia> review list
+  # → Full-screen review browser opens:
+  #   ┌──── Reviews for Quantum Error Correction ───────┐
+  #   │ ▸ @pierre_curie  ★4.5  "Well-structured..."     │
+  #   │   @marie_curie   ★4.2  "Interesting approach..." │
+  #   │   ...                                            │
+  #   ├──────────────────────────────────────────────────┤
+  #   │ ↑↓:navigate  Enter:view  r:reply  q:quit        │
+  #   └──────────────────────────────────────────────────┘
+  #
+  # Or give the paper ID directly:
+  peerpedia> review list abc12345
+
+  # Browse popular researchers (leaderboard)
+  peerpedia> :school
+  # → Full-screen leaderboard opens:
+  #   ┌──── School (most followed) ─────────────────────┐
+  #   │ ▸ @einstein      42 followers                   │
+  #   │   @marie_curie   38 followers                   │
+  #   │   @pierre_curie  35 followers                   │
+  #   │   ...                                           │
+  #   ├──────────────────────────────────────────────────┤
+  #   │ ↑↓:navigate  Enter:follow  q:quit               │
+  #   └──────────────────────────────────────────────────┘
+  #
+  # Press Enter on a researcher to follow them.
+
+WHEN TO USE EACH BROWSER
+  • Paper browser (list)     — find papers to read, review, or bookmark.
+  • Review browser           — see what reviewers said, reply to them.
+  • School (:school)         — discover researchers worth following.
+
+  If you pipe output (e.g. `peerpedia list | grep quantum`), the REPL
+  falls back to plain text — no browser opens.  Browsers only launch when
+  your terminal is interactive.
+
+SEE ALSO
+  :help context     How sticky user and paper context work
+  :help             All REPL commands and keyboard shortcuts

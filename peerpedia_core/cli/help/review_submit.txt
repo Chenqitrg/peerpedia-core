@@ -9,26 +9,93 @@ SCORING DIMENSIONS (each 1–5, from poor to exceptional)
   ped      pedagogy       — clarity of exposition
   imp      impact         — potential significance to the field
 
+HOW TO READ THIS HELP
+  The examples below show real commands you can copy and paste.
+  Everything you should type is shown — just replace the example values
+  with your own.
+
+    <angle brackets>   Replace with your own value.  Do NOT type the brackets.
+                       peerpedia article show <id>
+                       → you actually type:  peerpedia article show abc12345
+
+    [square brackets]  This part is optional.  You can skip it entirely.
+                       peerpedia article list [--mine]
+                       → you can type:  peerpedia article list
+                       → or:            peerpedia article list --mine
+
+    --double-dashes    A "flag" (option) that changes what the command does.
+                       --title means "the title comes next"
+                       --scores means "the scores come next"
+                       Some flags take a value (--title "My Paper")
+                       Others work alone (--mine, --force, --feed).
+
+  The prompt character > or $ in examples means "type this in your terminal."
+  Don't type the prompt itself.
+
+
 EXAMPLES
-  # Review a paper in the sedimentation pool
+  # Review a paper by its ID
   peerpedia review submit abc12345 \
       --scores "orig=4,rigor=3,comp=4,ped=3,imp=5" \
       --comment "This paper presents a compelling argument for..."
+  # → Scores are recorded and your comment becomes part of the permanent
+  #   review record for this paper.
 
-  # Your comment must be at least 200 characters.  Write a thoughtful
-  # review that helps the author improve their work.  Explain what's
-  # good, what could be better, and why you gave each score.
-
-  # Review by title keyword
+  # Review a paper by its title (PeerPedia finds the best match)
   peerpedia review submit "Radioactivity" \
       --scores "orig=5,rigor=4,comp=4,ped=5,imp=5" \
       --comment "An excellent treatment of the subject..."
+  # → PeerPedia finds the closest title match and submits your review.
+
+  # What happens if your comment is too short
+  peerpedia review submit abc12345 \
+      --scores "orig=4,rigor=3,comp=4,ped=3,imp=5" \
+      --comment "Good paper"
+  # → Error: comment must be at least 200 characters (yours was 11).
+  #   PeerPedia requires thoughtful reviews that help authors improve.
+  #   Write at least a few sentences explaining your scores.
+
+  # Understanding the output — what a successful review shows
+  peerpedia review submit abc12345 \
+      --scores "orig=4,rigor=3,comp=4,ped=3,imp=5" \
+      --comment "This paper makes a strong contribution to the field..."
+  # → Your scores are shown back to you as a confirmation table:
+  #   Originality:   4/5   Rigor:   3/5   Completeness:  4/5
+  #   Pedagogy:      3/5   Impact:  5/5
+  #   Your review is now public and signed with your key.
 
 WHAT MAKES A GOOD REVIEW
   • Be specific — point to sections, arguments, or data.
   • Explain your scores — why did you give a 3 instead of a 4?
   • Suggest improvements, not just criticism.
   • Your review is signed and public — write professionally.
+
+TIPS
+  • The 200-character minimum is about substance, not word count.
+    Aim for 3-5 sentences: what the paper does well, what could improve,
+    and why you gave the scores you did.
+  • You cannot edit or delete a review once submitted. Re-read your
+    comment before hitting enter.
+  • Use the paper's ID (abc12345) for exact targeting. Title matching
+    works if the title is unique enough.
+
+FLAGS
+  Each flag is shown in the examples above.  This reference explains them
+  in full — come back after you have tried the examples.
+
+  --scores "dim=val,dim=val,..."
+                       Your five numerical scores, one for each scoring
+                       dimension above.  Each score is 1 (poor) through
+                       5 (exceptional).  Format: "orig=4,rigor=3,comp=4,
+                       ped=3,imp=5".  Use short names: orig (originality),
+                       rigor (rigor), comp (completeness), ped (pedagogy),
+                       imp (impact).  All five dimensions are required.
+
+  --comment "text"     Your written review (required, at least 200
+                       characters).  Explain what the paper does well,
+                       what could be improved, and why you gave each
+                       score.  Use quotes around your comment if it has
+                       spaces or special characters.
 
 SEE ALSO
   article list       Find papers to review (--status sedimentation)

@@ -2,16 +2,80 @@ Accept a merge proposal — apply someone's fork changes into your paper.
 This is how collaborative editing works: someone forks your paper, makes
 improvements, proposes a merge, and you accept it.
 
-EXAMPLES
-  # Accept a merge proposal
-  peerpedia merge accept proposal-1 --target abc12345
+HOW TO READ THIS HELP
+  The examples below show real commands you can copy and paste.
+  Everything you should type is shown — just replace the example values
+  with your own.
 
-Only the target paper's maintainers can accept merge proposals.
-If there are conflicts (both you and the fork changed the same part),
-the command reports them without applying changes — you'll need to
-resolve conflicts manually.
+    <angle brackets>   Replace with your own value.  Do NOT type the brackets.
+                       peerpedia article show <id>
+                       → you actually type:  peerpedia article show abc12345
+
+    [square brackets]  This part is optional.  You can skip it entirely.
+                       peerpedia article list [--mine]
+                       → you can type:  peerpedia article list
+                       → or:            peerpedia article list --mine
+
+    --double-dashes    A "flag" (option) that changes what the command does.
+                       --title means "the title comes next"
+                       --scores means "the scores come next"
+                       Some flags take a value (--title "My Paper")
+                       Others work alone (--mine, --force, --feed).
+
+  The prompt character > or $ in examples means "type this in your terminal."
+  Don't type the prompt itself.
+
+
+EXAMPLES
+  # Accept a merge proposal by its ID
+  peerpedia merge accept proposal-1 --target abc12345
+  # → The changes from Marie's fork are applied to your paper
+  #   "Radioactivity". Marie receives a notification of acceptance.
+
+  # Accept by matching the proposal title
+  peerpedia merge accept "Corrected miscalculation" --target "Radioactivity"
+  # → PeerPedia finds the proposal titled "Corrected miscalculation"
+  #   and the target paper "Radioactivity" by keyword. If more than
+  #   one match, you pick from a list.
+
+  # Review the changes before accepting
+  peerpedia article diff def67890 abc12345
+  # → Shows every difference between Marie's fork and your paper.
+  #   Review this to make sure you want all the changes.
+
+  # What happens to the fork after the merge
+  # The fork (def67890) still exists — Marie keeps her own copy.
+  # Accepting a merge does not delete the fork. Marie can continue
+  # editing it, or leave it as a personal reference.
+
+  # When the merge has conflicts
+  peerpedia merge accept proposal-1 --target abc12345
+  # → Error: Merge blocked by 2 conflicts.
+  #     Section 3  — your text says "decay rate is 0.003";
+  #                   Marie's fork says "decay rate is 0.005"
+  #     Section 7  — you removed the conclusion but Marie rewrote it
+  #   Nothing is applied. Fix the conflicts in your paper, then ask
+  #   Marie to re-propose with an updated fork.
+
+RULES
+  • Only the target paper's maintainers can accept merge proposals.
+  • If there are conflicts, the command reports them without applying
+    changes — you will need to resolve conflicts manually.
+  • Accepting a merge does not delete the fork. The proposer keeps
+    their copy.
+
+FLAGS
+  Each flag is shown in the examples above.  This reference explains it
+  in full — come back after you have tried the examples.
+
+  --target <id>        Your paper (the original) that receives the
+                       changes.  This is the paper you authored that
+                       someone forked and improved.  Default: (required,
+                       no default).  Shown in example "# Accept a merge
+                       proposal" above.
 
 SEE ALSO
   merge propose      Propose a merge from your fork
   merge withdraw     Withdraw a merge proposal you made
   fork               Fork a paper to start editing
+  article diff       Compare two papers before merging

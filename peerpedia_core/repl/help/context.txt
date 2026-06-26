@@ -1,0 +1,76 @@
+Set a "sticky" user or paper so you don't have to type their name or ID
+in every command.  When you are exploring one researcher's work or editing
+one paper, context saves you from repetitive typing.
+
+HOW TO READ THIS HELP
+  In the examples below, you TYPE everything after the `peerpedia>` prompt.
+  The prompt is shown to help you know you are in the REPL — don't type it.
+
+    <angle brackets>   Replace with your own value.  Don't type the brackets.
+                       :user <name>
+                       → you actually type:  :user Marie Curie
+
+    [square brackets]  This part is optional.  You can skip it.
+
+    :colon commands    REPL-specific commands that start with a colon.
+                       They are not sent to the server — they change how
+                       the REPL works for you.
+
+EXAMPLES
+  # Set a sticky user — their ID is auto-added to commands that take --user
+  peerpedia> :user Marie Curie
+  ✓ User set to Marie Curie (abc12345)
+
+  # Now "article list" shows Marie's papers without needing --user
+  peerpedia> article list
+  # → Lists all published papers by Marie Curie
+
+  # Set a sticky paper — its ID is auto-added to show / edit / publish / delete / fork
+  peerpedia> :article abc12345
+  ▸ On the Electrodynamics of Moving Bodies (abc12345)
+
+  # Now these work without typing the paper ID each time:
+  peerpedia> show
+  # → Shows abc12345
+
+  peerpedia> edit --title "Revised Title"
+  # → Edits abc12345 with the new title
+
+  peerpedia> publish --scores "orig=4,rig=3,comp=4,ped=3,imp=4"
+  # → Publishes abc12345
+
+  # You can still override the context by giving an explicit ID
+  peerpedia> show def67890
+  # → Shows def67890 instead of the sticky paper
+
+  # Check what the current context is (shown in your prompt)
+  peerpedia> :article
+  Article context cleared.
+
+  # The prompt shows your current context:
+  #   Marie Curie ▸ My Paper @abc12345 >
+  #   ───────────   ──────────────────
+  #   sticky user    sticky paper
+
+WHICH COMMANDS USE CONTEXT
+  Sticky user (:user) auto-injects --user into:
+    article list, review invite, following, followers, follow
+
+  Sticky paper (:article) auto-injects the paper ID into:
+    show, edit, publish, delete, fork
+
+  Commands NOT affected by context (you always need to type the ID):
+    review submit, merge propose, bookmark, share
+
+  The prompt always shows your current context so you never forget.
+
+TIPS
+  • :user is great when browsing one researcher's publications.
+  • :article is great when you are actively working on a single paper.
+  • You can set both at once — :article for the paper you're editing,
+    :user for the reviewer you're inviting.
+  • Clear context with :user or :article with no argument.
+
+SEE ALSO
+  :help browsing     Interactive paper and review browsers
+  :help              All REPL commands and shortcuts

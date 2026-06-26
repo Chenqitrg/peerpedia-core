@@ -2,6 +2,30 @@ See all reviews for a paper.  Reviews include numerical scores and
 written comments.  Use --show full to see the discussion threads
 (author replies and reviewer responses).
 
+HOW TO READ THIS HELP
+  The examples below show real commands you can copy and paste.
+  Everything you should type is shown — just replace the example values
+  with your own.
+
+    <angle brackets>   Replace with your own value.  Do NOT type the brackets.
+                       peerpedia article show <id>
+                       → you actually type:  peerpedia article show abc12345
+
+    [square brackets]  This part is optional.  You can skip it entirely.
+                       peerpedia article list [--mine]
+                       → you can type:  peerpedia article list
+                       → or:            peerpedia article list --mine
+
+    --double-dashes    A "flag" (option) that changes what the command does.
+                       --title means "the title comes next"
+                       --scores means "the scores come next"
+                       Some flags take a value (--title "My Paper")
+                       Others work alone (--mine, --force, --feed).
+
+  The prompt character > or $ in examples means "type this in your terminal."
+  Don't type the prompt itself.
+
+
 EXAMPLES
   # See review summaries (scores only)
   peerpedia review list abc12345
@@ -10,10 +34,43 @@ EXAMPLES
 
   # See full reviews with discussion threads
   peerpedia review list abc12345 --show full
-  # → Includes each reviewer's full comment and any author replies
+  # → Includes each reviewer's full written comment and any back-and-forth
+  #   between the author and reviewer.
 
   # List reviews by title keyword
   peerpedia review list "Radioactivity"
+  # → PeerPedia finds papers matching "Radioactivity" and shows reviews
+  #   for the best match.
+
+  # Understanding the output — who reviewed and what they said
+  peerpedia review list abc12345
+  # → Each review shows: the reviewer's name, their five scores, and
+  #   their written comment. If replies exist, they appear indented
+  #   below each review. The output also shows the review date and
+  #   helpfulness rating (if any).
+
+  # Check who has reviewed your own paper
+  peerpedia review list def78901
+  # → If def78901 is your paper, you see all reviews including reviewer
+  #   names, scores, and comments. This is the same command authors use
+  #   to track how their paper is being received.
+
+WHEN TO USE THIS COMMAND
+  • Use it to decide whether to read a paper — strong reviews signal
+    quality work.
+  • Use it after submitting a review to confirm it was recorded.
+  • Use it as an author to see what reviewers are saying about your
+    paper and prepare replies.
+
+FLAGS
+  Each flag is shown in the examples above.  This reference explains it
+  in full — come back after you have tried the examples.
+
+  --show <mode>        How much detail you see.  "summary" shows scores
+                       only, one line per review.  "full" shows the
+                       complete comment and any author-reply threads.
+                       Default: summary.  Shown in example "# See full
+                       reviews with discussion threads" above.
 
 SEE ALSO
   review submit      Submit a review

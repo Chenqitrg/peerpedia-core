@@ -1,6 +1,30 @@
 Add a co-author to your paper.  The new maintainer can edit, publish,
 and manage the paper — they have the same rights you do.
 
+HOW TO READ THIS HELP
+  The examples below show real commands you can copy and paste.
+  Everything you should type is shown — just replace the example values
+  with your own.
+
+    <angle brackets>   Replace with your own value.  Do NOT type the brackets.
+                       peerpedia article show <id>
+                       → you actually type:  peerpedia article show abc12345
+
+    [square brackets]  This part is optional.  You can skip it entirely.
+                       peerpedia article list [--mine]
+                       → you can type:  peerpedia article list
+                       → or:            peerpedia article list --mine
+
+    --double-dashes    A "flag" (option) that changes what the command does.
+                       --title means "the title comes next"
+                       --scores means "the scores come next"
+                       Some flags take a value (--title "My Paper")
+                       Others work alone (--mine, --force, --feed).
+
+  The prompt character > or $ in examples means "type this in your terminal."
+  Don't type the prompt itself.
+
+
 EXAMPLES
   # Add a co-author by @name
   peerpedia maintainer add abc12345 --target-user @pierre
@@ -11,11 +35,28 @@ EXAMPLES
   # Add by title keyword
   peerpedia maintainer add "Radioactivity" --target-user @marie
 
+  # Add multiple co-authors (one at a time)
+  peerpedia maintainer add abc12345 --target-user @paul
+  peerpedia maintainer add abc12345 --target-user @lise
+  # → Run the command once for each person.  All get the same full rights.
+
 WHAT HAPPENS
   • The target user gets full edit/publish rights to the paper.
   • Both you and the target must be registered users.
   • For multi-author papers, ALL maintainers must consent before publishing.
   • The new maintainer receives a notification.
+  • You can add as many co-authors as you like.  Each has equal rights.
+
+FLAGS
+  --target-user @name   Who to add as a co-author.  Can be their @name,
+                        user ID (UUID), or a unique prefix.  Required.
+                        Shown in all examples above.
+
+  --json                Output the result as JSON instead of plain text.
+                        Useful for scripts and automation.
+
+  --rich                Force human-readable colored output (default when
+                        you type the command directly).
 
 SEE ALSO
   maintainer remove   Remove a co-author

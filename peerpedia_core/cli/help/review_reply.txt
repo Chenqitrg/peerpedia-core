@@ -2,23 +2,81 @@ Reply to a reviewer's comments on your paper.  This opens a discussion
 thread between you (the author) and the reviewer.  Replies are public
 and become part of the paper's review record.
 
+HOW TO READ THIS HELP
+  The examples below show real commands you can copy and paste.
+  Everything you should type is shown — just replace the example values
+  with your own.
+
+    <angle brackets>   Replace with your own value.  Do NOT type the brackets.
+                       peerpedia article show <id>
+                       → you actually type:  peerpedia article show abc12345
+
+    [square brackets]  This part is optional.  You can skip it entirely.
+                       peerpedia article list [--mine]
+                       → you can type:  peerpedia article list
+                       → or:            peerpedia article list --mine
+
+    --double-dashes    A "flag" (option) that changes what the command does.
+                       --title means "the title comes next"
+                       --scores means "the scores come next"
+                       Some flags take a value (--title "My Paper")
+                       Others work alone (--mine, --force, --feed).
+
+  The prompt character > or $ in examples means "type this in your terminal."
+  Don't type the prompt itself.
+
+
 EXAMPLES
-  # Reply to reviewer @pierre
+  # Reply to a reviewer by @name
   peerpedia review reply abc12345 --to @pierre
-  # → Opens your editor to write the reply.
+  # → Opens your text editor. Write your response, save, and close.
+  #   @pierre receives a notification that you replied to their review.
 
   # Reply by reviewer ID
   peerpedia review reply abc12345 --to def67890
+  # → Same as above, but using the reviewer's user ID instead of @name.
+  #   Useful if you have the ID handy from a notification.
 
-Only the paper's maintainers (authors) can reply.  The reviewer
-receives a notification when you reply.  Replies are bidirectional
-— the reviewer can respond back.
+  # What a reply looks like to others
+  # After you reply, anyone viewing reviews on the paper sees:
+  #   Review by @pierre — orig=4 rigor=3 comp=4 ped=3 imp=5
+  #   "This paper could use more controls in section 2..."
+  #     → Reply from @author (you): "Thank you — I have added
+  #        additional controls and updated the analysis."
+
+  # A multi-turn discussion
+  peerpedia review reply abc12345 --to @pierre
+  # → If the reviewer responds back to your reply, you can reply again
+  #   using the same command. Each new message is indented further,
+  #   building a threaded discussion that anyone can read.
+
+  # Reply using a partial user ID
+  peerpedia review reply abc12345 --to def6
+  # → PeerPedia finds the reviewer whose ID starts with "def6"
+  #   and opens your editor for you to write a response.  Use this
+  #   when you have a short ID copied from a notification.
+
+RULES
+  • Only the paper's maintainers (authors) can reply to a review.
+  • The reviewer receives a notification each time you reply.
+  • Replies are bidirectional — the reviewer can respond back,
+    and you can reply again. This creates a threaded discussion.
+  • The full thread is public and permanent, just like the review.
 
 WHAT TO INCLUDE IN A REPLY
   • Thank the reviewer for their time and insights.
   • Address each major point raised.
   • Explain what you changed (or why you didn't).
   • Keep it professional — your reply is public.
+
+FLAGS
+  Each flag is shown in the examples above.  This reference explains it
+  in full — come back after you have tried the examples.
+
+  --to <user>          Who you are replying to.  Can be an @name (like
+                       @pierre), a full user ID, or a partial ID.
+                       Default: (required, no default).  Shown in all
+                       examples above.
 
 SEE ALSO
   review submit      Submit a review (as a reviewer)

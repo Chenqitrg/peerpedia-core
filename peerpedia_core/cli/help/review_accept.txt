@@ -1,15 +1,82 @@
 Accept a review invitation.  After accepting, you can submit your review.
 
+HOW TO READ THIS HELP
+  The examples below show real commands you can copy and paste.
+  Everything you should type is shown — just replace the example values
+  with your own.
+
+    <angle brackets>   Replace with your own value.  Do NOT type the brackets.
+                       peerpedia article show <id>
+                       → you actually type:  peerpedia article show abc12345
+
+    [square brackets]  This part is optional.  You can skip it entirely.
+                       peerpedia article list [--mine]
+                       → you can type:  peerpedia article list
+                       → or:            peerpedia article list --mine
+
+    --double-dashes    A "flag" (option) that changes what the command does.
+                       --title means "the title comes next"
+                       --scores means "the scores come next"
+                       Some flags take a value (--title "My Paper")
+                       Others work alone (--mine, --force, --feed).
+
+  The prompt character > or $ in examples means "type this in your terminal."
+  Don't type the prompt itself.
+
+
 EXAMPLES
   # Accept a review invitation
   peerpedia review accept abc12345
+  # → You are now listed as a reviewer for this paper. The author is
+  #   notified that you accepted.
 
-  # Then submit your review
-  peerpedia review submit abc12345 --scores "..." --comment "..."
+  # What happens after accepting — you can submit your review
+  peerpedia review accept abc12345
+  # → Now use "review submit" to write your review:
+  peerpedia review submit abc12345 \
+      --scores "orig=4,rigor=3,comp=4,ped=3,imp=5" \
+      --comment "This is a thorough paper..."
+  # → Your scores and comment are recorded. The author will see your
+  #   review and can reply to it.
 
-You can only accept invitations for papers in the sedimentation pool.
-Check your notifications to see pending invitations:
+  # What if the paper was already published?
+  peerpedia review accept abc12345
+  # → Error: this paper is no longer in the review period (it has been
+  #   published). You cannot accept invitations for papers that have
+  #   already finished the review process. The author may still
+  #   appreciate informal feedback.
+
+  # Check your pending invitations first
   peerpedia notifications
+  # → Lists all your notifications, including review invitations.
+  #   Find the paper ID you want to review, then use:
+  peerpedia review accept <id>
+  # → This is the recommended workflow — use notifications to find
+  #   what needs your attention.
+
+WHAT HAPPENS AFTER ACCEPTING
+  • You are added as a reviewer for the paper.
+  • The author receives a notification that you accepted.
+  • You can now submit your review using "review submit".
+  • You cannot accept an invitation for a paper that has already been
+    published — the review period has closed.
+  • You can only accept invitations for papers in the sedimentation
+    pool (currently under review).
+
+FLAGS
+  Each flag is shown in the examples above.  This reference explains it
+  in full — come back after you have tried the examples.
+
+  ref                   The paper you are accepting to review.  Can be a
+                        full UUID, an 8-character prefix, or a title
+                        keyword.  Required.
+                        Shown in all examples above.
+
+  --json                Output the result as JSON instead of plain text.
+                        Useful for scripts and automation.
+
+  --rich                Force human-readable colored output (default when
+                        you type the command directly).
 
 SEE ALSO
   review decline     Decline an invitation

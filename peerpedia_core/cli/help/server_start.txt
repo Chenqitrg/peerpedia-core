@@ -2,20 +2,83 @@ Start a PeerPedia HTTP server on your machine.  This lets other PeerPedia
 users sync with you — they can discover your papers, follow you, and
 pull your articles.  Think of it as hosting your own mini journal server.
 
+HOW TO READ THIS HELP
+  The examples below show real commands you can copy and paste.
+  Everything you should type is shown — just replace the example values
+  with your own.
+
+    <angle brackets>   Replace with your own value.  Do NOT type the brackets.
+                       peerpedia article show <id>
+                       → you actually type:  peerpedia article show abc12345
+
+    [square brackets]  This part is optional.  You can skip it entirely.
+                       peerpedia article list [--mine]
+                       → you can type:  peerpedia article list
+                       → or:            peerpedia article list --mine
+
+    --double-dashes    A "flag" (option) that changes what the command does.
+                       --title means "the title comes next"
+                       --scores means "the scores come next"
+                       Some flags take a value (--title "My Paper")
+                       Others work alone (--mine, --force, --feed).
+
+  The prompt character > or $ in examples means "type this in your terminal."
+  Don't type the prompt itself.
+
+
 EXAMPLES
-  # Start on default address (127.0.0.1:8080, local only)
+  # Start on the default address (local only, for testing)
   peerpedia server start
+  # → Server running at http://127.0.0.1:8080
 
-  # Listen on all network interfaces with a public URL
-  peerpedia server start --host 0.0.0.0 --port 8080 \
-      --public-url https://peer.example.com
-
-  # Local development
+  # Listen on a custom port for local use
   peerpedia server start --host 127.0.0.1 --port 9090
+  # → Server running at http://127.0.0.1:9090
 
-If you set --public-url, other PeerPedia users can use that URL with
-"sync push", "sync pull", "follow", etc. to interact with your server.
-Without --public-url, the server only works locally.
+  # Make your server public so other peers can reach you
+  peerpedia server start --host 0.0.0.0 --port 8080 \
+      --public-url https://peer.myname.example.com
+  # → Server running at http://0.0.0.0:8080
+  # → Public URL: https://peer.myname.example.com
+
+  # Check the server is running (open another terminal)
+  peerpedia sync status --server http://127.0.0.1:8080
+  # → Server reachable. No pending changes.
+
+  # After starting, other peers can pull your papers
+  # Marie on another machine can run:
+  #   peerpedia sync pull --server https://peer.myname.example.com
+  # Einstein can find you:
+  #   peerpedia sync discover --server https://peer.myname.example.com
+
+WHAT THE SERVER DOES
+  • Accepts sync push/pull requests from other PeerPedia users.
+  • Responds to follow, unfollow, and social graph queries.
+  • Serves article metadata and content for discovery.
+  • Only one server can run at a time (SQLite limitation).
+  • Runs in your terminal — press Ctrl+C to stop.
+
+TIPS
+  • Use --host 0.0.0.0 only if you have a firewall and know what
+    you're doing. It opens your server to the network.
+  • Without --public-url, the server works only for local commands
+    (sync push/pull from the same machine).
+  • If you set --public-url, PeerPedia automatically announces your
+    server to seed peers so others can find you.
+  • You don't need to run a server to use PeerPedia locally. The
+    server is only needed if other peers sync with you.
+
+FLAGS
+  --host        Which network address to bind to.
+                Default: 127.0.0.1 (local only).
+                Use 0.0.0.0 to accept connections from other machines.
+                Shown in examples above.
+  --port        Which port to listen on.
+                Default: 8080. Shown in examples above.
+  --public-url  The public URL where other peers can reach your server.
+                Example: https://peer.example.com.
+                If set, PeerPedia announces your server to the network.
+                Default: empty (local only). Shown in example above.
 
 SEE ALSO
   sync push          Send your work to a peer server

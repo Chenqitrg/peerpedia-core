@@ -39,6 +39,42 @@ def extract_user_id_from_email(email: str) -> str:
     return email.split("@")[0]
 
 
+# ── Article format constants ────────────────────────────────────────────────
+
+_ARTICLE_EXT_TO_FMT = {".md": "markdown", ".typ": "typst"}
+_ARTICLE_FMT_TO_EXT = {"markdown": ".md", "typst": ".typ"}
+ARTICLE_EXTENSIONS = (".md", ".typ")
+
+
+def article_format_to_ext(fmt: str) -> str:
+    """Return the file extension for an article format name.
+
+    >>> article_format_to_ext("markdown")
+    '.md'
+    >>> article_format_to_ext("typst")
+    '.typ'
+    """
+    return _ARTICLE_FMT_TO_EXT[fmt]
+
+
+def article_ext_to_format(ext: str) -> str:
+    """Return the format name for an article file extension.
+
+    >>> article_ext_to_format(".md")
+    'markdown'
+    """
+    return _ARTICLE_EXT_TO_FMT[ext]
+
+
+def article_filename(ext: str) -> str:
+    """Return the article source filename for an extension.
+
+    >>> article_filename(".md")
+    'article.md'
+    """
+    return f"article{ext}"
+
+
 @dataclass
 class SinkParams:
     """Sedimentation pool timing parameters."""

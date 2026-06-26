@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""User operations — follow/unfollow, profile queries.
+"""User operations — follow/unfollow, profile queries, search.
 
 Redirects to ``storage/db/crud_user.py`` via the commands facade so
 CLI and routes never import storage/db directly.
@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from peerpedia_core.storage.db import Session
 from peerpedia_core.commands.notifications import create_notification
+from peerpedia_core.storage.db.models import User
 from peerpedia_core.storage.db.crud_user import (
     create_user as _create,
     create_user_stub as _create_stub,
@@ -150,3 +151,12 @@ def reset_failed_login(db: Session, user_id: str) -> None:
 def soft_delete_user(db: Session, user_id: str) -> None:
     """Soft-delete a user account (GDPR right-to-erasure)."""
     _soft_delete(db, user_id)
+
+
+def find_users(db: Session, ref: str, *, limit: int = 20) -> list[User]:
+    """Search users by UUID prefix, then fall back to name ILIKE.
+
+    Always returns a list (0..N).
+    """
+    candidates = _search_users(db, id_prefix=ref, limit=limit)
+    return candidates if candidates else _search_users(db, query=ref, limit=limit)

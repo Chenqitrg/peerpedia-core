@@ -66,7 +66,6 @@ def get_all_article_ids(db: Session) -> list[str]:
     """Return every local article ID.  Lightweight — id column only."""
     return _get_all_ids(db)
 
-
 def get_author_ids(db: Session, article_id: str) -> list[str]:
     """Return ordered author IDs for an article."""
     return _get_author_ids(db, article_id)

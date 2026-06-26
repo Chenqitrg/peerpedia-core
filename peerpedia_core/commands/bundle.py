@@ -51,9 +51,10 @@ from pathlib import Path
 from peerpedia_core.storage.db import Session
 
 from peerpedia_core.config.params import EMAIL_SUFFIX, PLATFORM_EMAIL
+from peerpedia_core.types import short_id
 from peerpedia_core.types.status import VALID_ARTICLE_STATUSES, parse_status_tag
 from peerpedia_core.exceptions import BadRequestError, NotAuthorizedError, SignatureVerificationError
-from peerpedia_core.storage.db.crud_article import get_article, update_article_status, update_witnessed_at
+from peerpedia_core.storage.db.crud_article import update_article_status, update_witnessed_at
 from peerpedia_core.storage.db.crud_maintainer import get_maintainer_ids
 from peerpedia_core.storage.db.crud_review import upsert_review
 from peerpedia_core.storage.db.crud_user import get_user, get_users_by_ids, update_user_public_key
@@ -65,10 +66,10 @@ from peerpedia_core.storage.git_backend import (
     get_head_hash,
     list_review_dirs,
     merge_fetch_head,
-    read_review_scores,
     verify_commit_signature,
 )
 
+from peerpedia_core.commands.articles._helpers import require_article, require_article_repo, require_review_scores
 from peerpedia_core.commands.articles import rebuild_article_authors
 from peerpedia_core.commands.workflow import publish_ready_articles, recompute_article_score
 
@@ -84,15 +85,10 @@ def sync_status_from_git(db: Session, article_id: str) -> None:
     message has the form ``[status] <valid_status>``.
     The latest matching commit wins.
 
-    Raises FileNotFoundError if the article or its git repo is not found.
+    Raises NotFoundError if the article or its git repo is not found.
     """
-    article = get_article(db, article_id)
-    if article is None:
-        raise FileNotFoundError(f"Article not found: {article_id}")
-
-    rp = DEFAULT_ARTICLES_DIR / article_id
-    if not (rp / ".git").is_dir():
-        raise FileNotFoundError(f"Git repo not found for article: {article_id}")
+    article = require_article(db, article_id)
+    rp = require_article_repo(article_id)
 
     since = article.last_author_rebuild_hash
     for commit in get_commit_history(rp, since_hash=since):
@@ -124,11 +120,7 @@ def sync_reviews_from_worktree(db: Session, article_id: str) -> None:
     head_hash = get_head_hash(rp)
 
     for dir_name in list_review_dirs(rp):
-        scores = read_review_scores(rp, dir_name)
-        if scores is None:
-            raise FileNotFoundError(
-                f"scores.json not found in reviews/{dir_name}/ for article {article_id}"
-            )
+        scores = require_review_scores(rp, dir_name, article_id)
         # Validate scores on sync path — comment is stored in thread files
         # (not scores.json) so we only enforce score validity here.
         try:
@@ -241,19 +233,19 @@ def _rollback_git(repo_path: Path, old_head: str | None, new_head: str) -> None:
         logger.warning(
             "Cannot rollback git reset for %s — repo had no prior HEAD. "
             "Repo left at %s.",
-            repo_path.name, new_head[:8],
+            repo_path.name, short_id(new_head),
         )
         return
     try:
         reset_to_commit(repo_path, old_head)
         logger.info(
             "Rolled back git for %s: %s → %s after DB reconciliation failure.",
-            repo_path.name, new_head[:8], old_head[:8],
+            repo_path.name, short_id(new_head), short_id(old_head),
         )
     except Exception as exc:
         logger.error(
             "Failed to rollback git for %s from %s to %s: %s",
-            repo_path.name, new_head[:8], old_head[:8], exc,
+            repo_path.name, short_id(new_head), short_id(old_head), exc,
         )
 
 
@@ -285,7 +277,7 @@ def _verify_new_commits(db: Session, repo_path: Path, *, since_hash: str) -> Non
         pubkey_hex = _extract_pubkey_from_message(commit["message"])
         if not pubkey_hex:
             raise SignatureVerificationError(
-                f"Commit {commit_hash[:8]} by {author_email} "
+                f"Commit {short_id(commit_hash)} by {author_email} "
                 "has no Pubkey trailer — unsigned human commit"
             )
 

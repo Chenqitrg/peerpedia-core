@@ -154,6 +154,7 @@ def list_articles(
     session: Session,
     status: str | set[str] | None = None,
     search_query: str | None = None,
+    id_prefix: str | None = None,
     author_ids: str | list[str] | None = None,
     viewer_id: str | None = None,
     bookmarked_by: str | None = None,
@@ -165,6 +166,7 @@ def list_articles(
     Args:
         status: Filter by Article.status.
         search_query: Fuzzy title match (case-insensitive ILIKE).
+        id_prefix: UUID prefix match (``Article.id.startswith``).
         author_id: Only articles authored by this user (JOIN on article_authors).
         bookmarked_by: Only articles bookmarked by this user (JOIN on bookmarks).
         limit: Max results. None = unlimited.
@@ -177,6 +179,8 @@ def list_articles(
             q = q.filter(Article.status.in_(list(status)))
     elif status:
         q = q.filter(Article.status == status)
+    if id_prefix:
+        q = q.filter(Article.id.startswith(id_prefix))
     if search_query:
         q = q.filter(Article.title.ilike(f"%{search_query}%"))
     if author_ids:

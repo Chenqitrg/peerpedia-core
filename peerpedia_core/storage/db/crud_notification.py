@@ -27,6 +27,39 @@ def create_notification(
     return n
 
 
+def ensure_notification(
+    session: Session,
+    *,
+    user_id: str,
+    event: str,
+    message: str,
+    article_id: str | None = None,
+    actor_id: str | None = None,
+    notification_id: str | None = None,
+) -> Notification:
+    """Idempotent notification insert — skips if an identical notification exists.
+
+    Dedup by (user_id, event, actor_id, article_id, message).
+    """
+    existing = session.query(Notification).filter(
+        Notification.user_id == user_id,
+        Notification.event == event,
+        Notification.actor_id == actor_id,
+        Notification.article_id == article_id,
+        Notification.message == message,
+    ).first()
+    if existing is not None:
+        return existing
+    n = Notification(
+        id=notification_id,
+        user_id=user_id, event=event, message=message,
+        article_id=article_id, actor_id=actor_id,
+    )
+    session.add(n)
+    session.flush()
+    return n
+
+
 def get_notifications(
     session: Session,
     user_id: str,

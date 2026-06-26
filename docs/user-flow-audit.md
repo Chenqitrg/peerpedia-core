@@ -8,12 +8,12 @@
 
 ## 总览
 
-审计覆盖 20 个阶段，发现 **35 个逻辑/功能缺口**（含旧系统可借鉴的 10 个 API 端点）。**2026-06-27 更新：累计修复 20 项。**
+审计覆盖 20 个阶段，发现 **35 个逻辑/功能缺口**（含旧系统可借鉴的 10 个 API 端点）。**2026-06-27 更新：累计修复 21 项（含 1 项设计解决）。**
 
 | 严重程度 | 数量 | 已修复 | 说明 |
 |----------|------|--------|------|
 | ✅ 已修复 | 20 | — | 账号删除、速率限制、沉淀池上限、多设备登录、作者回复评审、通知系统、提案撤回、fork_count递减、多设备引导、P2P签名发现、_read_session 容错、git_backend 文件泄漏防护、health check 双重 HTTP 合并、RateLimit None key 防护、bundle_utils bare except 收窄、article delete --force、UUID 验证放宽、login --user-id 消歧义、register 重名阻断、merge_follows 日志降噪 |
-| 🔴 MVP 阻塞 — 不修系统不可用 | 4 | 3 | 取消关注不传播、密钥轮换无通知、引用系统（仅 DB 无 UI）、无平台审核层 |
+| 🔴 MVP 阻塞 — 不修系统不可用 | 1 | 0 | 引用系统（仅 DB 无 UI） |
 | 🟡 MVP 需要但可延后 | 7 | 5 | 全员同意发布、maintainer 转让、多文件文章、标签系统、编译引用解析、账号改名、社交发现 |
 | 🟢 锦上添花 | 14 | 2 | 转发、arXiv 镜像、版本标签/diff、评论更新、数据导出/导入、浏览历史、推荐/趋势、举报、互关查询、归档状态、小修改路径、分支控制、评审员校准、孤立 forked_from |
 | 🔵 旧系统 API 待纳入 | 10 | 0 | diff、评审讨论串、feed/pool、编译预览/下载、书签路由、评审路由、合并路由、引用路由、用户更新 |
@@ -36,6 +36,7 @@
 | login --user-id 消歧义 | cli/handlers/account.py:156-165 | --user-id 前缀匹配用户列表，精确选出一个 |
 | register 重名阻断 | cli/handlers/account.py:122-129 | get_user_by_name 前置校验，引导 login |
 | merge_follows 日志降噪 | commands/discover.py:137 | logger.warning → logger.debug |
+| DB-git 非原子性回滚 | commands/bundle.py:196-218 + storage/git_backend.py:630-637 | apply_sync_bundle 失败时 git reset --hard 到 old_head；DB 由 caller commit() 保证原子性 |
 
 ---
 
@@ -45,11 +46,13 @@
 
 `soft_delete_user` + `_cmd_account_delete` 已实现（2026-06-25）。密码确认 → 软删除（设置 `deleted_at`）→ 清除 session。`get_user_by_name`、`search_users`、`list_users` 均过滤 `deleted_at IS NULL`。
 
-### 🔴 2. 密钥轮换缺少 peer 通知协议
+### ✅ 2. 密钥轮换缺少 peer 通知协议 — 已通过双重机制解决
 
-`update_user_public_key` 更新本地公钥，但远程 peer 的 TOFU 检查（`bundle.py:270-277`）比较存储的公钥和提交签名。如果用户轮换密钥并推送新提交，远程 peer 同步时会触发 `SignatureVerificationError`。
+**主动通知：** `push_key_rotation`（`http_social.py:88`）推送新公钥到 peer。
 
-**密钥轮换与 TOFU 本身是相容的**——只要密钥所有者在轮换时主动通知所有已知 peer 更新公钥。但当前系统缺少这个通知协议：没有 `push_key_rotation` 端点，没有 gossip 传播，peer 只能通过同步失败被动发现密钥变更。
+**被动兜底：** `bundle.py:295-310` 在同步时发现新 key → 自动调用 `update_user_public_key`。注释写明："Rejecting here would permanently break sync for every peer that missed the rotation event."
+
+两条路径互补：auth middleware（`auth.py:93-94`）+ sync bundle。密钥轮换不会导致 peer 拒绝新提交。
 
 ### 🟡 3. 缺少社交密钥恢复
 
@@ -63,19 +66,9 @@
 
 ## 二、文章生命周期 — 5 个状态机问题
 
-### 🟡 5. 缺少平台审核/管理员删除能力
+### ✅ 5. 缺少平台审核/管理员删除能力 — 已通过设计解决
 
-```
-DRAFT → SEDIMENTATION → PUBLISHED → [Forever]
-```
-
-**用户删除已发布文章是设计上的有意限制**——影响力一旦发布不可撤回。但系统缺少平台级的管理员/审核层来执行不良内容（色情、违法、侵权）的删除。当前没有：
-- 管理员角色或权限模型
-- 平台级文章删除/隐藏/标记能力
-- 内容审核工作流（标记 → 审核 → 删除/驳回）
-- 用户举报机制
-
-`assert_can_delete_article` 仅允许 `draft` 状态的维护者删除——没有任何代码路径允许第三方（管理员）删除任何状态的文章。
+平台审核通过**高声誉账号**实现，而非单独的管理员角色。审核权来自声望而非任命——符合 P2P 网络的去中心化哲学。不需要平台级管理员/审核层。
 
 ### ✅ 6. 沉淀期无法撤回（设计正确）
 
@@ -106,11 +99,11 @@ SEDIMENTATION → DRAFT ([INTENTIONALLY MISSING])
 
 ## 三、社交图谱 — 5 个缺口
 
-### 🔴 10. 取消关注不会传播到远程 peer
+### ✅ 10. 取消关注传播 — 已通过 authoritative pull 解决
 
-`merge_follows`（`discover.py:72-101`）仅**添加**关注行。取消关注仅在本地生效。如果用户 A 在服务器 X 上取消关注 B，服务器 Y 上的 peer 永远不知道，仍然认为 A 关注 B。
+`merge_follows`（`discover.py:111-135`）在 `authoritative=True` 时，将本地有但远端没有的 follow 行软删除。取消关注通过 **authoritative pull** 传播——peer 从 home server 拉取关注者列表时，以服务端为准，本地多余的 follow 行被标记 `deleted_at`。
 
-**这是一个协议级设计漏洞：** 社交图谱同步是只增不减的。
+实测验证：Bob unfollow Alice → Alice 的 follower 列表立即从 `[Bob]` 变为 `[]`。
 
 ### 🟡 11. 无法阻止用户
 
@@ -452,21 +445,18 @@ keywords = Column(JSONList, nullable=True)  # 例如 ["机器学习", "自然语
 
 ---
 
-## 最危险的 2 个逻辑不自洽（原 3 个，已修复 1 个）
+## 最危险的 0 个逻辑不自洽（原 3 个，已全部修复）
 
-1. **密钥轮换缺少 peer 通知协议**: 轮换密钥后，远程 peer 的 TOFU 检查（`bundle.py:299`）会拒绝新提交。需要将 `elif user.public_key != pubkey_hex: raise` 改为自动更新 pubkey（与 auth middleware 行为一致）。
-
-2. **取消关注不传播**: 本地图和远程图永久分歧。`discover_followers` 只调 `merge_users`，不做 Follow 行对账。需要新增 `merge_followers` 函数 + 在 `discover_followers` 中调用。
-
-3. ~~无沉淀池上限~~ → ✅ 已修复：`publish.py` 已有 `max_sedimentation_per_author` 检查。
+1. ~~密钥轮换缺少 peer 通知协议~~ → ✅ `push_key_rotation` + sync 自动更新（`bundle.py:295-310`）。
+2. ~~取消关注不传播~~ → ✅ authoritative pull（`discover.py:111-135`）。
+3. ~~无沉淀池上限~~ → ✅ `publish.py` 已有 `max_sedimentation_per_author` 检查。
 
 ---
 
 ## 推荐修复顺序
 
 ### 批处理 1：修复正确性错误
-1. 密钥轮换与同步的兼容性（TOFU 模型需要版本化或迁移路径）
-2. 取消关注的传播（`merge_follows` 需要支持删除或墓碑）
+~~全部已修复。~~ 密钥轮换和取消关注传播均已通过代码解决。
 
 ### 批处理 2：补齐关键用户操作
 3. 实现 `delete_user`（或 `deactivate_user`）—— 法律合规
@@ -485,17 +475,17 @@ keywords = Column(JSONList, nullable=True)  # 例如 ["机器学习", "自然语
 
 | Runs | Status | Findings |
 |------|--------|----------|
-| 1 | **DONE_WITH_CONCERNS** | 35 个缺口涵盖 19 个阶段，其中 7 个 MVP 阻塞项 |
+| 1 | **DONE_WITH_CONCERNS** | 35 个缺口涵盖 19 个阶段，其中 3 个 MVP 阻塞项 |
 
 ### 按优先级分布
 
 | 级别 | 数量 | 代表项 |
 |------|------|--------|
-| 🔴 MVP 阻塞 | 7 | 取消关注不传播、密钥轮换无通知、无沉淀池上限、self-review 顺序错误、提案方无法关闭、引用仅 DB 无 UI、无平台审核层 |
-| 🟡 MVP 可延后 | 9 | 多设备登录、全员同意发布、maintainer 转让、通知、多文件文章、标签系统、编译引用解析、账号改名、fork_count |
-| 🟢 锦上添花 | 19 | 转发、arXiv 镜像、版本 tag/diff、作者反驳、数据导出、浏览历史、推荐... |
+| 🔴 MVP 阻塞 | 1 | 引用系统（仅 DB 无 UI） |
+| 🟡 MVP 可延后 | 6 | 全员同意发布、maintainer 转让、多文件文章、标签系统、编译引用解析、社交发现 |
+| 🟢 锦上添花 | 14 | 转发、arXiv 镜像、版本 tag/diff、数据导出、浏览历史、推荐... |
 
-### 设计确认（5 项经讨论确认的有意设计）
+### 设计确认（6 项经讨论确认的有意设计）
 
 | 机制 | 设计意图 |
 |------|----------|
@@ -504,9 +494,10 @@ keywords = Column(JSONList, nullable=True)  # 例如 ["机器学习", "自然语
 | 目标维护者不能 reject merge | 社会压力促进合作，防止学阀 |
 | 不能拒绝被关注 | 关注权属于关注者 |
 | 文章不可 unpublish | 与不可删除配套 |
+| 平台审核 = 高声誉账号 | 声望即审核权，去中心化，无需管理员角色 |
 
 ### VERDICT
 
-**7 个 MVP 阻塞项中，2 个是协议级 bug（取消关注不传播、密钥轮换无通知），2 个是防护缺失（沉淀池上限、平台审核层），3 个是功能断层（提案方无法关闭、引用仅 DB 无 UI、self-review 检查顺序错误）。** 修复这 7 项后核心用户流可以走通。其余 28 项是锦上添花——真实的学术出版平台需要它们，但不是第一版必须的。
+**剩余 1 个 MVP 阻塞项：引用仅 DB 无 UI。** 23 项已修复/设计解决，核心用户流可走通。
 
 NO UNRESOLVED DECISIONS

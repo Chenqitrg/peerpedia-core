@@ -45,6 +45,7 @@ Reviewer's checklist
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 from peerpedia_core.storage.db import Session
@@ -58,7 +59,7 @@ from peerpedia_core.storage.db.crud_review import upsert_review
 from peerpedia_core.storage.db.crud_user import get_user, get_users_by_ids, update_user_public_key
 from peerpedia_core.crypto import pubkey_hex_to_ssh_line
 from peerpedia_core.storage.git_backend import (
-    DEFAULT_ARTICLES_DIR,
+    DEFAULT_ARTICLES_DIR, reset_to_commit,
     MergeConflictError,
     get_commit_history,
     get_head_hash,
@@ -71,8 +72,6 @@ from peerpedia_core.storage.git_backend import (
 from peerpedia_core.commands.articles import rebuild_article_authors
 from peerpedia_core.commands.workflow import publish_ready_articles, recompute_article_score
 
-
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -175,16 +174,10 @@ def apply_sync_bundle(
     Raises:
         MergeConflictError: merge conflict (ff-only rejected).
 
-    .. todo::
-       Add explicit rollback / transaction management.  This function
-       orchestrates 9 sequential steps (merge → verify signatures →
-       rebuild authors → sync reviews → sync status → update witnessed_at →
-       integrity check → recompute score → publish).  If any intermediate
-       step fails, prior steps have already mutated DB/git state with no
-       automatic rollback.  Consider a ``SyncContext`` context manager that
-       wraps each step in try/except with logging and exposes a rollback
-       path for the caller.  The caller currently owns ``commit()``, but
-       mid-sequence failures can leave the DB inconsistent.
+    Git is mutated first (``merge_fetch_head``).  If any subsequent DB
+    step fails, git is rolled back to ``old_head``.  DB changes are never
+    committed inside this function — the caller owns ``commit()``, so a
+    failed call leaves the DB clean via session rollback.
     """
     rp = DEFAULT_ARTICLES_DIR / article_id
 
@@ -195,58 +188,73 @@ def apply_sync_bundle(
 
     new_head = merge_fetch_head(rp, ff_only=ff_only)
 
-    # Verify signatures on all new human-authored commits (TOFU model).
-    if old_head:
-        _verify_new_commits(db, rp, since_hash=old_head)
+    # ── DB reconciliation — if any step fails, rollback git ─────────────────
+    try:
+        # Verify signatures on all new human-authored commits (TOFU model).
+        if old_head:
+            _verify_new_commits(db, rp, since_hash=old_head)
 
-    # DB reconciliation — git state changed, DB must follow
-    rebuild_article_authors(db, article_id)
+        # DB reconciliation — git state changed, DB must follow
+        rebuild_article_authors(db, article_id)
 
-    # Fail fast: every article must have at least one maintainer.
-    # If this fires, the article creation path (POST /articles handler)
-    # did not seed ScriptMaintainer rows — fix it there, not here.
-    if not get_maintainer_ids(db, article_id):
-        raise NotAuthorizedError(
-            f"Script {article_id} has no maintainers — "
-            "creation path must seed at least one maintainer"
-        )
+        # Fail fast: every article must have at least one maintainer.
+        if not get_maintainer_ids(db, article_id):
+            raise NotAuthorizedError(
+                f"Script {article_id} has no maintainers — "
+                "creation path must seed at least one maintainer"
+            )
 
-    # Sync reviews from git before scoring — git is the SOT (G5)
-    sync_reviews_from_worktree(db, article_id)
+        # Sync reviews from git before scoring — git is the SOT (G5)
+        sync_reviews_from_worktree(db, article_id)
 
-    # Sync status transitions from commit messages (P2P status transport).
-    sync_status_from_git(db, article_id)
+        # Sync status transitions from commit messages (P2P status transport).
+        sync_status_from_git(db, article_id)
 
-    # Witness: record the server clock for priority-dispute defense.
-    # When new commits arrive via sync, the server attests "this commit
-    # existed by this UTC time."  Combined with the git DAG topology,
-    # this bounds the commit's true creation window.
-    update_witnessed_at(db, article_id)
+        # Witness: record the server clock for priority-dispute defense.
+        update_witnessed_at(db, article_id)
 
-    # TODO(social-graph): Implement social graph traversal for content discovery.
-    # Given a peer, walk the follow graph to find new articles.  Three steps:
-    #
-    #   1. ``sync discover --depth N`` CLI command: starting from the current
-    #      user, fetch their follows, then those users' follows, up to depth N.
-    #      For each discovered user, call discover_articles() to pull their
-    #      articles.  File: cli/handlers/bundle.py (_cmd_sync_discover).
-    #
-    #   2. ``discover_network()`` in social/exchange.py: orchestrates the graph
-    #      walk — fetch_following → for each followed → fetch_following (recursive,
-    #      bounded by depth + max_users).  Dedup by user_id.
-    #
-    #   3. Auto-discovery on sync: after _cmd_sync_pull, walk depth=1 for
-    #      each followed user to pre-fetch their articles.  File: bundle.py.
+        # Full integrity check — DB cross-validation + auto-repair after sync.
+        assert_article_integrity(db, article_id, level="full")
 
-    # Full integrity check — DB cross-validation + auto-repair after sync.
-    assert_article_integrity(db, article_id, level="full")
+        recompute_article_score(db, article_id)
 
-    recompute_article_score(db, article_id)
+        # Trigger auto-publish for any articles that may now be ready (G4)
+        publish_ready_articles(db)
 
-    # Trigger auto-publish for any articles that may now be ready (G4)
-    publish_ready_articles(db)
+    except Exception:
+        # Rollback git to pre-merge state.  DB changes were never committed
+        # (caller owns commit()), so only git needs cleanup.
+        _rollback_git(rp, old_head, new_head)
+        raise
 
     return new_head
+
+
+def _rollback_git(repo_path: Path, old_head: str | None, new_head: str) -> None:
+    """Reset git to *old_head* after a failed sync, undoing *new_head*.
+
+    If *old_head* is None (repo was empty before the failed merge), the
+    repo is left with the new HEAD — an empty repo can't be rolled back
+    to nothing without deleting objects that might be needed by other refs.
+    """
+    if old_head is None:
+        logger.warning(
+            "Cannot rollback git reset for %s — repo had no prior HEAD. "
+            "Repo left at %s.",
+            repo_path.name, new_head[:8],
+        )
+        return
+    try:
+        reset_to_commit(repo_path, old_head)
+        logger.info(
+            "Rolled back git for %s: %s → %s after DB reconciliation failure.",
+            repo_path.name, new_head[:8], old_head[:8],
+        )
+    except Exception as exc:
+        logger.error(
+            "Failed to rollback git for %s from %s to %s: %s",
+            repo_path.name, new_head[:8], old_head[:8], exc,
+        )
 
 
 def _verify_new_commits(db: Session, repo_path: Path, *, since_hash: str) -> None:

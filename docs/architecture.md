@@ -87,7 +87,10 @@ peerpedia_core/
 │   └── exchange.py            #   discover_following, discover_followers, discover_articles
 
 ├── transport/                 # HTTP — only layer importing httpx/starlette
-│   ├── http_client.py         #   fetch_* / push_* (head, bundle, meta, source, social)
+│   ├── _http_core.py          #   Shared: client pool, signed get/post, helpers
+│   ├── http_articles.py       #   Article sync: head, bundle, repo, source, search
+│   ├── http_social.py         #   Social graph: follow, share, peers, school, key rotation
+│   ├── http_client.py         #   Facade: re-exports all fetch_* / push_* functions
 │   ├── http_server.py         #   Starlette app with create_app()
 │   ├── auth.py                #   Ed25519 auth header signing/verification
 │   ├── shared.py              #   Shared HTTP utilities
@@ -526,11 +529,29 @@ peerpedia_core/
 
 ### `transport/` — HTTP layer
 
+**`transport/_http_core.py`**
+- What it does: Shared HTTP infrastructure — thread-safe client pool, URL/body helpers, signed `GET`/`POST` wrappers with Ed25519 auth.
+- Key functions: `_get_client()` → shared `httpx.Client`; `close_client()`; `_api_url()`; `_signed_get()`; `_signed_post()`.
+- Key exports: `_SYNC_TIMEOUT`.
+- Depends on: `httpx`, `peerpedia_core.exceptions`, `peerpedia_core.transport.auth`.
+- Used by: `transport/http_articles.py`, `transport/http_social.py`.
+
+**`transport/http_articles.py`**
+- What it does: Article-level HTTP calls — sync protocol (head, bundle, ancestor probe), repo upload/download, source fetch, search, metadata.
+- Key functions: `ancestor_probe()`, `fetch_head()`, `push_bundle()`, `fetch_incremental_bundle()`, `fetch_article_repo()`, `push_article_repo()`, `fetch_article_source()`, `fetch_search()`, `fetch_article_meta()`, `fetch_user_articles()`.
+- Depends on: `httpx`, `peerpedia_core.exceptions`, `transport/_http_core.py`.
+- Used by: `bundle/client.py`, `cli/bundle_utils.py`.
+
+**`transport/http_social.py`**
+- What it does: Social-layer HTTP calls — follow/unfollow, user profiles, school, peers, shares, notifications, key rotation.
+- Key functions: `fetch_following()`, `fetch_followers()`, `push_follow()`, `push_unfollow()`, `push_key_rotation()`, `push_share()`, `push_share_remove()`, `fetch_shares()`, `fetch_notifications()`, `fetch_peers()`, `push_peer_registration()`, `fetch_user()`, `fetch_school()`.
+- Depends on: `httpx`, `peerpedia_core.exceptions`, `transport/_http_core.py`, `transport/auth.py`.
+- Used by: `social/exchange.py`, `social/discovery.py`, `cli/handlers/social.py`.
+
 **`transport/http_client.py`**
-- What it does: All outbound HTTP requests (fetch/push for head, bundle, meta, source, social). Every function is `fetch_*` (GET → data or None) or `push_*` (POST → None/True or raises).
-- Key functions: `fetch_head(server, article_id)`, `fetch_incremental_bundle(server, article_id, since)`, `push_bundle(server, article_id, bundle_bytes)`, `fetch_article_repo(server, article_id)` / `push_article_repo(server, article_id, tar_bytes)`, `fetch_following(server, user_id)`, `fetch_followers(server, user_id)`, `push_follow(server, target_id)`, `fetch_notifications(server, user_id)`, `fetch_peers(server)`, `ancestor_probe(server, article_id, commit_hash)`, `close_client()`.
-- Depends on: `httpx`, `peerpedia_core.exceptions`, `peerpedia_core.transport.auth.sign_auth_header`.
-- Used by: `bundle/client.py`, `social/exchange.py`, `cli/bundle_utils.py`.
+- What it does: Facade that re-exports all `fetch_*` / `push_*` functions from `http_articles.py` and `http_social.py`, plus `close_client()` from `_http_core.py`. External code imports from here (or `transport/__init__.py`).
+- Depends on: `transport/http_articles`, `transport/http_social`, `transport/_http_core`.
+- Used by: `transport/__init__.py`, tests.
 
 **`transport/http_server.py`**
 - What it does: Starlette ASGI application — routing, middleware, error handling.

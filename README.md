@@ -5,7 +5,7 @@
 **Git stores content; SQLite stores state.** Every article is an independent Git repository -- body text and reviews have full history, can be diffed/forked/merged. Metadata (status, scores, relationships) lives in SQLite for fast queries and aggregation.
 
 [![Tests](https://github.com/Chenqitrg/peerpedia-core/actions/workflows/test.yml/badge.svg)](https://github.com/Chenqitrg/peerpedia-core/actions/workflows/test.yml)
-660 tests | 69% coverage | Python 3.11+
+661 tests | 69% coverage | Python 3.11+
 
 ## Installation
 
@@ -53,18 +53,22 @@ Sedimentation is PeerPedia's review mechanism: articles enter a timed public rev
 ### 4. Review
 
 ```bash
+peerpedia review invite <id> --user <reviewer-id>
+peerpedia review accept <id>       # Accept invitation
+peerpedia review decline <id>      # Decline invitation
 peerpedia review submit <id> --scores "..." --comment "Well-structured."
 peerpedia review reply <id> --to @reviewer
-peerpedia review invite <id> --user <reviewer-id>
 peerpedia review rate <id> --reviewer <reviewer-id> --helpfulness 4
+peerpedia review list <id>         # View all reviews
 ```
 
 ### 5. Fork & Merge
 
 ```bash
-peerpedia fork <id>                 # Fork a published article
+peerpedia fork <id>                 # Fork an article (published: anyone; draft: maintainer only)
 peerpedia merge propose <fork-id> --target <original-id>
 peerpedia merge accept <proposal-id> --target <article-id>
+peerpedia merge withdraw <proposal-id>
 ```
 
 ### 6. Multi-device setup
@@ -119,7 +123,8 @@ draft --publish()--> sedimentation --auto-expire--> published
 | Command | Description |
 |---------|-------------|
 | `account register --name <name>` | Register a new user |
-| `account login --name <name>` | Login (local) |
+| `account login --name <name>` | Login |
+| `account login --name <name> --user-id <uuid>` | Login with user ID disambiguation |
 | `account login --name <name> --peer <url> --user-id <uuid>` | Login with remote bootstrap (new device) |
 | `account delete` | Soft-delete the current account |
 | `account recover [--name <n>\|--user-id <id>]` | Recover keys from password |
@@ -138,7 +143,7 @@ draft --publish()--> sedimentation --auto-expire--> published
 | `article list --user <id> [--server <url>]` | Discover articles from a remote user |
 | `article edit <id> [--content <c>] [--title <t>]` | Edit an article |
 | `article publish <id> --scores <s>` | Publish to the sedimentation pool |
-| `article delete <id>` | Delete a draft |
+| `article delete <id> [--force]` | Delete a draft (--force skips confirmation) |
 | `article diff <id> <hash1> <hash2>` | Diff two versions |
 | `article scan` | Trigger auto-publish for expired sedimentation articles |
 
@@ -146,11 +151,13 @@ draft --publish()--> sedimentation --auto-expire--> published
 
 | Command | Description |
 |---------|-------------|
+| `review invite <id> --user <user-id>` | Invite a user to review |
+| `review accept <id>` | Accept a review invitation |
+| `review decline <id>` | Decline a review invitation |
 | `review submit <id> --scores <s> [--comment <c>]` | Submit a review |
-| `review invite <id> --user <user-id>` | Invite a specific user to review |
 | `review rate <id> --reviewer <user-id> --helpfulness <1-5>` | Rate a review's helpfulness |
 | `review list <id> [--show meta\|full]` | List reviews (full shows threads) |
-| `review reply <id> --to <reviewer>` | Reply to a review (bidirectional conversation) |
+| `review reply <id> --to <reviewer>` | Reply to a review (bidirectional) |
 
 ### maintainer -- Co-authorship
 
@@ -191,7 +198,7 @@ draft --publish()--> sedimentation --auto-expire--> published
 
 | Command | Description |
 |---------|-------------|
-| `fork <id>` | Fork a published article into a new draft |
+| `fork <id>` | Fork an article (published/rejected: anyone; draft: maintainer only) |
 | `merge propose <fork-id> --target <target-id>` | Propose a merge from a fork |
 | `merge accept <proposal-id> --target <id>` | Accept a merge proposal |
 | `merge withdraw <proposal-id>` | Withdraw a merge proposal |
@@ -203,6 +210,7 @@ draft --publish()--> sedimentation --auto-expire--> published
 | `sync status [--server <url>]` | Show synchronization status between local and peer |
 | `sync push [--server <url>]` | Push local offline operations to the peer server |
 | `sync pull [--server <url>]` | Pull article updates from the peer server |
+| `sync discover [--depth <n>] [--max-users <n>]` | Walk the follow graph to discover new articles |
 
 Syncing uses a k-exponential probe protocol to find a common git ancestor, then exchanges incremental git bundles. Clock skew exceeding 30 seconds is hard-blocked. Each sync records a `witnessed_at` timestamp on the server for priority dispute resolution.
 
@@ -217,7 +225,8 @@ Syncing uses a k-exponential probe protocol to find a common git ancestor, then 
 
 | Flag | Description |
 |------|-------------|
-| `--json` | JSON output |
+| `--json` | JSON output (default) |
+| `--rich` | Rich terminal output (human-readable panels) |
 | `--version` | Show version |
 
 ## Scoring dimensions
@@ -272,7 +281,7 @@ Key dependency rules:
 - `storage/db/` is the only layer importing `sqlalchemy`
 - Foundation modules (`config/`, `policies/`, `types/`, `workflow/`, …) never import `bundle/`, `social/`, or `transport/`
 
-These rules are enforced by **26 architecture tests** in `tests/test_architecture.py` — every import boundary is checked via AST parsing.
+These rules are enforced by architecture tests in `tests/test_architecture.py` — every import boundary is checked via AST parsing.
 
 ## Data directory
 
@@ -339,7 +348,7 @@ All commands take an SQLAlchemy `Session` as the first parameter, making them te
 git clone https://github.com/Chenqitrg/peerpedia-core.git
 cd peerpedia-core
 pip install -e ".[dev]"
-pytest tests/ -v           # 660 tests
+pytest tests/ -v           # 661 tests
 pytest tests/ -x --lf      # Re-run failures only (fast feedback)
 ```
 

@@ -151,6 +151,9 @@ def test_no_httpx_outside_transport():
     """Only transport/http_client.py and transport/health.py may import httpx."""
     _ALLOWED = {
         "peerpedia_core/transport/http_client.py",
+        "peerpedia_core/transport/http_articles.py",
+        "peerpedia_core/transport/http_social.py",
+        "peerpedia_core/transport/_http_core.py",
         "peerpedia_core/transport/health.py",
     }
     for f in _all_modules():

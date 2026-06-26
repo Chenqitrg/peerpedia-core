@@ -625,3 +625,13 @@ def read_article_source(repo_path: Path) -> tuple[str, str] | None:
         if f.is_file():
             return f.read_text(), fmt
     return None
+
+
+def reset_to_commit(repo_path: Path, commit_hash: str) -> None:
+    """Hard-reset the repo at *repo_path* to *commit_hash*.
+
+    Used for rolling back a failed sync merge — restores git to the
+    pre-merge state so a subsequent retry starts from a clean slate.
+    """
+    repo = git.Repo(repo_path)
+    repo.git.reset("--hard", commit_hash)

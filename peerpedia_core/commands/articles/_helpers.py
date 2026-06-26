@@ -18,6 +18,7 @@ from peerpedia_core.storage.db.crud_article import (
 from peerpedia_core.storage.db.crud_user import get_user as _get_user
 from peerpedia_core.storage.git_backend import (
     DEFAULT_ARTICLES_DIR, commit_status_marker, get_commit_authors, get_head_hash,
+    read_review_scores,
 )
 from peerpedia_core.storage.db.models import Article, User
 
@@ -56,6 +57,22 @@ def require_article_repo(article_id: str) -> Path:
     if not (rp / ".git").is_dir():
         raise NotFoundError("Article repo not found", resource_type="article", resource_id=article_id)
     return rp
+
+
+def require_review_scores(repo_path: Path, reviewer_dir: str, article_id: str) -> dict:
+    """Return parsed review scores or raise NotFoundError.
+
+    Eliminates the repeated ``scores = read_review_scores(rp, d); if scores is None: raise``
+    pattern.  Fail fast: missing or malformed scores.json raises immediately.
+    """
+    scores = read_review_scores(repo_path, reviewer_dir)
+    if scores is None:
+        raise NotFoundError(
+            f"scores.json not found in reviews/{reviewer_dir}/ for article {article_id}",
+            resource_type="review_scores",
+            resource_id=f"{article_id}/reviews/{reviewer_dir}",
+        )
+    return scores
 
 
 def reset_sink(db: Session, article_id: str, rp: Path, extra_days: int) -> None:

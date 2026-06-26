@@ -1,0 +1,21 @@
+Give a followed user a short nickname.  After setting an alias, you can
+use it anywhere you would use @name or a user ID.
+
+EXAMPLES
+  # Set an alias for a user
+  peerpedia alias set @pierre_curie pierre
+
+  # Set an alias by user ID
+  peerpedia alias set abc12345 marie
+
+  # Now you can use the alias in other commands
+  peerpedia follow marie
+  peerpedia review invite my-paper --user pierre
+
+Aliases are local to your machine — only you see them.  They save
+typing and make commands more readable.
+
+SEE ALSO
+  alias list         See all your aliases
+  alias remove       Remove an alias
+  follow             Follow a user

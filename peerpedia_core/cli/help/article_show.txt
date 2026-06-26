@@ -1,14 +1,27 @@
+Read a paper — see its details, scores, and full text.
+
 EXAMPLES
-  # Show metadata (title, status, authors, score)
+  # Show the paper's metadata (title, status, authors, scores)
   peerpedia article show abc12345
 
-  # Show metadata + full content
+  # Read the full text
   peerpedia article show abc12345 --show full
 
-You can reference an article by its full UUID, an 8-char prefix,
-or a title keyword.
+  # Find a paper by title keyword (no need to memorize IDs)
+  peerpedia article show "Radioactivity"
+
+  # Try a partial title match
+  peerpedia article show "quantum error"
+
+You can reference a paper by:
+  • Its full ID (like abc12345-6789-...)
+  • The first 8 characters of its ID (like abc12345)
+  • Any word or phrase from its title (PeerPedia finds the best match)
+
+The --show full output includes the complete paper text, formatted
+for your terminal.
 
 SEE ALSO
-  article list       Browse articles
-  article diff       Compare commits
-  review list        See reviews for this article
+  article list       Browse and search papers
+  article diff       Compare different versions of a paper
+  review list        See reviews for this paper

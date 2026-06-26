@@ -1,14 +1,29 @@
+Follow another researcher.  Their papers will appear in your personal
+feed (article list --feed), and you'll be notified of their new work.
+
 EXAMPLES
+  # Follow by @name (easiest — use their display name with @)
+  peerpedia follow @marie_curie
+
   # Follow by user ID
   peerpedia follow abc12345
 
-  # Follow by @name
-  peerpedia follow @alice
+  # Follow by partial ID
+  peerpedia follow abc1
 
-Following a user adds their articles to your feed (article list --feed).
-The followed user receives a notification.
+  # Follow by alias (if you set one)
+  peerpedia follow marie
+
+Following is the main way to build your reading list.  Follow researchers
+whose work you respect — their papers populate your feed.  The followed
+user gets a notification that you're following them.
+
+Don't know who to follow?  Try:
+  peerpedia school          — most-followed users (popular in the community)
+  peerpedia account search  — find specific people by name
 
 SEE ALSO
-  unfollow           Stop following
-  article list --feed    See articles from followed users
-  alias set          Give a followed user a nickname
+  unfollow           Stop following someone
+  article list --feed    See papers from people you follow
+  school             Discover popular users to follow
+  alias set          Give a followed user a short nickname

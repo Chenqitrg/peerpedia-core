@@ -1,10 +1,19 @@
+Check all papers in the sedimentation pool and promote any that have
+been there for 3+ days to "published" status.  This runs automatically
+when you start PeerPedia, but you can also run it manually.
+
 EXAMPLES
+  # Trigger the scan manually
   peerpedia article scan
 
-Checks all articles in the sedimentation pool.  Any article that
-has been in the pool for at least 3 days is promoted to "published".
-The scan also runs automatically on startup.
+  # Usually you don't need to run this — it auto-runs on startup.
+  # But if you're waiting for a paper to publish, this speeds it up.
+
+WHAT HAPPENS
+  • Every paper in the sedimentation pool is checked.
+  • Papers that have been in review for ≥3 days become "published".
+  • Published papers are permanently visible and citable.
 
 SEE ALSO
-  article publish    Submit to sedimentation pool
-  article list       See article statuses
+  article publish    Submit to the sedimentation pool
+  article list       See paper statuses

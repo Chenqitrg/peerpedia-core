@@ -1,11 +1,26 @@
-EXAMPLES
-  # Reply to reviewer @bob
-  peerpedia review reply abc12345 --to @bob
+Reply to a reviewer's comments on your paper.  This opens a discussion
+thread between you (the author) and the reviewer.  Replies are public
+and become part of the paper's review record.
 
-Opens your editor to write the reply.  Only article maintainers
-can reply.  The reviewer will receive a notification.
+EXAMPLES
+  # Reply to reviewer @pierre
+  peerpedia review reply abc12345 --to @pierre
+  # → Opens your editor to write the reply.
+
+  # Reply by reviewer ID
+  peerpedia review reply abc12345 --to def67890
+
+Only the paper's maintainers (authors) can reply.  The reviewer
+receives a notification when you reply.  Replies are bidirectional
+— the reviewer can respond back.
+
+WHAT TO INCLUDE IN A REPLY
+  • Thank the reviewer for their time and insights.
+  • Address each major point raised.
+  • Explain what you changed (or why you didn't).
+  • Keep it professional — your reply is public.
 
 SEE ALSO
-  review submit      Submit a review
-  review list        See all reviews
+  review submit      Submit a review (as a reviewer)
+  review list        See all reviews and threads
   notifications      Check for replies to your reviews

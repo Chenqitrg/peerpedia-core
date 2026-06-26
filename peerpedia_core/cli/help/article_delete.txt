@@ -1,8 +1,22 @@
+Delete a draft paper.  This removes the paper and its entire history
+from your machine.  Only the paper's maintainers can delete it, and
+only drafts can be deleted (published papers are permanent).
+
 EXAMPLES
+  # Delete a draft (asks for confirmation)
   peerpedia article delete abc12345
 
-Prompts for confirmation.  Only the article's maintainers can delete.
-Deletion removes the DB record and the git repository on disk.
+  # Delete without confirmation prompt
+  peerpedia article delete abc12345 --force
+
+  # Delete by title keyword
+  peerpedia article delete "Radioactivity"
+
+WARNING
+  Deletion removes the paper's database record AND its git repository
+  on disk.  This cannot be undone.  Published papers cannot be deleted
+  — they are part of the permanent peer-reviewed record.
 
 SEE ALSO
-  article list --mine    Find your articles
+  article list --mine    Find your papers and their statuses
+  article create         Write a new paper

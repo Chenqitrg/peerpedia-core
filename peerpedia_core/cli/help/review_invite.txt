@@ -1,0 +1,22 @@
+Invite someone to review your paper.  The invited user receives a
+notification and can accept or decline.
+
+EXAMPLES
+  # Invite by @name
+  peerpedia review invite abc12345 --user @pierre
+
+  # Invite by user ID
+  peerpedia review invite abc12345 --user def67890
+
+  # Invite by partial ID
+  peerpedia review invite abc12345 --user def6
+
+Your paper must be in the sedimentation pool (published for review)
+before you can invite reviewers.  Use "article publish" first.
+
+SEE ALSO
+  review submit      Submit a review (as a reviewer)
+  review accept      Accept a review invitation
+  review decline     Decline a review invitation
+  article publish    Submit your paper for review
+  account search     Find users to invite

@@ -1,0 +1,14 @@
+List all the local aliases you've set for users.
+
+EXAMPLES
+  # Show all aliases
+  peerpedia alias list
+  # → pierre    → @pierre_curie (abc12345)
+  # → marie     → @marie_curie  (def67890)
+
+Aliases are shortcuts you create for yourself.  They only work on your
+machine and are not visible to other users.
+
+SEE ALSO
+  alias set          Create an alias
+  alias remove       Remove an alias

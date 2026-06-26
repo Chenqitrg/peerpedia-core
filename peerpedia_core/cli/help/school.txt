@@ -1,21 +1,35 @@
+Show the most-followed researchers on the network.  This is the user
+directory — use it to discover people worth following and papers worth
+reading.  Think of it like a "most-cited authors" list.
+
 EXAMPLES
-  # Fetch from the peer server (default)
+  # Top 20 users (default)
   peerpedia school
 
-  # From a specific server
+  # From a specific peer server
   peerpedia school --server https://peer.example.com
 
   # Show top 10
   peerpedia school --limit 10
 
-  # Read from local DB only
+  # Show top 50
+  peerpedia school --limit 50
+
+  # From local database only (no network)
   peerpedia school --local
 
-The school lists users ranked by follower count.  Follow the top users
-to bootstrap your feed — they act as hubs, curating high-quality content
-and connecting you to more of the network.
+HOW TO USE THE SCHOOL
+  The users at the top have the most followers — they are often
+  influential researchers whose papers are worth reading.  Follow
+  a few to populate your feed with high-quality content.
+
+  Follow someone from the school:
+    peerpedia follow @top_researcher
+
+  Then see their papers:
+    peerpedia article list --feed
 
 SEE ALSO
-  follow             Follow a user from the school
-  article list --feed    See what your followed users are reading
-  account search     Search for a specific user
+  follow             Follow a user
+  account search     Search for a specific user by name
+  article list --feed    See papers from followed users

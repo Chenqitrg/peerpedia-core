@@ -1,0 +1,19 @@
+Recover your signing key from your password and salt.  Use this after
+"account bootstrap" to verify your password and load your session, or
+if your session file was lost.
+
+EXAMPLES
+  # Recover by name
+  peerpedia account recover --name "Marie Curie"
+
+  # Recover by user ID (if multiple users share the name)
+  peerpedia account recover --user-id abc12345
+
+You will be prompted for your password.  PeerPedia uses scrypt to
+re-derive your Ed25519 key from the password and salt.  If the
+derived key matches the stored public key, your session is loaded.
+
+SEE ALSO
+  account bootstrap  Set up your identity on a new device
+  account whoami     See your current session
+  account register   Create a new identity

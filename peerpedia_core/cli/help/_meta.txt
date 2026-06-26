@@ -1,26 +1,25 @@
-PeerPedia has four built-in help systems.  Pick the one that fits:
+PeerPedia has several ways to get help.  Pick what works for you:
 
-  peerpedia --help             Top-level overview, grouped by workflow
-  peerpedia <command> --help   Detailed options + examples for one command
-  peerpedia schema [command]   Machine-readable JSON (for AI agents and scripts)
-  peerpedia ?Mother            Interactive user guide and tutorial
+  peerpedia --help               Full command list, grouped by what you want to do
+  peerpedia <command> --help     Detailed options and examples for one command
+  peerpedia mother               Step-by-step guide for new users
+  peerpedia schema [command]     Machine-readable reference (for scripts and AI)
 
 EXAMPLES
-  # What can I do?
+  # What can PeerPedia do?
   peerpedia --help
 
-  # How do I review a paper?
+  # I want to review a paper — how?
   peerpedia review submit --help
 
-  # What commands does the AI see?
-  peerpedia schema
+  # I'm new — walk me through the basics
+  peerpedia mother
 
-  # What does a specific command look like to an AI?
-  peerpedia schema article_publish
+  # I want to find a specific command
+  peerpedia --help | grep review
 
-  # I'm lost — help me get started
-  peerpedia ?Mother
-
-TIP
-  Every error message includes a suggestion and related commands.
-  If a command fails, read the output — it tells you what to do next.
+TIPS
+  • Every error message tells you what went wrong and suggests what to try next.
+  • Use @name to refer to people (like @einstein), title words for papers.
+  • You don't need to memorize IDs — PeerPedia accepts partial matches.
+  • Add --help to any command to see examples you can copy and paste.

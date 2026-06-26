@@ -1,17 +1,24 @@
+Set up the same PeerPedia identity on a new device.  This creates a
+minimal user record on the new machine so you can recover your signing
+key with your password.
+
 EXAMPLES
-  # On your original device, export your identity:
+  # Step 1: On your original device, export your identity
   peerpedia account whoami --verbose --json
 
-  # Copy the JSON blob to your new device, then:
-  peerpedia account bootstrap --from '<paste JSON here>'
+  # Step 2: Copy the JSON output to your new device, then:
+  peerpedia account bootstrap --from '{"user_id":"abc12345-...","name":"Marie Curie",...}'
 
-  # Verify your password and load the session:
-  peerpedia account recover --user-id <your-id>
+  # Step 3: Verify your password and load your session
+  peerpedia account recover --user-id abc12345
 
-Bootstrap creates a minimal user stub on a new device so you can
-recover your signing key with your password.  After bootstrap,
-run "account recover" to verify.
+  # Optional: Connect to a peer server for data sync
+  peerpedia account bootstrap --from '<json>' --peer https://peer.example.com
+
+After bootstrap, your new device has a user stub but no papers.
+Run "sync pull" to download your papers from a peer server.
 
 SEE ALSO
   account whoami --verbose    Export your identity
-  account recover             Re-derive your key after bootstrap
+  account recover             Verify password after bootstrap
+  sync pull                   Download your papers

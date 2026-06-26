@@ -1,0 +1,15 @@
+Revoke (withdraw) your consent to publish or merge a paper.  If you
+previously consented via "maintainer consent", this reverses it.
+
+EXAMPLES
+  # Revoke your consent
+  peerpedia maintainer revoke abc12345
+
+You might revoke consent if new issues are found, if you disagree
+with co-authors about readiness, or if you want more time to review
+changes.  All maintainers must consent for the paper to proceed.
+
+SEE ALSO
+  maintainer consent Give your consent to publish
+  maintainer list    See consent status of all co-authors
+  article publish    Publish when all have consented

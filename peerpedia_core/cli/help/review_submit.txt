@@ -1,25 +1,37 @@
-SCORING DIMENSIONS
-  orig     originality    – novelty of the idea or approach
-  rigor    rigor          – methodological soundness
-  comp     completeness   – coverage of edge cases and limitations
-  ped      pedagogy       – clarity of exposition
-  imp      impact         – potential significance to the field
+Submit a peer review of someone else's paper.  Your review includes
+numerical scores and a written comment.  Reviews are public and signed
+with your key — they become part of the paper's permanent record.
 
-Each dimension is scored 1 (poor) through 5 (exceptional).
+SCORING DIMENSIONS (each 1–5, from poor to exceptional)
+  orig     originality    — novelty of the idea or approach
+  rigor    rigor          — methodological soundness
+  comp     completeness   — coverage of edge cases and limitations
+  ped      pedagogy       — clarity of exposition
+  imp      impact         — potential significance to the field
 
 EXAMPLES
   # Review a paper in the sedimentation pool
   peerpedia review submit abc12345 \
       --scores "orig=4,rigor=3,comp=4,ped=3,imp=5" \
-      --comment "This paper presents a compelling argument..."
+      --comment "This paper presents a compelling argument for..."
 
-  # List reviews you've received
-  peerpedia review list abc12345
+  # Your comment must be at least 200 characters.  Write a thoughtful
+  # review that helps the author improve their work.  Explain what's
+  # good, what could be better, and why you gave each score.
 
-  # Reply to a reviewer's comment
-  peerpedia review reply abc12345 --to @reviewer_name
+  # Review by title keyword
+  peerpedia review submit "Radioactivity" \
+      --scores "orig=5,rigor=4,comp=4,ped=5,imp=5" \
+      --comment "An excellent treatment of the subject..."
+
+WHAT MAKES A GOOD REVIEW
+  • Be specific — point to sections, arguments, or data.
+  • Explain your scores — why did you give a 3 instead of a 4?
+  • Suggest improvements, not just criticism.
+  • Your review is signed and public — write professionally.
 
 SEE ALSO
-  article list       Find articles to review
-  review list        See reviews on an article
-  review reply       Respond to a review
+  article list       Find papers to review (--status sedimentation)
+  review list        See all reviews on a paper
+  review reply       Respond to a reviewer's comments on your paper
+  review invite      Ask someone to review your paper

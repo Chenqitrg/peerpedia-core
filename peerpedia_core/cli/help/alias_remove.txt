@@ -1,0 +1,15 @@
+Remove an alias you previously set for a user.
+
+EXAMPLES
+  # Remove an alias
+  peerpedia alias remove @pierre_curie
+
+  # Remove by user ID
+  peerpedia alias remove abc12345
+
+The alias is deleted from your local list.  The user is unaffected
+— you just can't use that nickname to refer to them anymore.
+
+SEE ALSO
+  alias set          Create an alias
+  alias list         See all your aliases

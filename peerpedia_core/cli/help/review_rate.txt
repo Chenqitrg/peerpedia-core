@@ -1,0 +1,17 @@
+Rate a reviewer's helpfulness.  This contributes to the reviewer's
+reputation score on the network.
+
+EXAMPLES
+  # Rate reviewer @pierre as very helpful
+  peerpedia review rate abc12345 --reviewer @pierre --helpfulness 5
+
+  # Rate by user ID
+  peerpedia review rate abc12345 --reviewer def67890 --helpfulness 4
+
+Helpfulness is scored from 1 (not helpful) to 5 (exceptionally helpful).
+Only the paper's author (or maintainers) can rate reviewers.
+
+SEE ALSO
+  review list        See all reviews on your paper
+  review submit      Submit a review
+  school             See top-ranked users

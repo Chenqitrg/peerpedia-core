@@ -1,0 +1,20 @@
+View your share feed or the articles you've shared.  Shares are
+recommendations — when you share a paper, your followers see it.
+
+EXAMPLES
+  # See what others have shared (your feed)
+  peerpedia share list
+  # → Shows recent shares from people you follow
+
+  # See your own shares
+  peerpedia share list --mine
+  # → Shows articles you've shared
+
+Shares can include an optional comment explaining why you recommend
+the paper.  Sharing is a lightweight way to curate reading for your
+followers without writing a full review.
+
+SEE ALSO
+  share add          Share an article
+  share remove       Remove a share
+  article list --feed   See articles from followed users

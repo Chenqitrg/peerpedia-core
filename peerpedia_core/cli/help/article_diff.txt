@@ -1,13 +1,29 @@
+Compare two versions of a paper — like "track changes" for your
+academic writing.  See exactly what was added, removed, or modified.
+
 EXAMPLES
-  # Compare the last two commits
-  peerpedia diff abc12345 ~1 HEAD
+  # See what changed in the most recent edit
+  peerpedia article diff abc12345 ~1 HEAD
 
-  # Compare two specific commits
-  peerpedia diff abc12345 abc12345 def67890
+  # Compare any two specific versions
+  peerpedia article diff abc12345 abc12345 def67890
 
-Valid commit refs: a full hash, a short prefix, HEAD, or ~N
-(e.g. ~1 for the parent commit, ~3 for three commits back).
+  # Go back further (3 edits ago vs now)
+  peerpedia article diff abc12345 ~3 HEAD
+
+UNDERSTANDING VERSION REFERENCES
+  HEAD     = the latest (current) version
+  ~1       = one version ago (the previous version)
+  ~3       = three versions ago
+  abc12345 = a specific version by its ID
+
+  "~1 HEAD" means "compare the previous version against the current one"
+  — this is the most common use: "what did I just change?"
+
+The diff output highlights added lines in green and removed lines in red,
+similar to what you'd see in a word processor's "track changes" mode.
 
 SEE ALSO
   article show       Read the current version
-  article edit       Revise an article
+  article edit       Revise a paper
+  article list       Browse papers

@@ -1,10 +1,22 @@
+Save a paper to read later.  Bookmarked papers appear in your
+personal reading list (article list --bookmarked).
+
 EXAMPLES
-  # Bookmark an article for later
+  # Bookmark a paper
   peerpedia bookmark add abc12345
 
-Bookmarked articles appear in "article list --bookmarked".
-If the article is only on a peer server, metadata is pulled automatically.
+  # Bookmark by title keyword
+  peerpedia bookmark add "Radioactivity"
+
+  # See your bookmarks
+  peerpedia article list --bookmarked
+
+Bookmarks are private — only you can see your bookmark list.
+If the paper is only on a peer server (not on your machine),
+PeerPedia pulls its metadata automatically so you can at least
+see the title, author, and abstract.
 
 SEE ALSO
-  bookmark remove    Remove a bookmark
-  article list --bookmarked   See your bookmarks
+  bookmark remove         Remove a bookmark
+  article list --bookmarked   See your bookmarked papers
+  article show            Read a paper

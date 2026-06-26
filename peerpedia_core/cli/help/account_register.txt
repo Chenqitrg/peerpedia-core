@@ -1,9 +1,17 @@
-EXAMPLES
-  peerpedia account register --name Alice
+Create your PeerPedia identity.  You only need to do this once.
+Your name is how other researchers will find and cite you.
 
-PeerPedia derives an Ed25519 signing key from your password.
-This key signs every commit you make.  Keep your password safe —
-there is no password reset.  If you lose it, you must re-register.
+EXAMPLES
+  # Register with your real name
+  peerpedia account register --name "Marie Curie"
+
+  # Use a shorter name if you prefer
+  peerpedia account register --name "M. Curie"
+
+PeerPedia derives a signing key from your password using scrypt.
+This key signs every paper and review you create — it proves your
+work is really yours.  Keep your password safe.  There is no
+password reset.  If you lose it, you must re-register.
 
 SEE ALSO
   account login      Sign in on this device

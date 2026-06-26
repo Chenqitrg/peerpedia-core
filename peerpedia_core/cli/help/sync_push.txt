@@ -1,0 +1,24 @@
+Push your local papers, reviews, and social graph changes to a peer server.
+Use this after working offline — your changes are queued and sent when
+you run sync push.
+
+EXAMPLES
+  # Push to the default server (set by PEERPEDIA_SERVER env var)
+  peerpedia sync push
+
+  # Push to a specific server
+  peerpedia sync push --server https://peer.example.com
+
+WHAT HAPPENS
+  1. PeerPedia checks which articles have local changes not yet on the server.
+  2. It finds a common ancestor commit using k-exponential probe.
+  3. It sends an incremental git bundle with only the new changes.
+  4. The server records a witnessed_at timestamp for priority disputes.
+
+If there is a conflict (both you and someone else edited the same paper),
+sync push will report it and ask you to resolve it.
+
+SEE ALSO
+  sync pull          Fetch updates from the server
+  sync status        Check what needs syncing
+  sync discover      Find new articles on the network

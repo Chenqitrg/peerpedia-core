@@ -1,0 +1,23 @@
+Walk the social graph to discover new articles.  Starting from users you
+follow, PeerPedia looks at who they follow, fetches their articles, and
+continues outward up to a set depth.
+
+EXAMPLES
+  # Discover articles one hop away (default depth = 1)
+  peerpedia sync discover
+
+  # Go deeper into the network
+  peerpedia sync discover --depth 3
+
+  # Limit the number of users to traverse
+  peerpedia sync discover --depth 2 --max-users 50
+
+This is like "exploring the neighborhood" of your academic network.
+For each discovered user, their public articles are pulled and merged
+into your local database.  Discovery requires a configured peer server.
+
+SEE ALSO
+  sync pull          Fetch updates from known users
+  sync push          Send your work to the server
+  follow             Add a user to your network
+  school             See the most-followed users

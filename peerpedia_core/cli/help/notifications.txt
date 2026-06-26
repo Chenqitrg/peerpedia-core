@@ -1,0 +1,26 @@
+View your notifications.  PeerPedia sends you notifications when:
+  • Someone reviews your paper
+  • An author replies to your review
+  • You receive a review invitation
+  • Someone proposes a merge to your paper
+  • Someone follows you
+  • Your paper transitions from sedimentation to published
+
+EXAMPLES
+  # Show unread notifications (default)
+  peerpedia notifications
+  # → 3 unread:
+  #   [1] @pierre reviewed your paper "Radioactivity"
+  #   [2] @marie replied to your review on "Quantum Error Correction"
+  #   [3] @einstein started following you
+
+  # Show all notifications, including read ones
+  peerpedia notifications --all
+
+Notifications are local — they appear in your terminal.  There is
+no email or push notification.  Check them regularly to stay up
+to date with your papers and reviews.
+
+SEE ALSO
+  notifications read   Mark a notification as read
+  review list          See reviews directly

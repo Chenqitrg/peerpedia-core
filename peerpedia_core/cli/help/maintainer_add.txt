@@ -1,11 +1,23 @@
-EXAMPLES
-  # Add a co-author
-  peerpedia maintainer add abc12345 --target-user @bob
+Add a co-author to your paper.  The new maintainer can edit, publish,
+and manage the paper — they have the same rights you do.
 
-The new maintainer can edit, publish, and manage the article.
-Both the adder and the target must be registered users.
+EXAMPLES
+  # Add a co-author by @name
+  peerpedia maintainer add abc12345 --target-user @pierre
+
+  # Add by user ID
+  peerpedia maintainer add abc12345 --target-user def67890
+
+  # Add by title keyword
+  peerpedia maintainer add "Radioactivity" --target-user @marie
+
+WHAT HAPPENS
+  • The target user gets full edit/publish rights to the paper.
+  • Both you and the target must be registered users.
+  • For multi-author papers, ALL maintainers must consent before publishing.
+  • The new maintainer receives a notification.
 
 SEE ALSO
-  maintainer remove   Remove a maintainer
-  maintainer list     See all maintainers
+  maintainer remove   Remove a co-author
+  maintainer list     See all co-authors
   maintainer consent  Approve publication

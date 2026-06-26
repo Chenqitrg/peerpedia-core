@@ -1,0 +1,18 @@
+List all co-authors (maintainers) of a paper, showing their names,
+consent status for publishing, and roles.
+
+EXAMPLES
+  # See who maintains a paper
+  peerpedia maintainer list abc12345
+  # → Maintainers for "Radioactivity":
+  #   @marie_curie   (owner, consented)
+  #   @pierre_curie  (maintainer, consented)
+  #   @paul          (maintainer, consent pending)
+
+All maintainers must consent before the paper can be published.
+The list shows consent status for each co-author.
+
+SEE ALSO
+  maintainer add     Add a co-author
+  maintainer remove  Remove a co-author
+  maintainer consent Give your consent to publish

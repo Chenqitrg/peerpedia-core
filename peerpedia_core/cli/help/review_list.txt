@@ -1,11 +1,21 @@
-EXAMPLES
-  # List reviews for an article (scores only)
-  peerpedia review list abc12345
+See all reviews for a paper.  Reviews include numerical scores and
+written comments.  Use --show full to see the discussion threads
+(author replies and reviewer responses).
 
-  # List reviews + full discussion threads
+EXAMPLES
+  # See review summaries (scores only)
+  peerpedia review list abc12345
+  # → Review by @pierre: orig=4 rigor=3 comp=4 ped=3 imp=5
+  # → Review by @marie:  orig=5 rigor=4 comp=4 ped=5 imp=4
+
+  # See full reviews with discussion threads
   peerpedia review list abc12345 --show full
+  # → Includes each reviewer's full comment and any author replies
+
+  # List reviews by title keyword
+  peerpedia review list "Radioactivity"
 
 SEE ALSO
   review submit      Submit a review
-  review reply       Reply to a reviewer
-  article show       Read the article
+  review reply       Reply to a reviewer's comment
+  article show       Read the paper being reviewed

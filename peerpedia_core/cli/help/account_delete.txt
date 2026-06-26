@@ -1,0 +1,22 @@
+Delete your PeerPedia account.  This is a soft delete — your user
+record is deactivated but preserved so that papers you authored and
+reviews you wrote still show your name.  Your local session file is
+removed, and you will need to register or log in again to continue.
+
+EXAMPLES
+  # Delete your account
+  peerpedia account delete
+
+  # The command will ask you to confirm before proceeding.
+  # Once deleted, your session ends and you return to the login prompt.
+
+WHAT HAPPENS
+  • Your session file (~/.peerpedia/session.json) is removed.
+  • Your user record is marked inactive, not erased.
+  • Papers you authored still show your name.
+  • Reviews you wrote still show your name.
+  • You can register again with the same name if needed.
+
+SEE ALSO
+  account register   Create a new account
+  account login      Sign back in

@@ -1,0 +1,14 @@
+Decline a review invitation.  The author will be notified that you
+cannot review their paper at this time.
+
+EXAMPLES
+  # Decline an invitation
+  peerpedia review decline abc12345
+
+Declining is polite — the author knows not to wait for your review.
+There is no penalty for declining.
+
+SEE ALSO
+  review accept      Accept an invitation
+  review submit      Submit a review (if you accepted)
+  notifications      Check for pending invitations

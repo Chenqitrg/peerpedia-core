@@ -1,0 +1,22 @@
+Show your current session identity — who you are logged in as.
+
+EXAMPLES
+  # Basic info (name and user ID)
+  peerpedia account whoami
+  # → Logged in as Marie Curie (abc12345)
+
+  # Show full details for device setup
+  peerpedia account whoami --verbose
+  # → Includes public key and salt for bootstrap
+
+  # Machine-readable output for copying to another device
+  peerpedia account whoami --verbose --json
+  # → JSON you can paste into "account bootstrap --from"
+
+Use --verbose --json when you need to export your identity to set up
+PeerPedia on another computer.
+
+SEE ALSO
+  account register   Create a new identity
+  account login      Sign in
+  account bootstrap  Import identity on another device

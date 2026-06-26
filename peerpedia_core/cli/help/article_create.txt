@@ -1,18 +1,37 @@
+Write a new paper.  It starts as a private draft — only you (and any
+co-authors you add later) can see it until you publish.
+
 EXAMPLES
-  # Open your editor to write interactively
-  peerpedia article create --title "Quantum Error Correction"
+  # Write interactively (recommended for beginners)
+  peerpedia article create --title "Quantum Error Correction in Noisy Channels"
+  # → Opens your default text editor.  Write your paper, save, and close.
 
-  # Create with inline content (skip the editor)
-  peerpedia article create --title "Introduction" --content "# Hello\n\nWorld." --no-editor
+  # Write with inline content (good for short announcements)
+  peerpedia article create --title "A Short Proof" \
+      --content "# Introduction\n\nWe present a concise proof of..." \
+      --no-editor
 
-  # Create and publish immediately (with self-review scores)
-  peerpedia article create --title "My Paper" --content "# Abstract" \
+  # Create an empty draft to fill in later
+  peerpedia article create --title "Work in Progress" --no-editor
+
+  # Write and immediately submit for peer review
+  peerpedia article create --title "My Results" \
+      --content "# Abstract\n\n..." \
       --publish --scores "orig=4,rigor=3,comp=4,ped=3,imp=3"
 
-Your article starts as a draft.  Use "article edit" to revise,
-then "article publish" to submit to the sedimentation pool.
+WRITING FORMAT
+  Your paper is stored as plain text with Markdown formatting:
+    # Title          → top-level heading
+    ## Section       → section heading
+    *text*           → italics
+    **text**         → bold
+    $$E = mc^2$$     → LaTeX math (renders in compiled output)
+    Blank lines      → separate paragraphs
+
+  To see which editor will open:  echo $EDITOR
 
 SEE ALSO
-  article edit       Revise a draft
-  article publish    Submit to sedimentation pool
-  article list       Browse articles
+  article edit       Revise your draft
+  article show       Read your paper
+  article publish    Submit for peer review
+  article list       Browse papers

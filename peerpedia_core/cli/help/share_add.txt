@@ -1,13 +1,26 @@
+Share a paper with your followers.  Sharing is a lightweight way to
+recommend something worth reading — your followers will see it in their
+feed.  Unlike a review, a share can be as brief as you like.
+
 EXAMPLES
-  # Share publicly (visible to your followers)
-  peerpedia share add abc12345 --comment "Must read!"
+  # Share publicly (all your followers see it)
+  peerpedia share add abc12345 --comment "Must read for anyone in the field!"
 
-  # Share to a specific user
-  peerpedia share add abc12345 --to @bob
+  # Share to a specific colleague
+  peerpedia share add abc12345 --to @marie
 
-Shares appear in your followers' feeds.  Share to a specific user
-with --to (by @name, alias, or UUID).
+  # Share by title keyword
+  peerpedia share add "Radioactivity" --comment "Fascinating results"
+
+  # Share without a comment
+  peerpedia share add abc12345
+
+WHEN TO SHARE
+  • You found an interesting paper others should see.
+  • You want to recommend a paper to a specific colleague.
+  • You want to highlight a paper's importance without writing a full review.
 
 SEE ALSO
-  share list         See your shares or your feed
-  share remove       Un-share an article
+  share list         See shares from people you follow
+  share remove       Remove a share you posted
+  review submit      Write a full review (more detailed than a share)

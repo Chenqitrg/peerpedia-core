@@ -1,0 +1,23 @@
+Pull article updates, new reviews, and social graph changes from a peer
+server.  Use this when you come online to fetch what others have published
+while you were away.
+
+EXAMPLES
+  # Pull from the default server
+  peerpedia sync pull
+
+  # Pull from a specific server
+  peerpedia sync pull --server https://peer.example.com
+
+WHAT HAPPENS
+  1. PeerPedia connects to the server and checks for new content.
+  2. New articles, reviews, and follows are downloaded.
+  3. Local metadata is updated to reflect the remote state.
+
+Pull is safe — it only adds or updates local data, never overwrites
+your unpublished drafts.
+
+SEE ALSO
+  sync push          Send your changes to the server
+  sync status        Check what needs syncing
+  sync discover      Find new articles by walking the follow graph

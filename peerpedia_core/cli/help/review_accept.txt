@@ -1,0 +1,17 @@
+Accept a review invitation.  After accepting, you can submit your review.
+
+EXAMPLES
+  # Accept a review invitation
+  peerpedia review accept abc12345
+
+  # Then submit your review
+  peerpedia review submit abc12345 --scores "..." --comment "..."
+
+You can only accept invitations for papers in the sedimentation pool.
+Check your notifications to see pending invitations:
+  peerpedia notifications
+
+SEE ALSO
+  review decline     Decline an invitation
+  review submit      Submit your review after accepting
+  notifications      Check for pending invitations

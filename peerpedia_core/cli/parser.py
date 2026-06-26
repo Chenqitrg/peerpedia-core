@@ -99,10 +99,10 @@ COMMAND_GROUPS = [
         ("recover", _cmd_recover, [
             (("--name",), {"help": "Your display name"}),
             (("--user-id",), {"help": "Your user ID (UUID)"}),
-        ]),
+        ], {"epilog": _load_help("account_recover")}),
         ("whoami", _cmd_whoami, [
             (("--verbose",), {"action": "store_true", "help": "Show user ID, public key, and salt for device bootstrap"}),
-        ]),
+        ], {"epilog": _load_help("account_whoami")}),
         ("bootstrap", _cmd_bootstrap, [
             (("--from",), {"required": True, "dest": "from_", "metavar": "JSON",
              "help": "JSON blob from 'account whoami --verbose --json'"}),
@@ -180,19 +180,19 @@ COMMAND_GROUPS = [
         ("invite", _cmd_review_invite, [
             (("article_id",), {"metavar": "ref", "help": "Article UUID, prefix, or title keyword"}),
             (("--user",), {"required": True, "help": "User to invite (@name, UUID, or prefix)"}),
-        ]),
+        ], {"epilog": _load_help("review_invite")}),
         ("accept", _cmd_review_accept, [
             (("article_id",), {"metavar": "ref", "help": "Article UUID, prefix, or title keyword"}),
-        ]),
+        ], {"epilog": _load_help("review_accept")}),
         ("decline", _cmd_review_decline, [
             (("article_id",), {"metavar": "ref", "help": "Article UUID, prefix, or title keyword"}),
-        ]),
+        ], {"epilog": _load_help("review_decline")}),
         ("rate", _cmd_review_rate, [
             (("article_id",), {"metavar": "ref", "help": "Article UUID, prefix, or title keyword"}),
             (("--reviewer",), {"required": True, "help": "Reviewer to rate (@name, UUID, or prefix)"}),
             (("--helpfulness",), {"required": True, "type": int, "choices": [1, 2, 3, 4, 5],
              "help": "Helpfulness score 1-5"}),
-        ]),
+        ], {"epilog": _load_help("review_rate")}),
     ]),
     ("merge", "Propose, accept, or withdraw merge proposals", [
         ("propose", _cmd_merge_propose, [
@@ -211,11 +211,11 @@ COMMAND_GROUPS = [
         ("set", _cmd_alias_set, [
             (("user_identifier",), {"help": "User ID, @name, or UUID prefix"}),
             (("alias",), {"help": "Alias to assign"}),
-        ]),
+        ], {"epilog": _load_help("alias_set")}),
         ("remove", _cmd_alias_remove, [
             (("user_identifier",), {"help": "User ID, @name, or UUID prefix"}),
-        ]),
-        ("list", _cmd_alias_list, []),
+        ], {"epilog": _load_help("alias_remove")}),
+        ("list", _cmd_alias_list, [], {"epilog": _load_help("alias_list")}),
     ]),
     ("share", "Share or recommend articles to followers", [
         ("add", _cmd_share_add, [
@@ -225,10 +225,10 @@ COMMAND_GROUPS = [
         ], {"epilog": _load_help("share_add")}),
         ("list", _cmd_share_list, [
             (("--mine",), {"action": "store_true", "help": "Show my shares instead of feed"}),
-        ]),
+        ], {"epilog": _load_help("share_list")}),
         ("remove", _cmd_share_remove, [
             (("article_id",), {"help": "Article ID to unshare"}),
-        ]),
+        ], {"epilog": _load_help("share_remove")}),
     ]),
     ("bookmark", "Bookmark articles for later reading", [
         ("add", _cmd_bookmark_add, [
@@ -236,7 +236,7 @@ COMMAND_GROUPS = [
         ], {"epilog": _load_help("bookmark_add")}),
         ("remove", _cmd_bookmark_remove, [
             (("article_id",), {"metavar": "ref", "help": "Article UUID, prefix, or title keyword"}),
-        ]),
+        ], {"epilog": _load_help("bookmark_remove")}),
     ]),
     ("following", "View who a user follows", [
         ("", _cmd_following, [
@@ -257,7 +257,7 @@ COMMAND_GROUPS = [
             (("--host",), {"default": "127.0.0.1", "help": "Bind address"}),
             (("--port",), {"default": 8080, "type": int, "help": "Listen port"}),
             (("--public-url",), {"default": "", "help": "Public URL for peer registration (e.g. https://peer.example.com)"}),
-        ]),
+        ], {"epilog": _load_help("server_start")}),
     ]),
     ("sync", "Push/pull articles to/from a peer server", [
         ("status", _cmd_sync_status, [
@@ -265,25 +265,22 @@ COMMAND_GROUPS = [
         ], {"epilog": _load_help("sync_status")}),
         ("push", _cmd_sync_push, [
             (("--server",), {"help": "Peer server URL (or set PEERPEDIA_SERVER env var)"}),
-        ]),
+        ], {"epilog": _load_help("sync_push")}),
         ("pull", _cmd_sync_pull, [
             (("--server",), {"help": "Peer server URL (or set PEERPEDIA_SERVER env var)"}),
-        ]),
+        ], {"epilog": _load_help("sync_pull")}),
         ("discover", _cmd_sync_discover, [
             (("--depth",), {"type": int, "default": 1, "help": "Follow graph depth (default 1)"}),
             (("--max-users",), {"type": int, "default": 100, "help": "Max users to traverse"}),
         ], {"epilog": _load_help("sync_discover")}),
-        # Walks the follow graph to find new articles — fetch user's follows,
-        # then their follows, up to depth N (default 1).  For each discovered
-        # user, calls discover_articles().  See commands/bundle.py for details.
     ]),
     ("notifications", "View and manage notifications", [
         ("", _cmd_notifications, [
             (("--all",), {"action": "store_true", "help": "Show all notifications (not just unread)"}),
-        ]),
+        ], {"epilog": _load_help("notifications")}),
         ("read", _cmd_notification_read, [
             (("notification_id",), {"help": "Notification ID to mark as read"}),
-        ]),
+        ], {"epilog": _load_help("notifications_read")}),
     ]),
     ("maintainer", "Manage article co-authors (maintainers)", [
         ("add", _cmd_maintainer_add, [
@@ -293,16 +290,16 @@ COMMAND_GROUPS = [
         ("remove", _cmd_maintainer_remove, [
             (("article_id",), {"help": "Article ID"}),
             (("--target-user",), {"required": True, "help": "User ID to remove from maintainers"}),
-        ]),
+        ], {"epilog": _load_help("maintainer_remove")}),
         ("list", _cmd_maintainer_list, [
             (("article_id",), {"help": "Article ID"}),
-        ]),
+        ], {"epilog": _load_help("maintainer_list")}),
         ("consent", _cmd_maintainer_consent, [
             (("article_id",), {"help": "Article ID to consent to publish/merge"}),
         ], {"epilog": _load_help("maintainer_consent")}),
         ("revoke", _cmd_maintainer_revoke, [
             (("article_id",), {"help": "Article ID to revoke consent"}),
-        ]),
+        ], {"epilog": _load_help("maintainer_revoke")}),
     ]),
 ]
 
@@ -318,13 +315,13 @@ TOP_LEVEL = [
         (("id",), {"metavar": "ref", "help": "Article UUID, prefix, or title keyword"}),
         (("--format",), {"choices": ["pdf", "svg", "png", "html"],
                          "help": "Output format (default: pdf)"}),
-    ]),
+    ], {"epilog": _load_help("compile")}),
     ("follow", _cmd_follow_user, [
         (("user_identifier",), {"help": "User ID, @name, or UUID prefix"}),
     ], {"epilog": _load_help("follow")}),
     ("unfollow", _cmd_unfollow_user, [
         (("user_identifier",), {"help": "User ID, @name, or UUID prefix"}),
-    ]),
+    ], {"epilog": _load_help("unfollow")}),
     ("mother", _cmd_mother, []),
     ("school", _cmd_school, [
         (("--limit",), {"type": int, "default": 20, "help": "Max users to show"}),
@@ -350,32 +347,87 @@ def build_parser() -> argparse.ArgumentParser:
     except importlib.metadata.PackageNotFoundError:
         _version = "unknown"
 
-    # Build scannable command overview for --help
-    _group_lines = []
+    # Build friendlier command overview grouped by workflow
+    _writing = ["article"]
+    _reviewing = ["review"]
+    _social = ["follow", "unfollow", "following", "followers", "school",
+               "bookmark", "share", "alias"]
+    _collab = ["merge", "fork", "maintainer"]
+    _sync = ["sync", "server"]
+    _other = ["account", "notifications", "compile", "schema", "help", "mother"]
+
+    _all_grouped = [
+        ("Writing & publishing", _writing),
+        ("Peer review", _reviewing),
+        ("Collaboration (fork, merge, co-authors)", _collab),
+        ("Social & discovery", _social),
+        ("Sync & networking", _sync),
+        ("Account & utilities", _other),
+    ]
+
+    _lookup: dict[str, tuple[str, str, list[str]]] = {}
     for name, help_text, subcommands in COMMAND_GROUPS:
         subs = [s[0] for s in subcommands if s[0]]
-        _group_lines.append(f"  {name:<14} {', '.join(subs)}")
-    _top_level_names = [t[0] for t in TOP_LEVEL]
-    _group_lines.append(f"\n  {'':14} {', '.join(_top_level_names)}")
+        _lookup[name] = (name, help_text, subs)
+    for entry in TOP_LEVEL:
+        _lookup[entry[0]] = (entry[0], _first_line(entry[1]), [])
+
+    _cmd_lines = []
+    for section, cmds in _all_grouped:
+        _cmd_lines.append(f"  {section}")
+        for c in cmds:
+            if c in _lookup:
+                _name, _help, _subs = _lookup[c]
+                if _subs:
+                    _cmd_lines.append(f"    {_name:<14} {', '.join(_subs)}")
+                else:
+                    _cmd_lines.append(f"    {_name:<14} {_help}")
+        _cmd_lines.append("")
 
     _examples = (
-        "\nEXAMPLES\n"
-        "  peerpedia account register --name Alice\n"
-        "  peerpedia article create --title \"My Paper\" --content \"# Intro\\n\\n...\"\n"
-        "  peerpedia article publish <id> --scores \"orig=4,rigor=3,comp=4,ped=3,imp=4\"\n"
-        "  peerpedia review submit <id> --scores \"...\" --comment \"...\"\n"
-        "  peerpedia article list --feed              # articles from people you follow\n"
-        "  peerpedia article list --search \"quantum\"  # search by keyword\n"
-        "  peerpedia account search Alice             # find a user\n"
-        "  peerpedia diff <id> ~1 HEAD                # see what changed\n"
-        "  peerpedia sync push --server https://peer.example.com\n"
-        "\nRun 'peerpedia <command> --help' for detailed options and more examples.\n"
-        "Run 'peerpedia help' to learn about all help systems."
+        "\nEXAMPLES — real tasks you can copy and paste\n\n"
+        "  Your first paper:\n"
+        "    peerpedia account register --name \"Albert Einstein\"\n"
+        "    peerpedia article create --title \"On the Electrodynamics of Moving Bodies\"\n"
+        "    peerpedia article publish abc12345 --scores \"orig=5,rigor=4,comp=4,ped=3,imp=5\"\n"
+        "\n"
+        "  Finding papers to read:\n"
+        "    peerpedia article list                          # all public papers\n"
+        "    peerpedia article list --search \"quantum\"       # papers about quantum topics\n"
+        "    peerpedia article list --feed                    # papers from people you follow\n"
+        "    peerpedia article show abc12345                  # read a paper's details\n"
+        "    peerpedia article show abc12345 --show full      # read the full text\n"
+        "\n"
+        "  Improving your draft:\n"
+        "    peerpedia article edit abc12345                  # open editor to revise\n"
+        "    peerpedia article diff abc12345 ~1 HEAD          # see what changed last time\n"
+        "\n"
+        "  Peer reviewing:\n"
+        "    peerpedia review submit abc12345 \\\n"
+        "        --scores \"orig=4,rigor=3,comp=4,ped=3,imp=5\" \\\n"
+        "        --comment \"This paper presents a novel approach to...\"\n"
+        "    peerpedia review list abc12345                   # see all reviews of a paper\n"
+        "\n"
+        "  Working with others:\n"
+        "    peerpedia account search Einstein                # find a colleague\n"
+        "    peerpedia follow @einstein                       # follow their work\n"
+        "    peerpedia maintainer add abc12345 --target-user @bob  # add a co-author\n"
+        "    peerpedia fork abc12345                          # create your own copy to revise\n"
+        "\n"
+        "  Sharing with peers:\n"
+        "    peerpedia sync push --server https://peer.example.com\n"
+        "    peerpedia sync pull --server https://peer.example.com\n"
+        "\n"
+        "Add --help to any command for detailed options and more examples:\n"
+        "    peerpedia article create --help\n"
+        "    peerpedia review submit --help\n"
+        "\n"
+        "New to the command line?  Run:  peerpedia mother\n"
     )
 
     epilog = (
-        "COMMANDS\n"
-        + "\n".join(_group_lines)
+        "\nCOMMANDS\n"
+        + "\n".join(_cmd_lines)
         + "\n"
         + _examples
     )

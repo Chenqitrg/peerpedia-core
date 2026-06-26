@@ -1,0 +1,22 @@
+Compile an article from Markdown to a rendered format like PDF, SVG, PNG,
+or HTML.  This is useful for sharing your paper outside PeerPedia — for
+submitting to journals, posting on preprint servers, or printing.
+
+EXAMPLES
+  # Compile to PDF (default)
+  peerpedia compile abc12345
+
+  # Compile to a specific format
+  peerpedia compile abc12345 --format pdf
+  peerpedia compile abc12345 --format html
+  peerpedia compile abc12345 --format svg
+  peerpedia compile abc12345 --format png
+
+  # Reference by title keyword
+  peerpedia compile "radioactivity"
+
+The output file is saved alongside your article in ~/.peerpedia/articles/.
+
+SEE ALSO
+  article show       Read the article in the terminal
+  article create     Write a new article

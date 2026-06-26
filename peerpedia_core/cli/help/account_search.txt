@@ -1,22 +1,28 @@
+Find researchers by name.  Use this to discover people before following
+them, inviting them as reviewers, or adding them as co-authors.
+
 EXAMPLES
-  # Search by partial name
-  peerpedia account search Alice
+  # Search by full or partial name
+  peerpedia account search "Marie Curie"
+  peerpedia account search Marie
 
-  # Search case-insensitive
-  peerpedia account search alice     # same result as Alice
+  # Search is case-insensitive
+  peerpedia account search marie     # same as "Marie"
 
-  # Search with a fragment
+  # Search by name fragment
   peerpedia account search Chen      # matches "Chenqi Meng", "Chen Li", ...
 
-  # JSON output (machine-readable)
-  peerpedia account search Alice --json
-  # → [{"id": "abc12345-...", "name": "Alice Wang"}, ...]
+  # Machine-readable output
+  peerpedia account search Marie --json
+  # → [{"id": "abc12345-...", "name": "Marie Curie"}, ...]
 
-Use this to discover users before following them, inviting them as
-reviewers, or adding them as co-authors.
+After finding someone, you can:
+  • peerpedia follow @marie_curie          — add them to your feed
+  • peerpedia review invite mypaper --user @marie_curie  — ask for a review
+  • peerpedia maintainer add mypaper --target-user @marie_curie  — add as co-author
 
 SEE ALSO
-  follow             Follow a user after finding them
-  maintainer add     Add a user as co-author
-  review invite      Invite a user to review your article
+  follow             Follow a researcher
+  review invite      Invite someone to review
+  maintainer add     Add a co-author
   whoami             See your own account

@@ -1,0 +1,16 @@
+Remove a bookmark from an article.  The article will no longer appear
+in your bookmarked list.
+
+EXAMPLES
+  # Remove a bookmark
+  peerpedia bookmark remove abc12345
+
+  # Remove by title keyword
+  peerpedia bookmark remove "radioactivity"
+
+This only removes your bookmark — it does not delete the article.
+The article remains available; you just won't see it in --bookmarked.
+
+SEE ALSO
+  bookmark add       Save an article for later
+  article list --bookmarked   See your bookmarked articles

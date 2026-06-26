@@ -1,9 +1,14 @@
-EXAMPLES
-  # Withdraw a merge proposal you created
-  peerpedia merge withdraw <proposal-id>
+Withdraw a merge proposal you previously created.  This cancels the
+proposal — the original paper's maintainers will no longer see it.
 
-Only the proposer can withdraw.  Already-accepted proposals
-cannot be withdrawn.
+EXAMPLES
+  # Withdraw a merge proposal
+  peerpedia merge withdraw proposal-1
+
+Only the person who created the proposal can withdraw it.
+Already-accepted proposals cannot be withdrawn — the merge has
+already been applied.
 
 SEE ALSO
-  merge propose      Create a proposal
+  merge propose      Create a merge proposal
+  merge accept       Accept a proposal (as the original author)

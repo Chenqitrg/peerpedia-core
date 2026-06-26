@@ -1,23 +1,40 @@
+Submit your paper to the sedimentation pool for public peer review.
+Once published, other researchers can find and review your work.
+After a 3-day review period, the paper auto-publishes.
+
 EXAMPLES
-  # Publish with self-review scores (all 5 dimensions, 1-5)
+  # Publish with self-review scores
   peerpedia article publish abc12345 \
       --scores "orig=4,rigor=3,comp=4,ped=3,imp=3"
 
-Publishing moves your article into the 3-day sedimentation pool.
-During this period, peers can review it.  After 3 days, run
-"article scan" (or wait for the auto-scan) to promote it to published.
+  # Publish by title keyword (if you don't remember the ID)
+  peerpedia article publish "Radioactivity" \
+      --scores "orig=5,rigor=4,comp=3,ped=4,imp=5"
 
-Scoring dimensions:
-  orig    originality    – novelty of the idea
-  rigor   rigor          – methodological soundness
-  comp    completeness   – coverage of edge cases
-  ped     pedagogy       – clarity of exposition
-  imp     impact         – potential significance
+SCORING YOUR OWN PAPER (each dimension 1–5)
+  orig    originality    — How novel is your idea?
+  rigor   rigor          — How sound is your methodology?
+  comp    completeness   — How thorough is your coverage?
+  ped     pedagogy       — How clear is your writing?
+  imp     impact         — How much potential influence?
 
-Prerequisites: you must be logged in, be a maintainer of the article,
-and provide self-review scores.
+  Example scores and what they mean:
+    "orig=2,rigor=5,comp=5,ped=4,imp=3"  → thorough survey, not very novel
+    "orig=5,rigor=4,comp=4,ped=5,imp=5"  → groundbreaking, well-written
+    "orig=3,rigor=3,comp=3,ped=3,imp=3"  → average across the board
+
+WHAT HAPPENS NEXT
+  1. Your paper enters the sedimentation pool (public but not yet "published").
+  2. Other users can find and review it during this period.
+  3. After 3 days, it auto-publishes — or run "article scan" to speed it up.
+  4. Published papers are permanent and citable.
+
+PREREQUISITES
+  • You must be logged in and be a maintainer of the paper.
+  • If there are co-authors, ALL must consent first (see maintainer consent).
 
 SEE ALSO
-  article create     Write a new article
-  article scan       Trigger sedimentation → published
-  review submit      Review someone else's article
+  article create     Write a new paper
+  article scan       Manually trigger sedimentation → published
+  review submit      Review someone else's paper
+  maintainer consent Approve publication as co-author

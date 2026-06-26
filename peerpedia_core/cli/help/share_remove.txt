@@ -1,0 +1,10 @@
+Remove a share you previously posted.  The shared article is not
+deleted — only your recommendation is removed from your followers' feeds.
+
+EXAMPLES
+  # Remove a share
+  peerpedia share remove abc12345
+
+SEE ALSO
+  share add          Share an article
+  share list         See your shares

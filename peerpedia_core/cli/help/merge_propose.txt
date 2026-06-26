@@ -1,11 +1,19 @@
-EXAMPLES
-  # Propose merging your fork into the original
-  peerpedia merge propose <fork-id> --target <original-id>
+Propose merging your fork's changes back into the original paper.
+After forking a paper, editing it, and improving it, use this to
+suggest the original author adopt your changes.
 
-Creates an open merge proposal.  The original article's maintainers
-can accept it with "merge accept".
+EXAMPLES
+  # Propose a merge
+  peerpedia merge propose def67890 --target abc12345
+
+  # def67890 = your fork (the improved version)
+  # abc12345 = the original paper (where changes should go)
+
+The original paper's maintainers will be notified.  They can accept
+your proposal with "merge accept" or let it sit.  If you change your
+mind, use "merge withdraw".
 
 SEE ALSO
-  fork               Create a fork to work on
-  merge accept       Accept a merge proposal
+  fork               Fork a paper first
+  merge accept       Accept a merge proposal (as the original author)
   merge withdraw     Withdraw your proposal

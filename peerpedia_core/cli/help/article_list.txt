@@ -1,43 +1,48 @@
-QUERY PATTERNS
-  # Browse all public articles
+Browse, search, and filter papers.  This is your main way to discover
+what's on PeerPedia — from your own drafts to published work by others.
+
+EXAMPLES
+  # All public papers
   peerpedia article list
 
-  # Your own work — including private drafts
+  # Your own papers (including private drafts)
   peerpedia article list --mine
 
   # Your drafts only
   peerpedia article list --mine --status draft
 
-  # Articles from people you follow
+  # Papers from researchers you follow (your personal reading list)
   peerpedia article list --feed
 
-  # Search by title or abstract keyword
+  # Search by title keyword
   peerpedia article list --search "quantum"
 
-  # Filter by status (published, sedimentation, or draft)
-  peerpedia article list --status published
-  peerpedia article list --status sedimentation
+  # Filter by status
+  peerpedia article list --status published       # finished papers
+  peerpedia article list --status sedimentation   # papers under review
 
-  # Your bookmarked articles
+  # Your bookmarked papers
   peerpedia article list --bookmarked
 
-  # Fetch a remote user's articles from a peer server
-  peerpedia article list --user <user-id> --server https://peer.example.com
+  # Find a specific researcher's papers (requires a peer server)
+  peerpedia article list --user abc12345 --server https://peer.example.com
 
 COMBINING FILTERS
-  Filters are AND-ed.  Combine them to narrow results:
+  You can combine multiple filters to narrow results:
 
-  # My articles about quantum computing
-  peerpedia article list --mine --search "quantum"
+  # Your drafts that mention quantum
+  peerpedia article list --mine --status draft --search "quantum"
 
-  # Published articles from people I follow, about ML
+  # Published papers from your feed about machine learning
   peerpedia article list --feed --status published --search "machine learning"
 
-Drafts are private — omit --mine to see only public articles.
+UNDERSTANDING PAPER STATUS
+  draft         — private, only you and co-authors can see it
+  sedimentation — public review period (3 days, then auto-publishes)
+  published     — permanent and citable
 
 SEE ALSO
-  article show       Read an article by ID or title
-  article create     Write a new article
-  follow             Follow a researcher to populate your feed
-  bookmark add       Save an article for later
-  account search     Find other users
+  article show       Read a specific paper
+  article create     Write a new paper
+  follow             Add researchers to your feed
+  bookmark add       Save a paper for later

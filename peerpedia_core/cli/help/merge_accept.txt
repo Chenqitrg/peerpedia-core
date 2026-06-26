@@ -1,10 +1,17 @@
-EXAMPLES
-  # Accept a merge proposal into your article
-  peerpedia merge accept <proposal-id> --target <article-id>
+Accept a merge proposal — apply someone's fork changes into your paper.
+This is how collaborative editing works: someone forks your paper, makes
+improvements, proposes a merge, and you accept it.
 
-Only the target article's maintainers can accept.  If the merge
-has conflicts, the command reports them without applying changes.
+EXAMPLES
+  # Accept a merge proposal
+  peerpedia merge accept proposal-1 --target abc12345
+
+Only the target paper's maintainers can accept merge proposals.
+If there are conflicts (both you and the fork changed the same part),
+the command reports them without applying changes — you'll need to
+resolve conflicts manually.
 
 SEE ALSO
-  merge propose      Create a proposal
-  merge withdraw     Withdraw a proposal
+  merge propose      Propose a merge from your fork
+  merge withdraw     Withdraw a merge proposal you made
+  fork               Fork a paper to start editing

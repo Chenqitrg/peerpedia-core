@@ -1,10 +1,18 @@
+Give your consent for a co-authored paper to be published or merged.
+When a paper has multiple maintainers, every one of them must consent
+before the paper can move forward.
+
 EXAMPLES
-  # Consent to publish a co-authored article
+  # Consent to publish
   peerpedia maintainer consent abc12345
 
-When multiple maintainers exist, ALL must consent before the article
-can be published.  Use "maintainer revoke" to withdraw consent.
+  # Consent by title keyword
+  peerpedia maintainer consent "Radioactivity"
+
+If you change your mind later, use "maintainer revoke" to withdraw
+your consent.  Check consent status with "maintainer list".
 
 SEE ALSO
   maintainer revoke   Withdraw your consent
+  maintainer list     See who has consented
   article publish     Publish when all have consented

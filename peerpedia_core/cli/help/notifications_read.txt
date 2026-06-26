@@ -1,0 +1,19 @@
+Mark a notification as read so it no longer appears in the default
+(unread) view.
+
+EXAMPLES
+  # Mark notification #3 as read
+  peerpedia notifications read 3
+
+  # First check your notification IDs
+  peerpedia notifications
+  # → [1] @pierre reviewed your paper
+  # → [2] @marie replied to your review
+  peerpedia notifications read 1
+
+The notification ID is the number shown in brackets when you run
+"peerpedia notifications".  Read notifications are hidden by default
+but visible with --all.
+
+SEE ALSO
+  notifications      View your notifications

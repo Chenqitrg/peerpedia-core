@@ -1,16 +1,31 @@
+Edit a paper you're working on.  Every edit creates a new saved version
+— you can always go back to an earlier version if needed.
+
 EXAMPLES
-  # Open your editor to revise content
+  # Open your editor to revise the paper
   peerpedia article edit abc12345
+  # → Your editor opens with the current content.  Make changes, save, close.
 
-  # Update content inline
-  peerpedia article edit abc12345 --content "# Updated\n\nNew content." --no-editor
+  # Update content without opening the editor
+  peerpedia article edit abc12345 \
+      --content "# Revised Title\n\nUpdated introduction..." \
+      --no-editor
 
-  # Change only the title
-  peerpedia article edit abc12345 --title "Better Title" --no-editor
+  # Change only the title (keep existing content)
+  peerpedia article edit abc12345 --title "A Better Title" --no-editor
 
-Every edit creates a signed git commit.  Only article maintainers can edit.
+  # Edit by title keyword
+  peerpedia article edit "Radioactivity"
+
+WHAT HAPPENS
+  1. A new version (git commit) is created with your changes.
+  2. The commit is cryptographically signed with your key.
+  3. The old version is preserved — use "article diff" to compare.
+
+Only the paper's maintainers (authors and co-authors) can edit it.
+Published papers that are edited re-enter a 3-day sedimentation period.
 
 SEE ALSO
-  article create     Write a new article
-  article publish    Submit to sedimentation pool
-  article diff       See what changed between commits
+  article create     Write a new paper
+  article publish    Submit for peer review
+  article diff       See what changed between versions

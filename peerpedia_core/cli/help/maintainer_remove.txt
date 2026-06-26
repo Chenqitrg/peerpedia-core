@@ -1,0 +1,17 @@
+Remove a co-author from your paper.  The removed user loses the ability
+to edit, publish, or manage the article.
+
+EXAMPLES
+  # Remove a co-author by @name
+  peerpedia maintainer remove abc12345 --target-user @pierre
+
+  # Remove by user ID
+  peerpedia maintainer remove abc12345 --target-user def67890
+
+Only existing maintainers can remove other maintainers.  You cannot
+remove yourself if you are the last maintainer — every article must
+have at least one maintainer.
+
+SEE ALSO
+  maintainer add     Add a co-author
+  maintainer list    See all co-authors

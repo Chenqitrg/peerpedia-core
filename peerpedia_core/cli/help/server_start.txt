@@ -1,0 +1,23 @@
+Start a PeerPedia HTTP server on your machine.  This lets other PeerPedia
+users sync with you — they can discover your papers, follow you, and
+pull your articles.  Think of it as hosting your own mini journal server.
+
+EXAMPLES
+  # Start on default address (127.0.0.1:8080, local only)
+  peerpedia server start
+
+  # Listen on all network interfaces with a public URL
+  peerpedia server start --host 0.0.0.0 --port 8080 \
+      --public-url https://peer.example.com
+
+  # Local development
+  peerpedia server start --host 127.0.0.1 --port 9090
+
+If you set --public-url, other PeerPedia users can use that URL with
+"sync push", "sync pull", "follow", etc. to interact with your server.
+Without --public-url, the server only works locally.
+
+SEE ALSO
+  sync push          Send your work to a peer server
+  sync pull          Fetch work from a peer server
+  sync status        Check server connection

@@ -1,15 +1,27 @@
+Fork a published paper to create your own copy.  Your fork starts as
+a private draft with the original's full history.  You can edit it
+freely and propose merging your changes back to the original.
+
 EXAMPLES
-  # Fork a published article to start your own version
+  # Fork a published paper
   peerpedia fork abc12345
 
-Published and rejected articles can be forked by anyone.  Draft articles
-can only be forked by their maintainers.  The fork starts as a draft with
-the original's full git history.  You become the fork's maintainer.
+  # Fork by title keyword
+  peerpedia fork "Radioactivity"
 
-After editing your fork, use "merge propose" to suggest merging
-your changes back into the original.
+WHEN TO FORK
+  • You found a paper with minor errors and want to propose corrections.
+  • You want to extend someone's work with new results.
+  • You want to write a commentary or alternative interpretation.
+  • You want to translate a paper into another language.
+
+RULES
+  • Published and rejected papers: anyone can fork.
+  • Draft papers: only maintainers can fork.
+  • Your fork starts as a private draft — only you can see it.
+  • After editing, use "merge propose" to suggest your changes back.
 
 SEE ALSO
-  merge propose      Propose merging your fork back
+  merge propose      Propose merging your fork back to the original
   article edit       Revise your fork
-  article list       Find articles to fork
+  article list       Find papers to fork

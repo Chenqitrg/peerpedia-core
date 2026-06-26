@@ -1,11 +1,23 @@
+Check your connection to a peer server and see what needs to be synced.
+Tells you if the server is reachable and how many pending changes you have.
+
 EXAMPLES
+  # Check default server (PEERPEDIA_SERVER env var)
   peerpedia sync status
+
+  # Check a specific server
   peerpedia sync status --server https://peer.example.com
 
-Checks whether the peer server is reachable and counts pending
-sync operations.  Reads PEERPEDIA_SERVER from the environment
-if --server is not given.
+WHAT THE OUTPUT TELLS YOU
+  • Server reachable / unreachable
+  • Number of articles with unsent local changes (pending push)
+  • Number of remote articles with updates you haven't pulled
+  • Clock skew warning if your system time is too far off (±30s limit)
+
+If you haven't set PEERPEDIA_SERVER and don't provide --server,
+the command will remind you to configure one.
 
 SEE ALSO
-  sync push          Send changes to the server
+  sync push          Send your changes to the server
   sync pull          Fetch updates from the server
+  sync discover      Find new articles on the network

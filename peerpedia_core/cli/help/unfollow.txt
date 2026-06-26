@@ -1,0 +1,20 @@
+Stop following a user.  Their articles will no longer appear in your
+feed, and they will no longer receive notifications about your activity.
+This command is safe to run even if you don't currently follow the user.
+
+EXAMPLES
+  # Unfollow by @name
+  peerpedia unfollow @einstein
+
+  # Unfollow by user ID
+  peerpedia unfollow abc12345
+
+  # Unfollow by alias
+  peerpedia unfollow albert
+
+Unfollowing is private — the user is not notified.
+
+SEE ALSO
+  follow             Follow a user
+  following          See who you follow
+  article list --feed   See your current feed

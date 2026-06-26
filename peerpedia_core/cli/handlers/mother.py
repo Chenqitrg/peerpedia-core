@@ -1,39 +1,7 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""Mother — interactive user guide.
-
-TODO(mother-agent): Mother evolves through four phases:
-
-  Phase 1 — Knowledge Crawler
-    Traverse the P2P network along three graph axes: social (follow→peer
-    →articles), citation (cite→cited→cited-by transitive closure), and
-    tag (tag→subfield_of→related_to→articles).  Build a local index of
-    articles, authors, reviews, and their relationships.
-
-  Phase 2 — Structure Recognition
-    Identify article outlines, argument structures, and inter-article
-    relationships (contradicts, extends, replicates, supersedes).  Build
-    a knowledge map of the peer network — not just "what exists" but
-    "how things connect."
-
-  Phase 3 — Writing Assistant
-    User writes an article section → Mother suggests additions, flags
-    missing citations, highlights related work from the crawled corpus.
-    Mother's suggestions are grounded in the actual peer-reviewed
-    literature on the network, not generic model knowledge.
-
-  Phase 4 — Autonomous Agent
-    Mother writes, polishes, and reviews articles independently.  She
-    is the peer who has read everything — her intelligence comes from
-    the P2P graph, not from model weights alone.  She can be a reviewer,
-    a co-author, or a reader who surfaces connections no human noticed.
-
-  CLI integration: ``peerpedia mother ask "..."`` sends queries to the
-  agent.  The REPL can invoke Mother inline (``:mother "..."``).  Mother
-  uses the user's own API key from ``~/.peerpedia/config.json`` — no
-  central billing, no server-side costs.
-"""
+"""Mother — friendly user guide for academics who don't live in the terminal."""
 
 from __future__ import annotations
 
@@ -47,53 +15,206 @@ def _cmd_mother(_args):
     console.print(Panel("""
 [bold info]Welcome to PeerPedia![/]  I'm [accent]Mother[/], your guide.
 
-PeerPedia is a peer-to-peer platform for academic writing, reviewing, and
-publishing.  Every article lives in its own git repository on your machine.
+PeerPedia is a tool for writing, reviewing, and publishing academic papers
+— right from your terminal.  Think of it as a journal that runs on your
+own computer, where every paper lives in its own version-controlled history.
 
-[bold]Getting started[/]
-  [accent]peerpedia account register --name <your-name>[/]
-      Create your identity.  You'll use this name for all actions.
+[bold]What you can do with PeerPedia[/]
 
-  [accent]peerpedia article create --title "My Paper"[/]
-      Write your first article.  An editor will open for you to type content.
-      Pass [muted]--content "..."[/] to skip the editor.
+  • Write papers in Markdown (plain text with simple formatting)
+  • Submit your work for peer review by colleagues
+  • Review other people's papers and discuss them
+  • Publish finished papers so others can find and cite them
+  • Collaborate with co-authors and track every change
+  • Sync your work with remote servers to share with the world
 
-[bold]Core workflow[/]
-  [accent]article show <id>[/]       Read an article and its reviews
-  [accent]article edit <id>[/]        Revise your draft
-  [accent]article publish <id>[/]     Submit to the sedimentation pool
-  [accent]review submit <id>[/]       Peer-review someone else's article
-  [accent]article list[/]             Browse all local articles
+[bold]How commands work[/]
 
-[bold]Collaboration[/]
-  [accent]fork <id>[/]                Copy a published article to start your version
-  [accent]merge propose <fork> --target <original>[/]
-      Propose merging your changes back
-  [accent]bookmark add <id>[/]        Save an article for later
+  PeerPedia commands look like this:
 
-[bold]Peer-to-peer sync[/]
-  [accent]sync status[/]              Check connection to a peer
-  [accent]sync push[/]                Send your changes to a peer server
+    peerpedia [what] [action] [options]
 
-[bold]Identity & signing[/]
-  [accent]account login --name <name>[/]
-      Log in to load your signing key for this session.
-      PeerPedia signs every commit you make with your private key.
-      Remote peers verify signatures — unsigned commits are rejected.
+  For example:
+    [accent]peerpedia article create --title "My Paper"[/]
+    │          │       │        │
+    │          │       │        └── options (extra details, start with --)
+    │          │       └── action (what to do)
+    │          └── what (article, review, account, …)
+    └── the program name
 
-  [bold yellow]⚠  Do NOT use raw git commands to commit.[/]
-      Commits made with [muted]git commit[/] instead of [accent]peerpedia article edit[/]
-      or [accent]review submit[/] will have no Pubkey trailer and no signature.
-      They will not be tracked in the local database, and remote peers
-      will reject them during [accent]sync[/].
+  You don't need to memorize everything.  Add [muted]--help[/] to any command
+  to see what it does and get examples you can copy.
 
-  [accent]account whoami[/]            Show your current session identity
+[bold]Your first paper — a step-by-step walkthrough[/]
 
-[bold]Tips[/]
-  • Use [muted]--json[/] on any command for machine-readable output.
-  • Type [muted]peerpedia[/] with no arguments to enter the REPL.
-  • Run [muted]peerpedia <command> --help[/] to see all options for a command.
+  [bold]Step 1: Create your identity[/]
+    [accent]peerpedia account register --name "Marie Curie"[/]
+    This makes you a user.  Your name is how others will find you.
+    You'll be asked to set a password — keep it safe, there is no reset.
 
-[muted]In the future, I'll be able to answer questions and help you write.
-For now, this guide is all I can offer.[/]
+  [bold]Step 2: Write a paper[/]
+    [accent]peerpedia article create --title "Research on Radioactivity"[/]
+    This opens your text editor.  Write your paper in Markdown format
+    (just type normally — use # for headings, * for italics, like you
+    would in any plain-text note).  Save and close the editor when done.
+
+    If you prefer to type inline:
+    [accent]peerpedia article create --title "Research on Radioactivity" \\[/]
+    [accent]    --content "# Abstract\\n\\nThis paper investigates..."[/]
+
+  [bold]Step 3: See what you've written[/]
+    [accent]peerpedia article list --mine[/]
+    Shows all your papers.  Each one gets a short ID like "abc12345".
+    Use that ID to refer to the paper in other commands.
+
+    [accent]peerpedia article show abc12345[/]
+    See the paper's details (title, status, scores).
+
+    [accent]peerpedia article show abc12345 --show full[/]
+    Read the full text.
+
+  [bold]Step 4: Revise your draft[/]
+    [accent]peerpedia article edit abc12345[/]
+    Opens your editor again.  Make changes, save, and a new version
+    is recorded.  PeerPedia keeps every version — you can always go back.
+
+    [accent]peerpedia article diff abc12345 ~1 HEAD[/]
+    See what changed between the last version (~1) and the current one (HEAD).
+    Think of this as "track changes" for your paper.
+
+  [bold]Step 5: Submit for peer review[/]
+    [accent]peerpedia article publish abc12345 \\[/]
+    [accent]    --scores "orig=4,rigor=3,comp=4,ped=3,imp=5"[/]
+
+    This submits your paper to the "sedimentation pool" — a 3-day public
+    review period.  You also give your paper a self-assessment on five
+    dimensions (each scored 1–5):
+
+      orig  = originality    — how novel is your idea?
+      rigor = rigor          — how sound is your method?
+      comp  = completeness   — how thorough is your work?
+      ped   = pedagogy       — how clearly is it written?
+      imp   = impact         — how much potential influence?
+
+    After 3 days (if no issues are raised), the paper auto-publishes.
+    You can speed this up with:  [accent]peerpedia article scan[/]
+
+  [bold]Step 6: Get reviewed by colleagues[/]
+    Ask someone to review your paper:
+    [accent]peerpedia review invite abc12345 --user @pierre[/]
+
+    They'll receive a notification and can submit a review:
+    [accent]peerpedia review submit abc12345 \\[/]
+    [accent]    --scores "orig=4,rigor=3,comp=4,ped=4,imp=4" \\[/]
+    [accent]    --comment "A thorough treatment of the subject..."[/]
+
+    See all reviews:
+    [accent]peerpedia review list abc12345[/]
+
+    Reply to a reviewer's comments:
+    [accent]peerpedia review reply abc12345 --to @pierre[/]
+
+  [bold]Step 7: Discover other people's work[/]
+    [accent]peerpedia article list[/]
+    All public papers.
+
+    [accent]peerpedia article list --search "radioactivity"[/]
+    Papers with "radioactivity" in the title.
+
+    [accent]peerpedia article list --feed[/]
+    Papers from people you follow (your personal reading list).
+
+    [accent]peerpedia follow @einstein[/]
+    Add someone to your feed.  Their new papers will appear in --feed.
+
+    [accent]peerpedia bookmark add abc12345[/]
+    Save a paper to read later.  Find it with --bookmarked.
+
+[bold]Working with co-authors[/]
+
+    [accent]peerpedia maintainer add abc12345 --target-user @marie[/]
+    Add Marie as a co-author.  She can now edit and publish the paper.
+
+    [accent]peerpedia maintainer consent abc12345[/]
+    When there are multiple authors, everyone must consent before
+    publishing.  This command records your approval.
+
+    [accent]peerpedia maintainer list abc12345[/]
+    See all co-authors of a paper.
+
+[bold]Forking and merging (like branching a paper)[/]
+
+    If you want to build on someone else's published paper:
+    [accent]peerpedia fork abc12345[/]
+    Creates your own copy that you can edit independently.
+
+    After making improvements, propose merging back:
+    [accent]peerpedia merge propose def67890 --target abc12345[/]
+
+    The original author can accept your changes:
+    [accent]peerpedia merge accept proposal-1 --target abc12345[/]
+
+[bold]Syncing with a peer server[/]
+
+    If your research group runs a PeerPedia server, you can sync:
+    [accent]peerpedia sync status --server https://peer.example.com[/]
+    Check if you're connected.
+
+    [accent]peerpedia sync push --server https://peer.example.com[/]
+    Send your papers and reviews to the server.
+
+    [accent]peerpedia sync pull --server https://peer.example.com[/]
+    Download new papers and reviews from the server.
+
+    Syncing is optional — everything works offline by default.
+
+[bold]Useful shortcuts[/]
+
+    • Reference papers by any part of their title:
+      [accent]peerpedia article show "electrodynamics"[/]
+      (No need to memorize IDs — PeerPedia finds the match.)
+
+    • Reference people by @name:
+      [accent]peerpedia follow @einstein[/]
+      (The @ sign tells PeerPedia you mean a person, not a paper.)
+
+    • Bookmark important papers:
+      [accent]peerpedia bookmark add abc12345[/]
+      [accent]peerpedia article list --bookmarked[/]
+
+    • See your notifications:
+      [accent]peerpedia notifications[/]
+      (Review invitations, replies, new followers — all appear here.)
+
+    • Open the interactive REPL (no need to type "peerpedia" every time):
+      Just type [accent]peerpedia[/] with no arguments.
+
+    • Get examples for any command:
+      [accent]peerpedia article create --help[/]
+
+[bold]Concepts you might wonder about[/]
+
+    [bold]What is a "UUID"?[/]
+    Every paper and user gets a unique ID like "abc12345-6789-...".
+    You only need the first few characters (like "abc12345") to refer to it.
+    You can also use title keywords or @names instead of IDs.
+
+    [bold]What are ~1 and HEAD?[/]
+    These refer to versions of your paper.  HEAD = the latest version.
+    ~1 = one version ago.  ~3 = three versions ago.  Think of it like
+    "undo history" — every edit is saved, and you can compare any two.
+
+    [bold]What is "sedimentation"?[/]
+    When you publish a paper, it enters a 3-day review period.  During
+    this time, peers can submit reviews.  If no major issues are found,
+    the paper automatically becomes "published" after 3 days.  This
+    prevents spam and ensures every paper gets a chance to be reviewed.
+
+    [bold]What about privacy?[/]
+    Draft papers are private — only you and your co-authors can see them.
+    Published papers are public — anyone can read and cite them.
+    Everything is stored on your computer.  The peer server is optional.
+
+[muted]Need more help?  Run 'peerpedia --help' for the full command list,
+or 'peerpedia <command> --help' for detailed options and examples.[/]
 """, title="Mother — PeerPedia Guide", border_style="accent", title_align="left"))

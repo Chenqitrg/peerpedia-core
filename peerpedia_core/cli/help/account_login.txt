@@ -1,11 +1,23 @@
-EXAMPLES
-  peerpedia account login --name Alice
+Sign in to PeerPedia.  Your password re-derives your signing key.
+After logging in, you can write, edit, publish, and review papers.
 
-Your password re-derives your Ed25519 key from the stored salt.
+EXAMPLES
+  # Basic login
+  peerpedia account login --name "Marie Curie"
+
+  # Login with disambiguation (if multiple users share your name)
+  peerpedia account login --name "Marie Curie" --user-id abc12345
+
+  # Login on a new device (fetches your identity from a peer server)
+  peerpedia account login --name "Marie Curie" \
+      --peer https://peer.example.com --user-id abc12345
+
 If you get "wrong password", check your spelling and try again.
-If you forgot your password, you must re-register.
+Passwords are case-sensitive.  If you forgot your password entirely,
+you must re-register — there is no password reset.
 
 SEE ALSO
   account register   Create a new identity
   account recover    Restore your key from password + salt
   account whoami     See your current session
+  account bootstrap  Alternative way to set up a new device

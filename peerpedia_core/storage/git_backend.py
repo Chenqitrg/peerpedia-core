@@ -12,8 +12,6 @@ count) lives in the database so it can be queried and aggregated.
 
 Pure local git — does not depend on bundle or sync modules.
 
-Pure local git — does not depend on bundle or sync modules.
-
 **Hard constraint**: this module depends on GitPython + stdlib +
 ``peerpedia_core.config.paths`` (for ``ARTICLES_DIR``) and
 ``peerpedia_core.exceptions`` (for ``ConflictError``, the base of

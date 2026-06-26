@@ -58,7 +58,7 @@ def require_article_repo(article_id: str) -> Path:
     return rp
 
 
-def _reset_sink(db: Session, article_id: str, rp: Path, extra_days: int) -> None:
+def reset_sink(db: Session, article_id: str, rp: Path, extra_days: int) -> None:
     """Write status marker to git and reset sink timer.
 
     Eliminates the repeated ``commit_status_marker + set_sink_start`` pair.

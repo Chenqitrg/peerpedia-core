@@ -4,12 +4,12 @@
 
 ```
 peerpedia_core/
+├── __main__.py                # Top-level router — routes to CLI or REPL
 ├── compiler.py               # Compiler backend (Markdown/Typst → HTML/PDF/SVG/PNG)
 ├── crypto.py                  # Ed25519 key derivation, signing, verification
-├── exceptions.py              # Semantic exceptions (NotFound, NotAuthorized, Conflict, etc.)
+├── exceptions.py              # Semantic exceptions (NotFound, NotAuthorized, Conflict, MergeConflict, etc.)
 ├── frontmatter.py             # YAML frontmatter parse/build
 ├── names.py                   # Anonymous name generation
-├── repl.py                    # Interactive REPL (prompt_toolkit + timed scan)
 
 ├── config/
 │   ├── paths.py               # Centralised filesystem paths (PEERPEDIA_HOME env override)
@@ -102,10 +102,17 @@ peerpedia_core/
 │       ├── peers.py           #     REST routes for peer info and discovery
 │       └── users.py           #     REST routes for users, social, key rotation
 
-└── cli/                       # Terminal UI — never imports storage/ directly
-    ├── __init__.py            #   Entry point: main(), first-run wizard
+├── repl/                       # Interactive REPL — pure UI, only imports from cli/
+│   ├── __init__.py            #   run() entry point, dashboard, periodic scan
+│   ├── state.py               #   Theme defs, session vars, prompt, completions
+│   ├── commands.py            #   Meta-commands (:help, :user, …) + dispatch
+│   ├── browse.py              #   Full-screen article/user/review browsers
+│   └── typography.py          #   Unicode pseudo-font rendering
+
+└── cli/                       # Terminal UI — never imports repl/; may import storage.db.models
+    ├── __init__.py            #   main() — parse args, dispatch handler (no REPL logic)
     ├── parser.py              #   Argparse builder + command table
-    ├── helpers.py             #   Shared: _with_db, session, editor, user resolution
+    ├── helpers.py             #   Shared: _with_db, _ensure_db, session, editor, user resolution
     ├── display.py             #   Rich-powered output: panels, tables, diff, stars
     ├── bundle_utils.py        #   Auto-push helpers
     └── handlers/
@@ -157,16 +164,22 @@ peerpedia_core/
 - Used by: `workflow/`, `commands/`, `policies/`.
 
 **`types/status.py`**
-- What it does: Article status constants.
-- Key exports: `VALID_ARTICLE_STATUSES` — the set of legal status strings (draft, sedimentation, published, folded, deleted).
-- Depends on: stdlib only.
-- Used by: `storage/git_backend.py`, `commands/bundle.py`, `policies/articles.py`.
+- What it does: Article status constants and status-tag parsing.
+- Key exports: `VALID_ARTICLE_STATUSES` — the set of legal status strings (draft, sedimentation, published, rejected); `parse_status_tag(message, author_email)` — single canonical parser for ``[status]`` markers in platform commit messages.
+- Depends on: `peerpedia_core.config.params.PLATFORM_EMAIL`.
+- Used by: `storage/git_backend.py`, `commands/bundle.py`, `commands/integrity.py`, `policies/articles.py`.
 
 ### Root modules
 
+**`__main__.py`**
+- What it does: Top-level entry point router — the ONLY module that imports both `cli` and `repl`. When no subcommand is given, launches the REPL; otherwise delegates to `cli.main()`.
+- Key function: `main()`.
+- Depends on: `peerpedia_core.cli`, `peerpedia_core.repl` (lazy — prompt_toolkit is heavy).
+- Used by: Package entry point (console_scripts: `peerpedia = "peerpedia_core.__main__:main"`).
+
 **`exceptions.py`**
 - What it does: Semantic exception hierarchy for the entire application.
-- Key classes: `PeerpediaError` (base), `NotFoundError`, `NotAuthorizedError`, `ConflictError`, `BadRequestError`, `SignatureVerificationError`, `TransportError`, `ProtocolError`.
+- Key classes: `PeerpediaError` (base), `NotFoundError`, `NotAuthorizedError`, `ConflictError`, `MergeConflictError` (shared by `storage/git_backend` and `bundle/git_bundle`), `BadRequestError`, `SignatureVerificationError`, `TransportError`, `ProtocolError`.
 - Depends on: stdlib only.
 - Used by: Every layer — raised in `commands/`, `storage/`, `transport/`, caught in `cli/`.
 
@@ -469,7 +482,7 @@ peerpedia_core/
 **`bundle/client.py`**
 - What it does: Client-side sync orchestration — push/pull article repos to/from a remote peer.
 - Key functions: `sync_article(db, server_url, article_id, signing_key_bytes, pubkey_hex)` — orchestrates the full sync protocol; `find_merge_base(server, article_id, local_commits)`, `pull_incremental(server, article_id, local_head)`, `pull_new_article(server, article_id)`, `push_incremental(server, article_id, server_head, repo_path)`, `upload_article(server, article_id, repo_path)`.
-- Depends on: `peerpedia_core.bundle.git_bundle`, `peerpedia_core.bundle.server.ingest_article`, `peerpedia_core.commands.apply_sync_bundle`, `peerpedia_core.transport.*`, `peerpedia_core.transport.health.check_clock_skew`.
+- Depends on: `peerpedia_core.bundle.git_bundle` (including `ingest_article`), `peerpedia_core.commands.apply_sync_bundle`, `peerpedia_core.transport.*`, `peerpedia_core.transport.health.check_clock_skew`. Does NOT import from `bundle.server` — client and server communicate via HTTP, not Python import.
 - Used by: `cli/handlers/bundle.py`.
 
 **`bundle/git_bundle.py`**
@@ -588,13 +601,48 @@ peerpedia_core/
 - Depends on: `peerpedia_core.commands`, `peerpedia_core.crypto.load_public_key`, `peerpedia_core.exceptions`, `peerpedia_core.policies.articles.PUBLIC_READABLE_STATUSES`, `peerpedia_core.transport.shared`.
 - Used by: `transport/routes/__init__.py`.
 
+### `repl/` — Interactive REPL (pure UI layer)
+
+**`repl/__init__.py`**
+- What it does: REPL entry point — `run()` initializes a persistent prompt_toolkit session with startup dashboard, timed article publish scan, and command dispatch loop.
+- Key functions: `run()` — start the interactive REPL.
+- Depends on: `peerpedia_core.cli` (helpers, display, parser), `peerpedia_core.config`, `peerpedia_core.repl.commands`, `peerpedia_core.repl.state`.
+- Used by: `__main__.py` (top-level router).
+
+**`repl/state.py`**
+- What it does: Theme definitions (parchment/ember), session variables (`_repl_user`, `_repl_article_id`), prompt builder, completion refresher.
+- Key functions: `_prompt_text()` — build the REPL prompt with user badge + article context + notification count; `_refresh_completions()` — rebuild tab-completion word list from DB.
+- Key exports: `theme`, `repl_style`, `console`, `_repl_unicode`, `_repl_compact`.
+- Depends on: `peerpedia_core.cli.helpers` (all data access), `prompt_toolkit`, `rich`.
+- Used by: `repl/__init__.py`, `repl/commands.py`, `repl/browse.py`.
+
+**`repl/commands.py`**
+- What it does: Meta-command handlers (`:help`, `:user`, `:article`, `:theme`, `:inbox`, …) and CLI command dispatch — parses user input, injects sticky user/article context, delegates to CLI parser handlers.
+- Key functions: `_dispatch(cmd_str, parser)` — parse and execute a single command; `_meta_help()`, `_meta_user(name)`, `_meta_article(ref)`, `_meta_theme(mode)`, `_show_inbox()`.
+- Key exports: `_META_COMMANDS`.
+- Depends on: `peerpedia_core.cli.helpers` (all data access), `peerpedia_core.cli.parser`, `peerpedia_core.repl.state`, `peerpedia_core.repl.browse` (lazy — prompt_toolkit heavy).
+- Used by: `repl/__init__.py`.
+
+**`repl/browse.py`**
+- What it does: Full-screen interactive views — article browser, user leaderboard (school), review viewer.
+- Key functions: `_browse_articles(db)` — interactive article selector with keyboard shortcuts (p:publish, e:edit, r:review, b:bookmark); `_browse_school(db)` — user leaderboard with follow action; `_browse_reviews(db, article_id)` — review viewer with reply action.
+- Depends on: `peerpedia_core.cli.helpers`, `peerpedia_core.cli.display`, `peerpedia_core.repl.state`, `prompt_toolkit`.
+- Used by: `repl/commands.py` (lazy — only loaded for browse views).
+
+**`repl/typography.py`**
+- What it does: Unicode pseudo-font rendering — maps ASCII to Mathematical Alphanumeric Symbols for six visual roles (bold serif for titles, italic for quotes, script for authors, fraktur for venues, sans-bold for status, monospace for dates/commits).
+- Key functions: `title(s)`, `author(s)`, `status(s)`, `date(s)`, `score(val)`, `styled(raw_func)` — wrapper that applies typography only when `_repl_unicode` is enabled.
+- Depends on: `peerpedia_core.repl.state` (reads `_repl_unicode` toggle).
+- Used by: `repl/commands.py`, `repl/browse.py`.
+
 ### `cli/` — Terminal UI
 
 **`cli/__init__.py`**
-- What it does: Entry point — `main()` orchestrates first-run wizard, REPL, or single command.
-- Key functions: `main()` — parse args, run command (single-shot or REPL).
-- Depends on: `peerpedia_core.cli.parser`, `peerpedia_core.cli.display.console`, `peerpedia_core.commands`, `peerpedia_core.repl`.
-- Used by: Package entry point (console_scripts).
+- What it does: CLI entry point — `main()` parses args and dispatches to a handler. Does NOT know about `repl/` (routing is done by `__main__.py`).
+- Key functions: `main()` — parse args, run single command.
+- Key exports: `main`, `build_parser`.
+- Depends on: `peerpedia_core.cli.parser`, `peerpedia_core.cli.display`, `peerpedia_core.commands`, `peerpedia_core.config.paths`.
+- Used by: `__main__.py` (top-level router).
 
 **`cli/parser.py`**
 - What it does: Build argparse parser from a command table.
@@ -604,10 +652,10 @@ peerpedia_core/
 - Used by: `cli/__init__.py`.
 
 **`cli/helpers.py`**
-- What it does: Shared CLI utilities — session management, user/article resolution, editor integration, JSON output.
-- Key functions: `_with_db()`, `_page()`, `_open_file()`, `_ok()`, `_die()`, `_resolve_article_id()`, `_json_out()`, `_find_article_file()`, `_read_session()`, `_write_session()`, `_get_session_user()`, `_resolve_user()`, `_get_session_key()`, `_parse_scores()`, `_prompt_commit_message()`, `_open_editor()`.
+- What it does: Shared CLI/REPL utilities — session management, user/article resolution, DB setup, editor integration, JSON output.
+- Key functions: `_with_db()` (CLI handler decorator), `_ensure_db()` / `_close_db()` (REPL persistent session), `_get_article_head_hash()`, `_page()`, `_open_file()`, `_ok()`, `_die()`, `_resolve_article_id()`, `_json_out()`, `_find_article_file()`, `_read_session()`, `_write_session()`, `_get_session_user()`, `_get_session_user_id()`, `_resolve_user()`, `_get_session_key()`, `_parse_scores()`, `_prompt_commit_message()`, `_open_editor()`.
 - Depends on: `peerpedia_core.cli.display`, `peerpedia_core.commands`, `peerpedia_core.config.paths`, `peerpedia_core.crypto`, `peerpedia_core.exceptions`, `peerpedia_core.storage.db.models`.
-- Used by: All `cli/handlers/*.py`.
+- Used by: All `cli/handlers/*.py`, `repl/` (via `cli.helpers`).
 
 **`cli/display.py`**
 - What it does: Rich-powered terminal output — panels, tables, badges, diffs.
@@ -678,7 +726,11 @@ peerpedia_core/
 ## Layer Rules
 
 ```
+__main__      ──import──►  cli/
+__main__      ──import──►  repl/           (lazy: prompt_toolkit is heavy)
+repl/         ──import──►  cli/            (helpers, display, parser — nothing else)
 CLI handlers  ──import──►  commands/       (facade)
+CLI helpers   ──import──►  storage.db.models  (ORM entities only)
 Transport     ──import──►  commands/       (facade)
 Commands      ──import──►  storage/db/     (CRUD)
 Commands      ──import──►  storage/        (git_backend)
@@ -687,11 +739,14 @@ Policies      ──import──►  storage/db/     (models only)
 Bundle        ──import──►  storage/        (git_backend)
 ```
 
-- CLI never imports `storage/` directly — goes through `commands/`
+- `cli/` never imports from `repl/` — **zero circular dependency**
+- `repl/` only imports from `cli/` — no direct `commands/` or `storage/` access
+- `cli/` may import `storage.db.models` (ORM entities) but nothing else from `storage/` — all data access goes through `commands/`
 - `transport/` is the only layer importing `httpx`/`starlette`
 - `storage/db/` is the only layer importing `sqlalchemy`
 - `commands/` + `storage/db/` only: import from `storage/db/crud_*.py`
 - Foundation modules (config, policies, storage, workflow, types) never import bundle/social/transport
+- All import rules enforced by `tests/test_architecture.py` (26 AST-based tests)
 
 ## Key Design Decisions
 

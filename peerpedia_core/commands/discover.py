@@ -134,7 +134,7 @@ def _merge_follow_edges(
                     label, removed, source_id,
                 )
         else:
-            logger.warning(
+            logger.debug(
                 "merge_%s: authoritative server returned empty list for %s — skipped",
                 label, source_id,
             )

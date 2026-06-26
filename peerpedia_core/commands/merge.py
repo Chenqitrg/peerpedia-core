@@ -54,7 +54,7 @@ from peerpedia_core.storage.db.crud_merge import (
 )
 from peerpedia_core.storage.db.crud_merge import create_merge_proposal as _create
 from peerpedia_core.commands.articles._helpers import (
-    _reset_sink,
+    reset_sink,
     require_article,
     require_article_repo,
     require_user,
@@ -115,7 +115,7 @@ def accept_merge(db: Session, article_id: str, proposal_id: str, user_id: str) -
         # Record status transition in git so it survives P2P sync.
         # The merge itself is already committed — this is an empty commit
         # that marks the re-sedimentation triggered by the merge.
-        _reset_sink(db, article_id, target_repo, params.sink.edit_article_default_days)
+        reset_sink(db, article_id, target_repo, params.sink.edit_article_default_days)
 
     head_hash = get_head_hash(target_repo)
 

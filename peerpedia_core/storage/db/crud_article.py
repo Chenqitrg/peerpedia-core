@@ -41,6 +41,7 @@ Reviewer's checklist
 - Does ``delete_article`` cascade properly?  (Check the model relations.)
 """
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from peerpedia_core.exceptions import NotFoundError
@@ -187,9 +188,8 @@ def list_articles(
             q = q.filter(ArticleAuthor.author_id == author_ids)
     elif viewer_id:
         followed_sub = (
-            session.query(Follow.followed_id)
-            .filter(Follow.follower_id == viewer_id, Follow.deleted_at.is_(None))
-            .subquery()
+            select(Follow.followed_id)
+            .where(Follow.follower_id == viewer_id, Follow.deleted_at.is_(None))
         )
         q = q.join(ArticleAuthor, ArticleAuthor.article_id == Article.id)\
              .filter(ArticleAuthor.author_id.in_(followed_sub))

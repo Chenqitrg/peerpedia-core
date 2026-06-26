@@ -239,8 +239,8 @@ def _assert_all_maintainers_consented(article: Article, maintainer_ids: list[str
     """
     if len(maintainer_ids) <= 1:
         return
-    consents = set(article.publish_consents or [])
-    missing = [m for m in maintainer_ids if m not in consents]
+    consented = set(article.publish_consents or [])
+    missing = [m for m in maintainer_ids if m not in consented]
     if missing:
         raise NotAuthorizedError(
             f"Unanimous consent required — {len(missing)} maintainer(s) "

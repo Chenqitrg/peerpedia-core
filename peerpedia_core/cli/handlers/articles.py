@@ -49,6 +49,9 @@ def _cmd_article_create(db, args):
     key_bytes = _get_session_key()
     user = require_user(db, user_id)
     content = args.content or ""
+    # Unescape shell-literal \n \t from --content (editor path writes real newlines).
+    if content and args.content:
+        content = content.replace("\\n", "\n").replace("\\t", "\t")
     if not content and not args.no_editor:
         import sys
         if not sys.stdout.isatty():
@@ -359,7 +362,7 @@ def _queue_if_offline(article_id: str) -> None:
 
     Called after state-changing commands (create, publish, edit) so that
     changes are pushed eventually even when the server is temporarily down.
-    ``_cmd_sync_push`` drains this queue when the server comes back.
+    ``cli.handlers.bundle._cmd_sync_push`` drains this queue when the server comes back.
     """
     server = _os.environ.get("PEERPEDIA_SERVER")
     if server and not is_online(server):

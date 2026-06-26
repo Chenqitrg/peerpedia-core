@@ -90,7 +90,7 @@ class TestHistory:
         (rp / "article.md").write_text("v2")
         commit_article_signed(rp, "second", "A", "a@b.com")
         history = get_commit_history(rp)
-        assert len(history) >= 2
+        assert len(history) == 3  # init commit + 2 explicit
         assert history[0]["message"].startswith("second")
         assert history[1]["message"].startswith("first")
 

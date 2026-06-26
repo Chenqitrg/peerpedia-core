@@ -19,7 +19,7 @@ from peerpedia_core.storage.db.crud_maintainer import get_maintainer_ids
 from peerpedia_core.storage.git_backend import commit_article
 from peerpedia_core.crypto import temp_signing_key
 from peerpedia_core.commands.articles._helpers import (
-    _reset_sink,
+    reset_sink,
     rebuild_article_authors,
     require_article,
     require_article_repo,
@@ -117,7 +117,7 @@ def update_article_content(
     if old_status in ("sedimentation", "published"):
         # Reset sink: write status marker + set new timer.
         extra = params.sink.edit_article_default_days
-        _reset_sink(db, article_id, rp, extra)
+        reset_sink(db, article_id, rp, extra)
         # Track cumulative days for the hard cap.
         if a.total_sink_days_accumulated + extra <= params.sink.max_total_sink_days:
             a.total_sink_days_accumulated += extra

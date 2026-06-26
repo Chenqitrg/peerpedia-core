@@ -105,10 +105,10 @@ def _auto_sync_after_auth(db, user_id: str) -> None:
                     sync_article(db, server, article_dir.name)
                     db.commit()
                 except Exception as e:
-                    _log.debug("auto-sync article %s to %s failed: %s",
-                               article_dir.name, server, e)
+                    _log.warning("auto-sync article %s to %s failed: %s",
+                                 article_dir.name, server, e)
         except Exception as e:
-            _log.debug("auto-sync to %s failed: %s", server, e)
+            _log.warning("auto-sync to %s failed: %s", server, e)
 
 
 @_with_db
@@ -117,6 +117,17 @@ def _cmd_register(db, args):
 
     args: --name, --password (optional), --json
     """
+    # Check for duplicate name — each user should have a unique display name.
+    same_name = get_user_by_name(db, args.name)
+    if same_name:
+        ids = ", ".join(u.id[:8] for u in same_name)
+        _die(
+            f"A user named '{args.name}' already exists (ID: {ids}).",
+            suggestion="Use 'account login --name <name>' to sign in, "
+                       "or pick a different name for your account.",
+            see_also=["account login", "account whoami"],
+        )
+
     existing = _read_session()
     if existing:
         console.print(
@@ -153,11 +164,21 @@ def _cmd_login(db, args):
     args: --name, --password (optional), --json, --peer (optional), --user-id (optional)
     """
 
+    user_id = getattr(args, "user_id", None)
     user = get_user_by_name(db, args.name)
+
+    # Disambiguate: if --user-id is provided, use it to pick the right user.
+    if len(user) > 1 and user_id:
+        resolved = get_user(db, user_id)
+        if resolved and resolved in user:
+            user = [resolved]
+        else:
+            _die(f"User ID '{user_id[:50]}' does not match any user named '{args.name}'.",
+                 suggestion="Check the --user-id or omit it to see all matches.")
+
     if len(user) == 0:
         # Try remote bootstrap if --peer or PEERPEDIA_SERVER is set
         peer = getattr(args, "peer", None) or _os.environ.get("PEERPEDIA_SERVER")
-        user_id = getattr(args, "user_id", None)
         if peer and user_id:
             data = fetch_user(peer, user_id)
             if data:
@@ -181,7 +202,7 @@ def _cmd_login(db, args):
                  see_also=["account register", "account search"])
     if len(user) > 1:
         _die(f"Multiple users named '{args.name}'.",
-             suggestion=f"Use a user ID to specify which one: "
+             suggestion="Use --user-id to specify which one: "
                         f"{', '.join(u.id[:8] for u in user)}",
              see_also=["account whoami"])
     user = user[0]

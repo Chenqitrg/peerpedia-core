@@ -115,7 +115,8 @@ def sync_article(db: Session, server: str, article_id: str) -> dict:
     # far from the server, commit timestamps are untrustworthy for priority
     # claims.  Refuse to sync until the user fixes their system clock.
     skew = check_clock_skew(server)
-    if skew is not None and abs(skew) > 30:
+    _MAX_CLOCK_SKEW_SECONDS = 30
+    if skew is not None and abs(skew) > _MAX_CLOCK_SKEW_SECONDS:
         direction = "behind" if skew > 0 else "ahead"
         raise ProtocolError(
             f"Clock skew with {server}: {abs(skew)}s {direction}. "

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import functools
 import json
+import logging
 import os
 import subprocess
 import sys
@@ -66,17 +67,14 @@ def _close_db():
 
 
 def _get_article_head_hash(article_id: str) -> str:
-    """Return the short HEAD hash for *article_id*, or '' if unavailable."""
+    """Return the short HEAD hash for *article_id*, or '' if no repo exists.
+
+    Raises ValueError if the repo exists but has no commits — that is a
+    corrupted state (``init_article_repo`` always creates an initial commit).
+    """
     rp = DEFAULT_ARTICLES_DIR / article_id
     if (rp / ".git").is_dir():
-        try:
-            return get_head_hash(rp)
-        except Exception:
-            import logging
-            logging.getLogger(__name__).warning(
-                "Failed to read HEAD for article %s", article_id, exc_info=True
-            )
-            return ""
+        return get_head_hash(rp)
     return ""
 
 
@@ -92,7 +90,8 @@ def _with_db(func):
 
     >>> @_with_db
     ... def _cmd_article_create(db, args):
-    ...     create_article_with_content(db, ...)  # db is ready to use
+    ...     # db session is injected — ready to use with any commands/ function
+    ...     pass
     """
 
     @functools.wraps(func)
@@ -280,11 +279,15 @@ def _resolve_and_display_article(db, article, *, author_ids: list[str] | None = 
 
 
 def _read_session() -> dict | None:
-    """Read the session file, or None if not logged in."""
+    """Read the session file, or None if not logged in or file is corrupted."""
     if SESSION_FILE.exists():
         try:
             return json.loads(SESSION_FILE.read_text())
         except (json.JSONDecodeError, OSError):
+            logging.getLogger(__name__).warning(
+                "Session file %s is corrupted — treating as not logged in",
+                SESSION_FILE, exc_info=True,
+            )
             return None
     return None
 
@@ -301,16 +304,15 @@ def _write_session(user_id: str, name: str, private_key_hex: str) -> None:
 
 
 def _get_session_user_id() -> str:
-    """Return the current user ID from session, or '' if not logged in."""
-    try:
-        s = _read_session()
-        return s["user_id"] if s else ""
-    except Exception:
-        import logging
-        logging.getLogger(__name__).warning(
-            "Failed to read session file", exc_info=True
-        )
-        return ""
+    """Return the current user ID from session, or '' if not logged in.
+
+    Unlike ``_get_session_user()``, this never calls ``_die`` — callers
+    must handle the empty-string case themselves.  Use this for non-fatal
+    lookups (e.g., display); use ``_get_session_user()`` for actions that
+    require authentication.
+    """
+    s = _read_session()
+    return s["user_id"] if s else ""
 
 
 def _get_session_user() -> str:

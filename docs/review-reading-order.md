@@ -20,11 +20,13 @@
 ### Phase 1 — 核心概念
 
 1. [README.md](../README.md) — 项目概览 + 5 分钟上手
-2. [architecture.md](architecture.md) — 完整文件树和分层规则
-3. `peerpedia_core/exceptions.py` — 语义异常定义（BadRequestError、NotFoundError、PermissionError 等）
-4. `peerpedia_core/types/scores.py` — 评分 5 维度的类型定义
-5. `peerpedia_core/config/paths.py` — 数据目录布局（`~/.peerpedia/` 结构）
-6. `peerpedia_core/config/params.py` — 全局参数（沉淀天数、评分阈值、速率限制）
+2. [architecture.md](architecture.md) — 完整文件树和分层规则（26 条架构测试强制执行）
+3. `peerpedia_core/__main__.py` — 顶层路由器（cli/ 和 repl/ 的唯一交汇点）
+4. `peerpedia_core/exceptions.py` — 语义异常定义（BadRequestError、NotFoundError、ConflictError、MergeConflictError 等）
+5. `peerpedia_core/types/scores.py` — 评分 5 维度的类型定义
+6. `peerpedia_core/types/status.py` — 文章状态常量 + `parse_status_tag` 解析器
+7. `peerpedia_core/config/paths.py` — 数据目录布局（`~/.peerpedia/` 结构）
+8. `peerpedia_core/config/params.py` — 全局参数（沉淀天数、评分阈值、速率限制）
 
 ### Phase 2 — 存储层
 
@@ -46,7 +48,15 @@
 
 20. `peerpedia_core/policies/articles.py` — 权限检查（谁能编辑/删除/发布/评审文章）
 21. `peerpedia_core/commands/` — 编排层，是唯一调用 storage/db/crud_* 的层
-    - `articles.py` — 文章 CRUD 编排（create、edit、delete、publish、rollback、fork）
+    - `articles/__init__.py` — 读包装器 + 重新导出
+    - `articles/_helpers.py` — 共享辅助（`require_article`, `reset_sink`, `rebuild_article_authors`）
+    - `articles/create.py` — `create_article_with_content`
+    - `articles/update.py` — `update_article_content`
+    - `articles/publish.py` — `publish_article`
+    - `articles/rollback.py` — `rollback_article`
+    - `articles/delete.py` — `delete_article`
+    - `articles/fork.py` — `fork_article`
+    - `articles/diff.py` — `diff_article`
     - `reviews.py` — 评审流程（submit_review、submit_reply、评分写入 git + DB）
     - `merge.py` — 合并提案（propose_merge、accept_merge、withdraw_merge）
     - `maintainers.py` — 维护者管理（add、remove）
@@ -82,13 +92,19 @@
 40. `peerpedia_core/social/exchange.py` — 社交图交换编排（fetch-then-merge：fetch_following → merge_follows）
 41. `peerpedia_core/social/discovery.py` — P2P peer 发现（从已知 peer 发现新 peer）
 
-### Phase 5 — CLI
+### Phase 5 — CLI + REPL
 
-42. `peerpedia_core/cli/parser.py` — 命令表 + argparse 定义（全部命令及其参数）
-43. `peerpedia_core/cli/helpers.py` — 共享工具（session 管理、编辑器调用、`_with_db` 装饰器、DB 初始化）
-44. `peerpedia_core/cli/display.py` — Rich 输出帮助（console、Panel、Table、Theme），layer 0，只依赖 rich
-45. `peerpedia_core/cli/bundle_utils.py` — 自动同步帮助（push/pull 所有本地文章），layer 1，依赖 helpers + bundle/
-46. `peerpedia_core/cli/handlers/` — 命令实现（articles.py、reviews.py、social.py、merge.py、admin.py 等）
+42. `peerpedia_core/__main__.py` — 顶层路由（无子命令 → REPL，有子命令 → CLI）
+43. `peerpedia_core/cli/parser.py` — 命令表 + argparse 定义（全部命令及其参数）
+44. `peerpedia_core/cli/helpers.py` — 共享工具（session 管理、`_ensure_db`、`_ensure_db`、编辑器调用、`_with_db` 装饰器），CLI 和 REPL 共用
+45. `peerpedia_core/cli/display.py` — Rich 输出帮助（console、Panel、Table、Theme），layer 0，只依赖 rich
+46. `peerpedia_core/cli/bundle_utils.py` — 自动同步帮助（push/pull 所有本地文章），layer 1，依赖 helpers + bundle/
+47. `peerpedia_core/cli/handlers/` — 命令实现（articles.py、reviews.py、social.py、merge.py、account.py 等）
+48. `peerpedia_core/repl/__init__.py` — REPL 入口（`run()`：启动 banner、定时扫描、命令循环）
+49. `peerpedia_core/repl/state.py` — REPL 状态（主题定义、会话变量、prompt 构建、自动补全刷新）
+50. `peerpedia_core/repl/commands.py` — REPL 元命令（`:help`, `:user`, `:article`, `:theme`, `:inbox`）+ 命令派发
+51. `peerpedia_core/repl/browse.py` — 全屏交互视图（文章浏览器、用户排行榜、评审查看器）
+52. `peerpedia_core/repl/typography.py` — Unicode 伪字体渲染（6 种数学字母符号表）
 
 ### Historical Docs
 

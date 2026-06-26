@@ -1,8 +1,28 @@
 # CLI UX 改进建议
 
-**日期:** 2026-06-25
+**日期:** 2026-06-25（2026-06-27 更新：标记已实现项）
 **类型:** 体验打磨建议（非 bug）
 **原则:** 单行改动级别，不动架构，提升留存。
+
+## 2026-06-27 已实现
+
+| 编号 | 建议 | 状态 |
+|------|------|------|
+| #1 | 无参数默认 Dashboard | ✅ 已实现（登录用户显示文章统计 + 快捷命令） |
+| #3 | article create → 提示后续操作 | ✅ 已实现（显示 ID + Next 提示） |
+| #4 | article publish → 告知 review 窗口 | ✅ 已实现（显示 auto-publishes after 日期 + Next） |
+| #6 | feed 空 → 引导去发现 | ✅ 已实现（显示 school + follow 提示） |
+| #7 | school 空 → 引导去 peer | ✅ 已实现 |
+| #12 | compile --format pdf 不能静默忽略 | ✅ 已实现（返回 JSON error 说明只支持 HTML） |
+| #15 | PEERPEDIA_SERVER 降噪 | ✅ 已改进（同进程只警告一次） |
+
+### 2026-06-27 第二轮
+
+| 编号 | 建议 | 状态 |
+|------|------|------|
+| — | register 重名阻断 | ✅ 已实现（get_user_by_name 前置校验，引导 login） |
+| — | login --user-id 消歧义 | ✅ 已实现（--user-id 前缀匹配用户列表） |
+| — | merge_follows 空列表日志降噪 | ✅ 已实现（warning → debug） |
 
 ---
 

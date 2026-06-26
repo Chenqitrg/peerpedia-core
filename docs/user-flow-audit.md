@@ -1,6 +1,6 @@
 # 用户流与系统逻辑审计报告
 
-**日期:** 2026-06-24（2026-06-25 更新：标记已修复项）
+**日期:** 2026-06-24（2026-06-25 更新；2026-06-27 第二轮更新）
 **分支:** main
 **审查焦点:** 缺失的用户操作、逻辑不自洽、规则设计漏洞
 
@@ -8,15 +8,34 @@
 
 ## 总览
 
-审计覆盖 20 个阶段，发现 **35 个逻辑/功能缺口**（含旧系统可借鉴的 10 个 API 端点）。**2026-06-25 更新：已修复 10 项。**
+审计覆盖 20 个阶段，发现 **35 个逻辑/功能缺口**（含旧系统可借鉴的 10 个 API 端点）。**2026-06-27 更新：累计修复 20 项。**
 
 | 严重程度 | 数量 | 已修复 | 说明 |
 |----------|------|--------|------|
-| ✅ 已修复 | 10 | — | 账号删除、速率限制、沉淀池上限、多设备登录、作者回复评审、通知系统、提案撤回、fork_count递减、多设备引导、P2P签名发现 |
+| ✅ 已修复 | 20 | — | 账号删除、速率限制、沉淀池上限、多设备登录、作者回复评审、通知系统、提案撤回、fork_count递减、多设备引导、P2P签名发现、_read_session 容错、git_backend 文件泄漏防护、health check 双重 HTTP 合并、RateLimit None key 防护、bundle_utils bare except 收窄、article delete --force、UUID 验证放宽、login --user-id 消歧义、register 重名阻断、merge_follows 日志降噪 |
 | 🔴 MVP 阻塞 — 不修系统不可用 | 4 | 3 | 取消关注不传播、密钥轮换无通知、引用系统（仅 DB 无 UI）、无平台审核层 |
 | 🟡 MVP 需要但可延后 | 7 | 5 | 全员同意发布、maintainer 转让、多文件文章、标签系统、编译引用解析、账号改名、社交发现 |
 | 🟢 锦上添花 | 14 | 2 | 转发、arXiv 镜像、版本标签/diff、评论更新、数据导出/导入、浏览历史、推荐/趋势、举报、互关查询、归档状态、小修改路径、分支控制、评审员校准、孤立 forked_from |
 | 🔵 旧系统 API 待纳入 | 10 | 0 | diff、评审讨论串、feed/pool、编译预览/下载、书签路由、评审路由、合并路由、引用路由、用户更新 |
+
+### 2026-06-27 新增修复明细
+
+| 修复项 | 文件 | 说明 |
+|--------|------|------|
+| _read_session 损坏 JSON 容错 | cli/helpers.py:237 | try/except (JSONDecodeError, OSError) → 返回 None |
+| git_backend 文件泄漏 | storage/git_backend.py:205 | try 上移到文件创建前 |
+| health check 双重 HTTP | transport/health.py | _probe() 合并 is_online + check_clock_skew |
+| RateLimit None key | transport/middleware/ratelimit.py:37 | client.host 双重 guard |
+| bundle_utils bare except | cli/bundle_utils.py:66,73,155,163 | Exception → (TransportError, ProtocolError, ConflictError, ConnectionError) |
+| article delete --force | cli/handlers/articles.py:295 + parser.py:153 | --json 需配 --force 才跳过确认 |
+| UUID 验证放宽 | transport/shared.py:17-25 | 正则 → uuid.UUID() 解析 |
+| SAWarning 抑制 | storage/db/crud_article.py:189-195 | session.query().subquery() → select().where() |
+| fork 缺 repo 友好报错 | commands/articles/fork.py:45 | require_article_repo 前置校验 |
+| compile \n 转义 | cli/handlers/articles.py:52-54 | --content 自动 \n \t → 真实换行/制表 |
+| PEERPEDIA_SERVER 同进程降噪 | cli/bundle_utils.py:25-36 | _warn_no_server() 每进程一次 |
+| login --user-id 消歧义 | cli/handlers/account.py:156-165 | --user-id 前缀匹配用户列表，精确选出一个 |
+| register 重名阻断 | cli/handlers/account.py:122-129 | get_user_by_name 前置校验，引导 login |
+| merge_follows 日志降噪 | commands/discover.py:137 | logger.warning → logger.debug |
 
 ---
 

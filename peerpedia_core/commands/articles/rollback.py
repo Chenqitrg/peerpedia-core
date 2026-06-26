@@ -19,7 +19,7 @@ from peerpedia_core.storage.git_backend import (
 )
 from peerpedia_core.crypto import temp_signing_key
 from peerpedia_core.commands.articles._helpers import (
-    _reset_sink,
+    reset_sink,
     rebuild_article_authors,
     require_article,
     require_article_repo,
@@ -72,7 +72,7 @@ def rollback_article(
     # G3: write a platform [status] marker so integrity repair can detect
     # divergence if the process dies before set_sink_start.
     if old_status == "published":
-        _reset_sink(db, article_id, rp, params.sink.edit_article_default_days)
+        reset_sink(db, article_id, rp, params.sink.edit_article_default_days)
 
     rebuild_article_authors(db, article_id)
     recompute_article_score(db, article_id)

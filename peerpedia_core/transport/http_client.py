@@ -26,6 +26,8 @@ import httpx
 from peerpedia_core.exceptions import ConflictError, ProtocolError, TransportError
 from peerpedia_core.transport.auth import sign_auth_header
 
+_SYNC_TIMEOUT = 60  # seconds — bundle upload/download can be large
+
 _client: httpx.Client | None = None
 _client_lock = threading.Lock()
 
@@ -169,7 +171,7 @@ def push_bundle(server: str, article_id: str, bundle_bytes: bytes) -> None:
             f"{_api_url(server, article_id)}/sync",
             content=bundle_bytes,
             headers={"Content-Type": "application/octet-stream"},
-            timeout=60,
+            timeout=_SYNC_TIMEOUT,
         )
     except httpx.HTTPError as e:
         raise TransportError(f"push_bundle failed for {article_id} at {server}: {e}") from e
@@ -187,7 +189,7 @@ def fetch_incremental_bundle(server: str, article_id: str, since_hash: str | Non
         resp = _get_client().get(
             f"{_api_url(server, article_id)}/bundle",
             params={"since": since_hash} if since_hash else None,
-            timeout=60,
+            timeout=_SYNC_TIMEOUT,
         )
     except httpx.HTTPError as e:
         raise TransportError(f"fetch_incremental_bundle failed for {article_id} at {server}: {e}") from e
@@ -218,7 +220,7 @@ def push_article_repo(server: str, article_id: str, bundle_b64: str) -> bool:
         resp = _get_client().post(
             f"{server}/api/v1/articles",
             json={"id": article_id, "repo_bundle": bundle_b64},
-            timeout=60,
+            timeout=_SYNC_TIMEOUT,
         )
     except httpx.HTTPError as e:
         raise TransportError(f"push_article_repo failed for {article_id} at {server}: {e}") from e
@@ -516,7 +518,10 @@ def fetch_school(server: str, limit: int = 20) -> list[dict]:
     client = _get_client()
     try:
         resp = client.get(f"{server}/api/v1/school", params={"limit": limit})
-        resp.raise_for_status()
+        if resp.status_code != 200:
+            raise ProtocolError(
+                f"fetch_school: unexpected status {resp.status_code} from {server}"
+            )
         data = resp.json()
         if not isinstance(data, list):
             raise ProtocolError(

@@ -23,6 +23,21 @@ from peerpedia_core.social.discovery import get_known_peers, record_peer_result
 from peerpedia_core.transport import fetch_head
 
 
+_no_server_warned = False
+
+
+def _warn_no_server() -> None:
+    """Warn once per process that PEERPEDIA_SERVER is not set."""
+    global _no_server_warned
+    if _no_server_warned:
+        return
+    _no_server_warned = True
+    console.print(
+        "[dim]⚠ No PEERPEDIA_SERVER set — network sync skipped. "
+        "Set with: export PEERPEDIA_SERVER=https://your-peer.example.com[/]"
+    )
+
+
 def _require_online_server(args) -> str:
     """Resolve server URL, ensure it's online, check clock skew, die if not.
 
@@ -83,11 +98,12 @@ def _try_sync(db, server: str | None = None) -> None:
 
     Best-effort: network and conflict errors are silent — local state
     is already persisted and manual push can retry later.  Warns on
-    each invocation if the server is unreachable.
+    the first invocation per process if the server is unreachable;
+    subsequent calls in the same process are silent.
     """
     srv = server or os.environ.get("PEERPEDIA_SERVER")
     if not srv:
-        console.print("[dim]⚠ No PEERPEDIA_SERVER set — auto-sync skipped.[/]")
+        _warn_no_server()
         return
     if not is_online(srv):
         console.print(f"[dim]⚠ Server {srv} is offline — auto-sync skipped.[/]")

@@ -5,7 +5,7 @@
 **Git stores content; SQLite stores state.** Every article is an independent Git repository -- body text and reviews have full history, can be diffed/forked/merged. Metadata (status, scores, relationships) lives in SQLite for fast queries and aggregation.
 
 [![Tests](https://github.com/Chenqitrg/peerpedia-core/actions/workflows/test.yml/badge.svg)](https://github.com/Chenqitrg/peerpedia-core/actions/workflows/test.yml)
-617 tests | 69% coverage | Python 3.11+
+660 tests | 69% coverage | Python 3.11+
 
 ## Installation
 
@@ -247,10 +247,14 @@ All events generate local notifications viewable via `peerpedia notifications`:
 ## Architecture
 
 ```
-cli/ + repl.py          -- Entry layer: parse args, dispatch, commit()
-    |
+__main__.py             -- Top-level router: CLI or REPL (the ONLY module aware of both)
+
+cli/                    -- Single-shot commands: parse args, dispatch, commit()
+repl/                   -- Interactive REPL: same commands, persistent session, TTY UI
+    │                   (repl/ only imports from cli/ — pure UI layer, zero circular dep)
+    ▼
 commands/               -- Orchestration: the only layer touching both git and DB
-    |
+    │
     +-- storage/        -- git_backend (content) + db/ (metadata), not aware of each other
     +-- workflow/       -- Pure compute: scoring, reputation, sedimentation logic
     +-- policies/       -- Authorization checks (maintainer-only, ownership, etc.)
@@ -259,7 +263,16 @@ commands/               -- Orchestration: the only layer touching both git and D
     +-- social/         -- Social graph exchange (follow/unfollow propagation)
 ```
 
-Each layer has a single responsibility. **cli/** handles argument parsing and delegates to `commands/` -- never imports from storage or transport. **commands/** is the orchestration hub: the only layer that touches both git and the database. **storage/db/** is pure SQLAlchemy data access (only directory that may `import sqlalchemy`). **storage/git_backend.py** handles raw git operations (only file that may `import git`). **transport/** is HTTP (httpx + starlette), translating requests into `commands/` calls. **bundle/** implements the git bundle sync protocol (probe, incremental bundles). **workflow/** contains stateless pure functions for scoring and sedimentation -- no I/O. **social/** handles follow propagation, alias resolution, and school ranking. Foundation modules (`config/`, `policies/`, `types/`, `exceptions.py`, `crypto.py`, `frontmatter.py`) must not import from `bundle/`, `social/`, or `transport/`. These import rules are enforced by `tests/test_architecture.py`.
+Key dependency rules:
+- `__main__.py` routes to `cli/` or `repl/` — the only place that knows about both
+- `cli/` never imports from `repl/` — **zero circular dependency**
+- `repl/` only imports from `cli/` (helpers, display, parser) — no direct `commands/` or `storage/` access
+- `cli/` may import `storage.db.models` (ORM entities) but nothing else from `storage/`
+- `transport/` is the only layer importing `httpx`/`starlette`
+- `storage/db/` is the only layer importing `sqlalchemy`
+- Foundation modules (`config/`, `policies/`, `types/`, `workflow/`, …) never import `bundle/`, `social/`, or `transport/`
+
+These rules are enforced by **26 architecture tests** in `tests/test_architecture.py` — every import boundary is checked via AST parsing.
 
 ## Data directory
 
@@ -326,7 +339,7 @@ All commands take an SQLAlchemy `Session` as the first parameter, making them te
 git clone https://github.com/Chenqitrg/peerpedia-core.git
 cd peerpedia-core
 pip install -e ".[dev]"
-pytest tests/ -v           # 617 tests
+pytest tests/ -v           # 660 tests
 pytest tests/ -x --lf      # Re-run failures only (fast feedback)
 ```
 

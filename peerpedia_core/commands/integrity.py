@@ -17,14 +17,18 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from peerpedia_core.config.params import PLATFORM_EMAIL
 from peerpedia_core.crypto import pubkey_hex_to_ssh_line
-from peerpedia_core.exceptions import SignatureVerificationError
+from peerpedia_core.exceptions import NotFoundError, SignatureVerificationError
 from peerpedia_core.storage.db import Session
+from peerpedia_core.commands.articles._helpers import require_article, require_article_repo
 from peerpedia_core.commands.workflow import recompute_article_score
-from peerpedia_core.storage.db.crud_article import get_article, get_author_ids, update_article_status
-from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, get_commit_history, verify_commit_signature
-from peerpedia_core.types.status import parse_status_tag
+from peerpedia_core.storage.db.crud_article import get_author_ids, update_article_status
+from peerpedia_core.storage.git_backend import (
+    extract_pubkey_from_message, get_commit_authors,
+    get_commit_history, read_status_from_git, verify_commit_signature,
+)
+from peerpedia_core.types import short_id
+from peerpedia_core.types.status import is_platform_commit
 
 
 def assert_article_integrity(db: Session, article_id: str, *, level: str = "light") -> None:
@@ -39,12 +43,10 @@ def assert_article_integrity(db: Session, article_id: str, *, level: str = "ligh
     rebuilding the DB cache from git history.  Runs after sync and before
     publish.
     """
-    rp = DEFAULT_ARTICLES_DIR / article_id
-    if not (rp / ".git").is_dir():
-        return
-
-    article = get_article(db, article_id)
-    if article is None:
+    try:
+        rp = require_article_repo(article_id)
+        require_article(db, article_id)
+    except NotFoundError:
         return
 
     if level == "light":
@@ -65,13 +67,13 @@ def _verify_light(repo_path: Path) -> None:
     if not commits:
         return
     commit = commits[0]
-    if commit["author_email"] == PLATFORM_EMAIL:
+    if is_platform_commit(commit["author_email"]):
         return
 
-    pubkey_hex = _extract_pubkey_from_message(commit["message"])
+    pubkey_hex = extract_pubkey_from_message(commit["message"])
     if not pubkey_hex:
         raise SignatureVerificationError(
-            f"Local integrity failure: commit {commit['hash'][:8]} "
+            f"Local integrity failure: commit {short_id(commit['hash'])} "
             f"by {commit['author_email']} has no Pubkey trailer — "
             "the git repo may have been tampered with. "
             "Run 'peerpedia sync pull <article_id>' to repair from a trusted peer."
@@ -82,18 +84,16 @@ def _verify_light(repo_path: Path) -> None:
 
 def _verify_full(db: Session, article_id: str, repo_path: Path) -> None:
     """DB cross-validation: rebuild DB cache from git SOT if inconsistent."""
-    article = get_article(db, article_id)
-    if article is None:
-        return
+    article = require_article(db, article_id)
 
-    expected_status = _read_status_from_git(repo_path)
+    expected_status = read_status_from_git(repo_path)
     if expected_status is not None and article.status != expected_status:
         _repair_from_git(db, article_id, repo_path)
         return
 
     # Check author list consistency.
     db_authors = set(get_author_ids(db, article_id))
-    git_authors = _extract_human_authors_from_git(repo_path)
+    git_authors = get_commit_authors(repo_path)
     if db_authors != git_authors:
         from peerpedia_core.commands.articles import rebuild_article_authors  # noqa: PLC0415
         rebuild_article_authors(db, article_id)
@@ -105,56 +105,11 @@ def _repair_from_git(db: Session, article_id: str, repo_path: Path) -> None:
     from peerpedia_core.commands.bundle import sync_reviews_from_worktree  # noqa: PLC0415
 
     rebuild_article_authors(db, article_id)
-    _sync_status_from_git(db, article_id, repo_path)
+    # Sync status from git platform commits into DB.
+    status = read_status_from_git(repo_path)
+    if status is not None:
+        update_article_status(db, article_id, status)
     # G9: sync reviews from git worktree before recomputing scores so
     # reviews that exist in git but not in DB are not silently dropped.
     sync_reviews_from_worktree(db, article_id)
     recompute_article_score(db, article_id)
-
-
-def _read_status_from_git(repo_path: Path) -> str | None:
-    """Read the latest [status] tag from platform commit messages.
-
-    Delegates parsing to ``types.status.parse_status_tag`` — the
-    single canonical parser for status markers in git history.
-    """
-    for commit in get_commit_history(repo_path):
-        status = parse_status_tag(commit["message"], commit["author_email"])
-        if status is not None:
-            return status
-    return None
-
-
-def _sync_status_from_git(db: Session, article_id: str, repo_path: Path) -> None:
-    """Update article.status in DB to match the latest git platform commit."""
-    status = _read_status_from_git(repo_path)
-    if status is not None:
-        update_article_status(db, article_id, status)
-
-
-def _extract_human_authors_from_git(repo_path: Path) -> set[str]:
-    """Extract unique human author IDs from git commit history."""
-    authors: set[str] = set()
-    for commit in get_commit_history(repo_path):
-        email = commit["author_email"]
-        if email == PLATFORM_EMAIL:
-            continue
-        user_id = _extract_user_id_from_email(email)
-        if user_id:
-            authors.add(user_id)
-    return authors
-
-
-def _extract_pubkey_from_message(message: str) -> str | None:
-    """Extract ``Pubkey: <hex>`` from a commit message. Returns hex or None."""
-    for line in message.splitlines():
-        if line.startswith("Pubkey: "):
-            candidate = line.split("Pubkey: ", 1)[1].strip()
-            if candidate:
-                return candidate
-    return None
-
-
-def _extract_user_id_from_email(email: str) -> str:
-    """Extract user_id from an email like ``<id>@peerpedia``."""
-    return email.split("@")[0]

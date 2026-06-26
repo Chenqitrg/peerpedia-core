@@ -50,9 +50,10 @@ from pathlib import Path
 
 from peerpedia_core.storage.db import Session
 
-from peerpedia_core.config.params import EMAIL_SUFFIX, PLATFORM_EMAIL
+from peerpedia_core.config.params import extract_user_id_from_email
 from peerpedia_core.types import short_id
-from peerpedia_core.types.status import VALID_ARTICLE_STATUSES, parse_status_tag
+from peerpedia_core.types.status import is_platform_commit, parse_status_tag, VALID_ARTICLE_STATUSES
+from peerpedia_core.storage.git_backend import extract_pubkey_from_message
 from peerpedia_core.exceptions import BadRequestError, NotAuthorizedError, SignatureVerificationError
 from peerpedia_core.storage.db.crud_article import update_article_status, update_witnessed_at
 from peerpedia_core.storage.db.crud_maintainer import get_maintainer_ids
@@ -262,19 +263,19 @@ def _verify_new_commits(db: Session, repo_path: Path, *, since_hash: str) -> Non
 
     # Batch-load users to avoid N+1 queries.
     user_ids = {
-        _extract_user_id_from_email(c["author_email"])
+        extract_user_id_from_email(c["author_email"])
         for c in commits
-        if c["author_email"] != PLATFORM_EMAIL
+        if not is_platform_commit(c["author_email"])
     }
     users_by_id = {u.id: u for u in get_users_by_ids(db, user_ids)}
 
     for commit in commits:
         author_email = commit["author_email"]
-        if author_email == PLATFORM_EMAIL:
+        if is_platform_commit(author_email):
             continue
 
         commit_hash = commit["hash"]
-        pubkey_hex = _extract_pubkey_from_message(commit["message"])
+        pubkey_hex = extract_pubkey_from_message(commit["message"])
         if not pubkey_hex:
             raise SignatureVerificationError(
                 f"Commit {short_id(commit_hash)} by {author_email} "
@@ -286,7 +287,7 @@ def _verify_new_commits(db: Session, repo_path: Path, *, since_hash: str) -> Non
         verify_commit_signature(repo_path, commit_hash, ssh_line, author_email)
 
         # TOFU pubkey consistency.
-        user_id = _extract_user_id_from_email(author_email)
+        user_id = extract_user_id_from_email(author_email)
         user = users_by_id.get(user_id)
         if user is None:
             continue
@@ -310,10 +311,5 @@ def _verify_new_commits(db: Session, repo_path: Path, *, since_hash: str) -> Non
             update_user_public_key(db, user_id, pubkey_hex)
 
 
-# Re-export integrity helpers and functions used by this module.
-from peerpedia_core.commands.integrity import (  # noqa: E402
-    _extract_human_authors_from_git,
-    _extract_pubkey_from_message,
-    _extract_user_id_from_email,
-    assert_article_integrity,
-)
+# Re-export helpers used by this module.
+from peerpedia_core.commands.integrity import assert_article_integrity  # noqa: E402

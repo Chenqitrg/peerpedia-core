@@ -28,6 +28,17 @@ def make_peerpedia_email(local_part: str) -> str:
     return f"{local_part}{EMAIL_SUFFIX}"
 
 
+def extract_user_id_from_email(email: str) -> str:
+    """Extract the user_id from a PeerPedia email address.
+
+    Inverse of ``make_peerpedia_email``.
+
+    >>> extract_user_id_from_email("user-123@peerpedia")
+    'user-123'
+    """
+    return email.split("@")[0]
+
+
 @dataclass
 class SinkParams:
     """Sedimentation pool timing parameters."""

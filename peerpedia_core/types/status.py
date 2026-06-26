@@ -17,13 +17,18 @@ VALID_ARTICLE_STATUSES = frozenset({"draft", "sedimentation", "published", "reje
 _VALID_STATUSES = set(VALID_ARTICLE_STATUSES)
 
 
+def is_platform_commit(author_email: str) -> bool:
+    """Return True if the commit was authored by the PeerPedia platform."""
+    return author_email == PLATFORM_EMAIL
+
+
 def parse_status_tag(message: str, author_email: str) -> str | None:
     """Return the article status if *message* is a valid platform status commit.
 
     Only accepts commits authored by the PeerPedia platform
     (``system@peerpedia``) whose message has the form ``[status] <valid_status>``.
     """
-    if author_email != PLATFORM_EMAIL:
+    if not is_platform_commit(author_email):
         return None
     msg = message.strip()
     prefix = "[status] "

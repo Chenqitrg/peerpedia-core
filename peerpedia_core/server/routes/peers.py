@@ -1,13 +1,10 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""P2P peer discovery — HTTP endpoints for peer exchange.
+"""Peer endpoints — list and register known peers.
 
 GET  /api/v1/peers → known peer URLs
-POST /api/v1/peers → register a new peer URL (idempotent)
-
-Peer list management is delegated to ``peerpedia_core.social.discovery``
-which is the single source of truth for ``~/.peerpedia/peers.json``.
+POST /api/v1/peers → register a new peer URL
 """
 
 from __future__ import annotations
@@ -16,7 +13,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
-from peerpedia_core.transport.peers import add_peer, get_known_peers
+from peerpedia_core.core import add_peer, get_known_peers
 
 
 async def _peers_endpoint(request: Request) -> JSONResponse:

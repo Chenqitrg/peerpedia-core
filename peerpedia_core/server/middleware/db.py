@@ -1,60 +1,35 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""DB session middleware — creates a SQLite session per request.
+"""Inject a SQLite session into every request, except git-only routes.
 
-Runs BEFORE ``AuthMiddleware`` so auth can look up the user's public key.
-Default: inject a DB session for every request.  Only git-only routes
-(head, bundle, ancestor, repo) are excluded — they only touch the
-filesystem and don't need a DB connection.
+Git-only routes (head, bundle, repo, ancestor) don't touch the database —
+they operate directly on the filesystem.  All other routes get a DB session
+attached to ``request.state.db``.
+
+Runs BEFORE ``AuthMiddleware`` so auth can look up public keys.
 """
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.routing import Route
 
-from peerpedia_core.core import db_session
+from peerpedia_core.config.params import params
 from peerpedia_core.config.paths import DB_URL
-
-
-class DbRoute(Route):
-    """Starlette ``Route`` with explicit DB-dependency declaration.
-
-    ``needs_db`` (default ``True``) — set ``False`` for git-only routes
-    that don't need a database session (e.g. head, bundle, repo).
-    """
-
-    def __init__(self, path: str, endpoint, *, needs_db: bool = True, **kwargs) -> None:
-        super().__init__(path, endpoint, **kwargs)
-        self.needs_db = needs_db
+from peerpedia_core.core import db_session
 
 
 class DBSessionMiddleware(BaseHTTPMiddleware):
-    """Inject a DB session for every request except git-only routes.
-
-    Git-only routes (head, bundle, ancestor, repo) are authenticated via
-    Ed25519 commit signatures on the git objects themselves and never
-    touch the database.
-
-    Default-inject is the safe default — new routes get a DB session
-    automatically; only routes that explicitly don't need one are excluded.
-    """
-
-    # Paths that do NOT need a DB session (git-only operations).
-    _NO_DB_PREFIXES = ("/health",)
-    _NO_DB_SUFFIXES = ("/head", "/bundle", "/repo")
-    _NO_DB_CONTAINS = ("/ancestor/",)
+    """Insert a DB session per request, skip for git-only paths."""
 
     async def dispatch(self, request: Request, call_next):
-        """Inject a DB session for the request, skip for git-only routes."""
         path = request.url.path
 
-        skip_db = (
-            path.startswith(self._NO_DB_PREFIXES)
-            or path.endswith(self._NO_DB_SUFFIXES)
-            or any(fragment in path for fragment in self._NO_DB_CONTAINS)
-        )
-        if skip_db:
+        if (
+            path.startswith(params.server.db_skip_prefixes)
+            or path.endswith(params.server.db_skip_suffixes)
+            or any(f in path for f in params.server.db_skip_contains)
+        ):
+            # Git-only route — no DB needed.
             return await call_next(request)
 
         with db_session(DB_URL) as db:

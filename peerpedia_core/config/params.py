@@ -152,6 +152,34 @@ class DiscoveryParams:
 
 
 @dataclass
+class ServerParams:
+    """Server and middleware parameters."""
+
+    # Rate limiting
+    rate_limit_requests_per_window: int = 60
+    rate_limit_window_seconds: int = 10
+
+    # Logging
+    log_slow_request_ms: float = 500.0
+
+    # Bundle size
+    max_bundle_bytes: int = 100 * 1024 * 1024  # 100 MB
+
+    # DB session — paths that don't need a DB connection (git-only)
+    db_skip_prefixes: tuple[str, ...] = ("/health",)
+    db_skip_suffixes: tuple[str, ...] = ("/head", "/bundle", "/repo")
+    db_skip_contains: tuple[str, ...] = ("/ancestor/",)
+
+    # Auth — paths that don't require authentication
+    auth_public_prefixes: tuple[str, ...] = ("/health", "/api/v1/school")
+    auth_public_suffixes: tuple[str, ...] = (
+        "/head", "/bundle", "/sync", "/repo",
+        "/following", "/followers", "/articles", "/shares",
+    )
+    auth_public_contains: tuple[str, ...] = ("/ancestor/",)
+
+
+@dataclass
 class Params:
     """Aggregate of all tunable parameter groups."""
 
@@ -160,6 +188,7 @@ class Params:
     reputation: ReputationParams
     comment: CommentParams
     discovery: DiscoveryParams
+    server: ServerParams
 
     def __init__(self):
         self.sink = SinkParams()
@@ -167,6 +196,7 @@ class Params:
         self.reputation = ReputationParams()
         self.comment = CommentParams()
         self.discovery = DiscoveryParams()
+        self.server = ServerParams()
 
 
 params = Params()

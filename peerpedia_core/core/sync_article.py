@@ -32,7 +32,6 @@ from peerpedia_core.storage.git import (
     create_bundle, find_common_ancestor, get_head,
     ingest_article, ingest_bundle, pack_article_repo,
 )
-from peerpedia_core.storage.pending import add, clear, count, list_all, remove
 from peerpedia_core.time import validate_clock_skew
 
 if TYPE_CHECKING:

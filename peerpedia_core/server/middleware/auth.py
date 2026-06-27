@@ -29,6 +29,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
+from peerpedia_core.config.params import params
 from peerpedia_core.core import create_user_stub, get_user, update_user_public_key
 from peerpedia_core.transport.guards import verify_auth_header
 from peerpedia_core.types import short_id
@@ -41,28 +42,16 @@ class AuthMiddleware(BaseHTTPMiddleware):
     for the public key lookup.
     """
 
-    # Paths that are public suffixes (e.g. /api/v1/articles/{id}/head).
-    # endswith prevents substring false-positives like "/repo" matching "/report".
-    _PUBLIC_PREFIXES = ("/health", "/api/v1/school")
-    # Read-only — public.  /articles is NOT public (drafts are private),
-    # but is called without auth from peers; the handler filters by status.
-    _PUBLIC_SUFFIXES = (
-        "/head", "/bundle", "/sync", "/repo",
-        "/following", "/followers", "/articles", "/shares",
-    )
-    _PUBLIC_CONTAINS = ("/ancestor/",)  # /api/v1/articles/{id}/ancestor/{hash}
-
     async def dispatch(self, request: Request, call_next):
         """Verify Ed25519 auth header or allow public routes through."""
         path = request.url.path
 
-        if path.startswith(self._PUBLIC_PREFIXES):
+        if path.startswith(params.server.auth_public_prefixes):
             return await call_next(request)
-        if path.endswith(self._PUBLIC_SUFFIXES):
+        if path.endswith(params.server.auth_public_suffixes):
             return await call_next(request)
-        for fragment in self._PUBLIC_CONTAINS:
-            if fragment in path:
-                return await call_next(request)
+        if any(f in path for f in params.server.auth_public_contains):
+            return await call_next(request)
 
         auth_header = request.headers.get("authorization", "")
         if not auth_header.startswith("Peerpedia "):

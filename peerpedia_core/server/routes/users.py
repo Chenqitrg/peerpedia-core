@@ -53,20 +53,16 @@ async def _followers(request: Request) -> JSONResponse:
 
 
 async def _follow(request: Request) -> JSONResponse:
+    """POST /follow → create, DELETE /follow → remove."""
     user_id = request.path_params["user_id"]
     _validate_id(user_id, "user_id")
     payload = await request.json()
     followed_id = _require_field(payload, "followed_id")
-    follow_user(request.state.db, user_id, followed_id)
-    return _ok_response()
 
-
-async def _unfollow(request: Request) -> JSONResponse:
-    user_id = request.path_params["user_id"]
-    _validate_id(user_id, "user_id")
-    payload = await request.json()
-    followed_id = _require_field(payload, "followed_id")
-    unfollow_user(request.state.db, user_id, followed_id)
+    if request.method == "DELETE":
+        unfollow_user(request.state.db, user_id, followed_id)
+    else:
+        follow_user(request.state.db, user_id, followed_id)
     return _ok_response()
 
 
@@ -184,8 +180,7 @@ ROUTES = [
     Route("/api/v1/users/{user_id}/following", _following, methods=["GET"]),
     Route("/api/v1/users/{user_id}/followers", _followers, methods=["GET"]),
     Route("/api/v1/users/{user_id}/articles", _articles, methods=["GET"]),
-    Route("/api/v1/users/{user_id}/follow", _follow, methods=["POST"]),
-    Route("/api/v1/users/{user_id}/unfollow", _unfollow, methods=["POST"]),
+    Route("/api/v1/users/{user_id}/follow", _follow, methods=["POST", "DELETE"]),
     Route("/api/v1/users/{user_id}/rotate-key", _rotate_key, methods=["POST"]),
     Route("/api/v1/users/{user_id}/share", _push_share, methods=["POST", "DELETE"]),
     Route("/api/v1/users/{user_id}/shares", _get_shares, methods=["GET"]),

@@ -63,13 +63,19 @@ def _push_unfollow(
     server: str, follower_id: str, followed_id: str, *,
     private_key_bytes: bytes | None = None, pubkey_hex: str = "",
 ) -> bool:
-    """POST /users/{follower_id}/unfollow → True on success, False on 404."""
-    return _post(
-        server, _user_path(follower_id, "unfollow"),
-        {"followed_id": followed_id}, follower_id,
-        private_key_bytes=private_key_bytes, pubkey_hex=pubkey_hex,
-        context="push_unfollow",
-    )
+    """DELETE /users/{id}/follow → True on success, False on 404."""
+    path = _user_path(follower_id, "follow")
+    body = _encode_body({"followed_id": followed_id})
+    headers = build_auth_header("DELETE", path, follower_id,
+                                private_key_bytes, pubkey_hex, body=body)
+    resp = _call("DELETE", server, path, follower_id,
+                 "push_unfollow", content=body, headers=headers)
+    if resp.status_code == 200:
+        return True
+    if resp.status_code == 404:
+        return False
+    raise ProtocolError(
+        f"push_unfollow: unexpected status {resp.status_code} from {server}")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

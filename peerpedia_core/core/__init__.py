@@ -133,3 +133,6 @@ from peerpedia_core.storage.db.crud_alias import (
 )
 from peerpedia_core.storage.db.crud_user import get_users_by_ids
 from peerpedia_core.storage.git import get_commit_history, get_head_hash, read_article_source
+from peerpedia_core.storage.peers import (
+    add_peer, get_known_peers, merge_peers, record_peer_result,
+)

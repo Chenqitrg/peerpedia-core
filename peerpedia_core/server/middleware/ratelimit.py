@@ -3,8 +3,8 @@
 
 """Simple in-memory rate limiter — per-IP, sliding-window.
 
-Defaults: 60 requests per 10‑second window per client IP.
-Returns ``429`` when exceeded.  State is in-memory — restart clears all.
+Defaults from ``params.server.rate_limit_*``.  Returns ``429`` when
+exceeded.  State is in-memory — restart clears all.
 """
 
 import time
@@ -14,9 +14,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-# Max requests per window per IP.  Generous for local/CLI use.
-_MAX_REQUESTS = 60
-_WINDOW_SECS = 10
+from peerpedia_core.config.params import params
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
@@ -26,21 +24,28 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     the counter.  No persistent storage — restart clears all state.
     """
 
-    def __init__(self, app, max_requests: int = _MAX_REQUESTS, window: int = _WINDOW_SECS):
+    def __init__(self, app,
+                 max_requests: int | None = None,
+                 window: int | None = None):
         super().__init__(app)
-        self._max = max_requests
-        self._window = window
+        self._max = max_requests if max_requests is not None else params.server.rate_limit_requests_per_window
+        self._window = window if window is not None else params.server.rate_limit_window_seconds
         self._buckets: dict[str, list[float]] = defaultdict(list)
 
-    async def dispatch(self, request: Request, call_next):
-        """Rate-limit by client IP; return 429 if exceeded."""
-        ip = request.client.host if (request.client and request.client.host) else "unknown"
-        now = time.monotonic()
-        bucket = [t for t in self._buckets[ip] if now - t < self._window]
-        bucket.append(now)
-        self._buckets[ip] = bucket
+    @staticmethod
+    def _client_ip(request: Request) -> str:
+        if request.client and request.client.host:
+            return request.client.host
+        return "unknown"
 
-        if len(bucket) > self._max:
+    async def dispatch(self, request: Request, call_next):
+        ip = self._client_ip(request)
+        # Prune stale timestamps, then record this hit.
+        now = time.monotonic()
+        self._buckets[ip] = [t for t in self._buckets[ip] if now - t < self._window]
+        self._buckets[ip].append(now)
+
+        if len(self._buckets[ip]) > self._max:
             return JSONResponse(
                 {"error": "Rate limit exceeded", "status": 429},
                 status_code=429,

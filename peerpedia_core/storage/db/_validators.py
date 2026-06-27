@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from peerpedia_core.exceptions import BadRequestError, NotFoundError
+from peerpedia_core.exceptions import BadRequestError
 from peerpedia_core.storage.db.models import ArticleMetaStorage, MergeProposalStorage
 
 
@@ -95,7 +95,7 @@ def require_sedimentation(article: ArticleMetaStorage) -> None:
         raise BadRequestError("Can only invite reviewers to articles in sedimentation")
 
 
-def require_merge_proposal_open(mp: MergeProposal) -> None:
+def require_merge_proposal_open(mp: MergeProposalStorage) -> None:
     """Raise BadRequestError if the merge proposal is not open."""
     if mp.status != "open":
         raise BadRequestError(f"Merge proposal {mp.id} is already {mp.status}")

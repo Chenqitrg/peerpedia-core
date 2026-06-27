@@ -60,22 +60,6 @@ Local integrity
 ---------------
 ``PEERPEDIA_SKIP_AUTH=true`` disables the auth middleware (for tests).
 ``PEERPEDIA_DEBUG=true`` enables traceback in error responses.
-
-TODO(discovery): Implement auto peer discovery so new users don't need
-an out-of-band server URL.  Three concrete steps:
-
-  1. Auto-connect to seed peers on startup (params.py already has seed list).
-     In ``_cmd_server_start``, spawn a background task that calls
-     ``merge_peers(seed_url)`` for each seed, then ``fetch_peers`` from
-     discovered peers, iterating up to ``max_known_peers``.
-
-  2. Add ``POST /api/v1/peers`` route — peers announce themselves.
-     When server A connects to server B, B adds A to its known_peers list.
-
-  3. Auto-sync on startup: after bootstrap or login, call ``_try_sync``
-     and ``_pull_social`` against each known peer, not just PEERPEDIA_SERVER.
-     Files: cli/handlers/server.py, transport/routes/peers.py,
-     cli/handlers/account.py (_cmd_bootstrap).
 """
 
 from __future__ import annotations

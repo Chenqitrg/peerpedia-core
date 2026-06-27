@@ -11,7 +11,7 @@ import time
 
 from peerpedia_core.config.params import params
 from peerpedia_core.cli.bundle_utils import _TRANSPORT
-from peerpedia_core.transport.peers import get_known_peers, merge_peers
+from peerpedia_core.storage.peers import get_known_peers, merge_peers
 
 _logger = logging.getLogger(__name__)
 

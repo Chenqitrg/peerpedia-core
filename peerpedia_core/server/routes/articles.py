@@ -24,6 +24,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
+from peerpedia_core.config.params import params
 from peerpedia_core.config.paths import ARTICLES_DIR
 from peerpedia_core.core import get_article_view, list_article_views
 from peerpedia_core.core.sync_article import apply_sync
@@ -33,8 +34,6 @@ from peerpedia_core.storage.git import (
     create_bundle, get_commit_history, get_head_or_none, ingest_article,
     is_ancestor, pack_article_repo, read_article_source,
 )
-
-MAX_BUNDLE_BYTES = 100 * 1024 * 1024  # 100 MB
 
 
 # ── Handlers ─────────────────────────────────────────────────────────────
@@ -64,10 +63,10 @@ async def _sync(request: Request) -> JSONResponse:
     _validate_id(article_id, "article_id")
 
     content_length = request.headers.get("content-length")
-    if content_length is not None and int(content_length) > MAX_BUNDLE_BYTES:
+    if content_length is not None and int(content_length) > params.server.max_bundle_bytes:
         raise BadRequestError(
             f"Bundle too large: {int(content_length)} bytes "
-            f"(max {MAX_BUNDLE_BYTES})"
+            f"(max {params.server.max_bundle_bytes})"
         )
     bundle_bytes = await request.body()
     db = request.state.db

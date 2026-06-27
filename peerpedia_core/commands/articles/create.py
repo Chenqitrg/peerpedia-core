@@ -16,7 +16,7 @@ from peerpedia_core.config.paths import article_repo_path
 from peerpedia_core.frontmatter import make_article_frontmatter
 from peerpedia_core.storage.db.crud_article import create_article
 from peerpedia_core.storage.db.crud_maintainer import add_maintainer
-from peerpedia_core.storage.git_backend import commit_article, init_article_repo
+from peerpedia_core.storage.git import commit_article, init_article_repo
 from peerpedia_core.crypto import temp_signing_key
 from peerpedia_core.commands.guards import require_authors_exist, require_title_nonempty, require_user
 

@@ -21,8 +21,8 @@ from peerpedia_core.storage.db.crud_merge import create_merge_proposal as _db_cr
 from peerpedia_core.storage.db.engine import get_session
 from peerpedia_core.storage.db.crud_maintainer import add_maintainer
 from peerpedia_core.storage.db.models import User
-import peerpedia_core.storage.git_backend as git_backend
-from peerpedia_core.storage.git_backend import init_article_repo, commit_article, MergeConflictError
+import peerpedia_core.storage.git as git_backend
+from peerpedia_core.storage.git import init_article_repo, commit_article, MergeConflictError
 from tests.conftest import commit_article_signed
 
 

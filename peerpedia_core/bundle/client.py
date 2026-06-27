@@ -50,10 +50,10 @@ from pathlib import Path
 from peerpedia_core.exceptions import ProtocolError, TransportError
 from peerpedia_core.storage.db import Session
 
-from peerpedia_core.commands import apply_sync_bundle
-from peerpedia_core.bundle.git_bundle import (
+from peerpedia_core.commands.reconcile import reconcile_after_sync
+from peerpedia_core.bundle.ancestor import find_common_ancestor
+from peerpedia_core.storage.git import (
     create_bundle,
-    find_common_ancestor,
     get_head,
     ingest_article,
     ingest_bundle,
@@ -202,7 +202,7 @@ def pull_incremental(
             f"pull_incremental: server returned empty bundle for article {article_id}"
         )
     ingest_bundle(DEFAULT_ARTICLES_DIR / article_id, bundle_bytes)
-    return apply_sync_bundle(db, article_id, ff_only=ff_only)
+    return reconcile_after_sync(db, article_id, ff_only=ff_only)
 
 
 def pull_new_article(db: Session, server: str, article_id: str) -> str | None:

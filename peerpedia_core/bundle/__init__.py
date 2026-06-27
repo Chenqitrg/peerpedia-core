@@ -8,7 +8,7 @@ which side initiates the HTTP request.
 """
 
 from peerpedia_core.bundle.client import pull_new_article, sync_article
-from peerpedia_core.bundle.git_bundle import MergeConflictError
+from peerpedia_core.exceptions import MergeConflictError
 from peerpedia_core.bundle.pending import add, clear, count, list_all, remove
 
 __all__ = [

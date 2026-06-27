@@ -53,6 +53,19 @@ _SCORE_DIMS_LIST = ", ".join(
 )
 
 
+def normalize_score_keys(scores: dict) -> None:
+    """Mutate *scores* in place: replace abbreviation keys with full dimension names.
+
+    >>> s = {"orig": 4, "rigor": 3}
+    >>> normalize_score_keys(s)
+    >>> s
+    {'originality': 4, 'rigor': 3}
+    """
+    for abbr, full in SCORE_DIMENSIONS.items():
+        if abbr in scores and full not in scores:
+            scores[full] = scores.pop(abbr)
+
+
 def _clamp(value: float, lo: float = 0.0, hi: float = 5.0) -> float:
     return max(lo, min(hi, value))
 

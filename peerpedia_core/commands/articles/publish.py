@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from peerpedia_core.storage.db import Session
 from peerpedia_core.config.params import make_peerpedia_email, params
+from peerpedia_core.config.paths import article_repo_path
 from peerpedia_core.commands.guards import (
     assert_article_has_score,
     assert_can_publish_article,
@@ -16,18 +17,16 @@ from peerpedia_core.commands.guards import (
     validate_self_review_scores,
 )
 from peerpedia_core.storage.db.crud_article import (
-    clear_publish_consents,
-    set_sink_start,
-    update_article_status,
+    clear_publish_consents, set_sink_start, update_article_status,
 )
 from peerpedia_core.storage.db.crud_review import get_reviews_for_article, upsert_review
-from peerpedia_core.config.paths import article_repo_path
 from peerpedia_core.storage.db.crud_user import get_followers
-from peerpedia_core.storage.git_backend import commit_status_marker
+from peerpedia_core.storage.git import commit_status_marker
 from peerpedia_core.commands.integrity import assert_article_integrity
 from peerpedia_core.commands.reviews import write_review_to_git
 from peerpedia_core.commands.notifications import create_notifications_batch
-from peerpedia_core.commands.workflow import recompute_article_score
+
+
 def _build_publish_notifications(db: Session, article_id: str, a, user) -> list[dict]:
     """Build notification batch for article publication."""
     batch: list[dict] = []
@@ -89,7 +88,8 @@ def publish_article(
     )
     clear_publish_consents(db, article_id)
     set_sink_start(db, article_id, params.sink.new_article_default_days)
-    recompute_article_score(db, article_id)
+    from peerpedia_core.commands.reconcile import reconcile_score
+    reconcile_score(db, article_id)
     assert_article_has_score(a)
 
     # ── Notify ─────────────────────────────────────────────────────────────

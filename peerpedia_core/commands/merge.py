@@ -55,10 +55,10 @@ from peerpedia_core.storage.db.crud_merge import create_merge_proposal as _creat
 from peerpedia_core.commands.articles._helpers import reset_sink
 from peerpedia_core.commands.guards import require_article_repo, require_open_proposal
 from peerpedia_core.commands.notifications import create_notification
-from peerpedia_core.storage.git_backend import (
+from peerpedia_core.storage.git import (
     MergeConflictError, get_head_hash, merge_git_repos,
 )
-from peerpedia_core.commands.articles import rebuild_article_authors
+from peerpedia_core.commands.reconcile import reconcile_authors
 
 
 def _notify_maintainers_except(db, target_id, proposer_id, proposer_name):
@@ -95,7 +95,7 @@ def accept_merge(db: Session, article_id: str, proposal_id: str, user_id: str) -
 
     # ── DB reconciliation ─────────────────────────────────────────────────
     accept_merge_proposal(db, proposal_id)
-    rebuild_article_authors(db, article_id)
+    reconcile_authors(db, article_id)
 
     if was_published:
         reset_sink(db, article_id, target_repo, params.sink.edit_article_default_days)

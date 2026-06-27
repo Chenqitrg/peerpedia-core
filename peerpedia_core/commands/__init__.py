@@ -72,7 +72,7 @@ from peerpedia_core.commands.articles import (
     get_author_ids,
     list_articles,
     publish_article,
-    rebuild_article_authors,
+    publish_ready_articles,
     rollback_article,
     update_article_content,
 )
@@ -90,8 +90,10 @@ from peerpedia_core.commands.reviews import accept_invitation, decline_invitatio
 from peerpedia_core.commands.shares import (
     add_share, get_feed_shares, get_shares_for_user, remove_share,
 )
-from peerpedia_core.commands.bundle import apply_sync_bundle
-from peerpedia_core.commands.integrity import assert_article_integrity, sync_reviews_from_worktree
+from peerpedia_core.commands.reconcile import (
+    reconcile_after_sync, reconcile_reviews,
+)
+from peerpedia_core.commands.integrity import assert_article_integrity
 from peerpedia_core.commands.users import (
     create_user,
     create_user_stub,
@@ -112,12 +114,10 @@ from peerpedia_core.commands.users import (
     update_user_public_key,
     update_user_salt,
 )
-from peerpedia_core.commands.workflow import (
-    publish_ready_articles,
-    recompute_all_reputations,
-    recompute_article_and_author_scores,
-    recompute_article_score,
-    recompute_author_reputation,
+from peerpedia_core.commands.reconcile import (
+    reconcile_all_reputations,
+    reconcile_reputation,
+    reconcile_score,
 )
 from peerpedia_core.commands.views import (
     get_article_view,
@@ -182,7 +182,7 @@ from peerpedia_core.storage.db.crud_alias import (
     list_aliases, remove_alias, resolve_username_or_alias, set_alias,
 )
 from peerpedia_core.storage.db.crud_user import get_users_by_ids
-from peerpedia_core.storage.git_backend import get_commit_history, get_head_hash, read_article_source
+from peerpedia_core.storage.git import get_commit_history, get_head_hash, read_article_source
 
 
 def db_session(database_url: str):
@@ -226,7 +226,8 @@ __all__ = [
     "db_session",
     "withdraw_merge_proposal",
     "add_maintainer_to_article",
-    "apply_sync_bundle",
+    "reconcile_after_sync",
+    "reconcile_reviews",
     "assert_article_integrity",
     "count_articles",
     "create_article_with_content",
@@ -255,7 +256,6 @@ __all__ = [
     "get_user",
     "is_following",
     "get_user_by_name",
-    "sync_reviews_from_worktree",
     "list_articles",
     "list_article_views",
     "list_user_article_views",
@@ -273,13 +273,12 @@ __all__ = [
     "parse_frontmatter",
     "publish_article",
     "publish_ready_articles",
-    "rebuild_article_authors",
+    "reconcile_authors",
     "resolve_username_or_alias",
     "find_users",
-    "recompute_all_reputations",
-    "recompute_article_and_author_scores",
-    "recompute_article_score",
-    "recompute_author_reputation",
+    "reconcile_all_reputations",
+    "reconcile_reputation",
+    "reconcile_score",
     "remove_alias",
     "remove_bookmark",
     "remove_share",

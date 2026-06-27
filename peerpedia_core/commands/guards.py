@@ -55,12 +55,13 @@ from peerpedia_core.storage.db.guards import (  # re-export pure DB guards
     require_user,
     validate_follow_entries,
 )
-from peerpedia_core.storage.git_backend import (
+from peerpedia_core.storage.git import (
     get_commit_history,
     read_review_scores,
     require_commit_pubkey_signature,
 )
 from peerpedia_core.commands.trailers import parse_closes_trailer, validate_closes_target
+from peerpedia_core.types.scores import normalize_score_keys
 
 logger = logging.getLogger(__name__)
 
@@ -299,3 +300,80 @@ def guard_not_last_maintainer(db: Session, article_id: str, caller_id: str, user
             "Cannot remove yourself as the last maintainer. "
             "Add another maintainer first, then remove yourself."
         )
+
+# ── Review validation ──────────────────────────────────────────────────────
+
+
+def assert_valid_review(scores: dict, comment: str | None = None, *, check_comment: bool = True) -> None:
+    """Validate a review before submission — shared by local and sync paths.
+
+    Raises BadRequestError if scores are invalid or comment is too short.
+    """
+    # ── Validate ───────────────────────────────────────────────────────────
+    errors = _collect_review_errors(scores, comment, check_comment=check_comment)
+    if errors:
+        raise BadRequestError("; ".join(errors))
+
+    # ── Normalize keys ─────────────────────────────────────────────────────
+    normalize_score_keys(scores)
+
+
+def _collect_review_errors(scores: dict, comment: str | None, *, check_comment: bool) -> list[str]:
+    """Orchestrate review validation — delegate to individual checkers."""
+    errors: list[str] = []
+
+    if check_comment:
+        _validate_review_comment(comment, errors)
+    _validate_review_scores(scores, errors)
+
+    return errors
+
+
+def _validate_review_scores(scores: dict, errors: list[str]) -> None:
+    """Append score validation errors to *errors* list."""
+    if not isinstance(scores, dict):
+        errors.append("scores must be a dict")
+        return
+
+    _check_score_dimensions(scores, errors)
+    _check_score_values(scores, errors)
+
+
+def _check_score_dimensions(scores: dict, errors: list[str]) -> None:
+    """Append dimension completeness errors to *errors* list."""
+    from peerpedia_core.types.scores import SCORE_DIMENSIONS
+
+    abbr_dims = set(SCORE_DIMENSIONS.keys())
+    full_dims = set(SCORE_DIMENSIONS.values())
+    keys = set(scores.keys())
+    if not (abbr_dims.issubset(keys) or full_dims.issubset(keys)):
+        errors.append(
+            f"scores must contain all {len(SCORE_DIMENSIONS)} dimensions: "
+            f"{', '.join(sorted(SCORE_DIMENSIONS.keys()))}"
+        )
+
+
+def _check_score_values(scores: dict, errors: list[str]) -> None:
+    """Append score value range errors (1-5) to *errors* list."""
+    for dim, val in scores.items():
+        if not isinstance(val, (int, float)) or val < 1 or val > 5:
+            errors.append(
+                f"score dimension '{dim}' must be a number between 1 and 5, got {val!r}"
+            )
+
+
+def _validate_review_comment(comment: str | None, errors: list[str]) -> None:
+    """Append comment validation errors to *errors* list."""
+    from peerpedia_core.config.params import params
+
+    min_len = params.comment.min_length
+    if not comment or not isinstance(comment, str):
+        errors.append("Review comment is required")
+    elif len(comment.strip()) < min_len:
+        actual = len(comment.strip())
+        errors.append(
+            f"Review comment must be at least {min_len} characters "
+            f"(got {actual} — {min_len - actual} more needed). "
+            f"Tip: echo 'your comment' | wc -c to count before pasting."
+        )
+

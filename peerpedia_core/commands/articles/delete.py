@@ -13,7 +13,7 @@ from peerpedia_core.storage.db.crud_article import (
 )
 from peerpedia_core.storage.db.crud_maintainer import get_maintainer_ids
 from peerpedia_core.config.paths import article_repo_path
-from peerpedia_core.storage.git_backend import delete_article_repo
+from peerpedia_core.storage.git import delete_article_repo
 from peerpedia_core.commands.guards import require_article, require_user
 from peerpedia_core.commands.integrity import assert_article_integrity
 

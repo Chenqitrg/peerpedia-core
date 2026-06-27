@@ -17,12 +17,10 @@ from peerpedia_core.commands.integrity import assert_article_integrity
 from peerpedia_core.storage.db.crud_article import (
     clear_publish_consents,
 )
-from peerpedia_core.storage.git_backend import commit_article, resolve_article_format
+from peerpedia_core.storage.git import commit_article, resolve_article_format
 from peerpedia_core.crypto import temp_signing_key
-from peerpedia_core.commands.articles._helpers import (
-    reset_sink,
-    rebuild_article_authors,
-)
+from peerpedia_core.commands.articles._helpers import reset_sink
+from peerpedia_core.commands.reconcile import reconcile_authors
 from peerpedia_core.commands.guards import authorize_article_action, require_article_repo
 
 def _rewrite_article_file(
@@ -94,7 +92,7 @@ def update_article_content(
         if val is not None:
             setattr(a, field, val)
     clear_publish_consents(db, article_id)
-    rebuild_article_authors(db, article_id, since_hash=a.last_author_rebuild_hash)
+    reconcile_authors(db, article_id, since_hash=a.last_author_rebuild_hash)
 
     # ── Sink timer ─────────────────────────────────────────────────────────
     if old_status in ("sedimentation", "published"):

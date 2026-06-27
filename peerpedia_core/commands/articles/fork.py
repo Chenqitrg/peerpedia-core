@@ -18,7 +18,7 @@ from peerpedia_core.storage.db.crud_article import (
 )
 from peerpedia_core.storage.db.crud_maintainer import add_maintainer
 from peerpedia_core.config.paths import article_repo_path
-from peerpedia_core.storage.git_backend import clone_article_repo, get_commit_authors
+from peerpedia_core.storage.git import clone_article_repo, get_commit_authors
 
 from peerpedia_core.commands.guards import authorize_article_action, require_article_repo
 

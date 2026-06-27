@@ -147,7 +147,7 @@ Dimension mapping (5 article dims → 4 reputation dims, PLACEHOLDER)
 
 from peerpedia_core.config.params import params
 from peerpedia_core.types.scores import FiveDimScores, ReputationScores
-from peerpedia_core.workflow.state import ReputationState
+from peerpedia_core.compute.state import ReputationState
 
 # Field names derived from dataclasses — single source of truth, never hardcoded.
 _REP_FIELDS = tuple(ReputationScores.__dataclass_fields__.keys())

@@ -21,7 +21,7 @@ from peerpedia_core.storage.db.crud_maintainer import add_maintainer
 from peerpedia_core.storage.db.crud_review import upsert_review
 from peerpedia_core.storage.db.engine import get_session
 from peerpedia_core.storage.db.models import User
-from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, commit_article, get_commit_history, init_article_repo
+from peerpedia_core.storage.git import DEFAULT_ARTICLES_DIR, commit_article, get_commit_history, init_article_repo
 from tests.conftest import commit_article_signed
 
 def _create_user(db, user_id: str, name: str = "Test Author"):
@@ -167,7 +167,7 @@ def test_rollback_requires_signing_keys(db, test_signing_key_bytes, test_pubkey_
     db.flush()
 
     # Set up the git repo so we get past the NotFoundError check.
-    from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, init_article_repo
+    from peerpedia_core.storage.git import DEFAULT_ARTICLES_DIR, init_article_repo
     rp = DEFAULT_ARTICLES_DIR / "art-1"
     import shutil
     if (rp / ".git").is_dir():

@@ -145,7 +145,7 @@ class TestPublishReadyArticles:
         import tempfile
         from pathlib import Path
 
-        from peerpedia_core.storage.git_backend import commit_article, init_article_repo
+        from peerpedia_core.storage.git import commit_article, init_article_repo
 
         author = _make_user(session, "has_git")
         past_start = datetime.now(timezone.utc) - timedelta(days=200)
@@ -168,7 +168,7 @@ class TestPublishReadyArticles:
                     scope="sedimentation", scores=_build_score(4, 4, 4, 4, 4),
                 )
 
-            import peerpedia_core.storage.git_backend as gb_mod
+            import peerpedia_core.storage.git as gb_mod
             orig_dir = gb_mod.DEFAULT_ARTICLES_DIR
             try:
                 gb_mod.DEFAULT_ARTICLES_DIR = base

@@ -12,7 +12,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR
+from peerpedia_core.storage.git import DEFAULT_ARTICLES_DIR
 
 
 # Closes: review/{reviewer-dir}/thread-{n}

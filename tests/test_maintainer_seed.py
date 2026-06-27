@@ -24,8 +24,8 @@ from peerpedia_core.storage.db.crud_merge import create_merge_proposal
 from peerpedia_core.storage.db.crud_user import get_user
 from peerpedia_core.storage.db.engine import get_session
 from peerpedia_core.storage.db.models import User
-from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, init_article_repo, commit_article
-import peerpedia_core.storage.git_backend as git_backend
+from peerpedia_core.storage.git import DEFAULT_ARTICLES_DIR, init_article_repo, commit_article
+import peerpedia_core.storage.git as git_backend
 from tests.conftest import commit_article_signed
 
 

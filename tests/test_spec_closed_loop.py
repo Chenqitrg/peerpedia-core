@@ -499,7 +499,7 @@ class TestSpecReviewReply:
 
         # Set up git repo with review thread so reply works
         from peerpedia_core.cli.helpers import DEFAULT_ARTICLES_DIR
-        from peerpedia_core.storage.git_backend import init_article_repo, commit_article
+        from peerpedia_core.storage.git import init_article_repo, commit_article
         from peerpedia_core.crypto import write_key_to_tempfile
         rp = DEFAULT_ARTICLES_DIR / art["id"]
         if not (rp / ".git").is_dir():
@@ -580,7 +580,7 @@ class TestSpecForkMergeWorkflow:
 
         # Ensure git repo with a signed commit exists (fork requires it)
         from peerpedia_core.cli.helpers import DEFAULT_ARTICLES_DIR
-        from peerpedia_core.storage.git_backend import init_article_repo, commit_article
+        from peerpedia_core.storage.git import init_article_repo, commit_article
         from peerpedia_core.crypto import write_key_to_tempfile
         from peerpedia_core.storage.db.models import User
 

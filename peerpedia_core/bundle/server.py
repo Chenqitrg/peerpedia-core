@@ -51,8 +51,9 @@ from pathlib import Path
 from peerpedia_core.exceptions import ConflictError
 from peerpedia_core.storage.db import Session
 
-from peerpedia_core.commands import apply_sync_bundle, get_commit_history, read_article_source
-from peerpedia_core.bundle.git_bundle import (
+from peerpedia_core.commands.reconcile import reconcile_after_sync
+from peerpedia_core.commands import get_commit_history, read_article_source
+from peerpedia_core.storage.git import (
     create_bundle,
     get_head as _git_get_head,
     ingest_article,
@@ -91,7 +92,7 @@ def apply_sync(db: Session, article_id: str, bundle_bytes: bytes) -> str:
     """
     rp = DEFAULT_ARTICLES_DIR / article_id
     ingest_bundle(rp, bundle_bytes)
-    return apply_sync_bundle(db, article_id, ff_only=True)
+    return reconcile_after_sync(db, article_id, ff_only=True)
 
 
 def get_bundle(repo_path: Path, since_hash: str | None) -> bytes | None:

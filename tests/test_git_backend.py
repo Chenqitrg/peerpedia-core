@@ -20,7 +20,7 @@ def articles_dir():
 @pytest.fixture
 def repo(articles_dir):
     """An initialized article repo with one commit."""
-    from peerpedia_core.storage.git_backend import commit_article, init_article_repo
+    from peerpedia_core.storage.git import commit_article, init_article_repo
 
     rp = init_article_repo(articles_dir / "test-article")
     # write initial content
@@ -31,14 +31,14 @@ def repo(articles_dir):
 
 class TestInitAndCommit:
     def test_init_creates_git_dir(self, articles_dir):
-        from peerpedia_core.storage.git_backend import init_article_repo
+        from peerpedia_core.storage.git import init_article_repo
 
         rp = init_article_repo(articles_dir / "test-1")
         assert (rp / ".git").is_dir()
         assert rp.name == "test-1"
 
     def test_commit_returns_hash(self, articles_dir):
-        from peerpedia_core.storage.git_backend import commit_article, init_article_repo
+        from peerpedia_core.storage.git import commit_article, init_article_repo
 
         rp = init_article_repo(articles_dir / "test-2")
         (rp / "article.md").write_text("content")
@@ -46,7 +46,7 @@ class TestInitAndCommit:
         assert len(h) == 40  # full SHA hash
 
     def test_commit_updates_file(self, articles_dir):
-        from peerpedia_core.storage.git_backend import commit_article, init_article_repo
+        from peerpedia_core.storage.git import commit_article, init_article_repo
 
         rp = init_article_repo(articles_dir / "test-3")
         f = rp / "article.md"
@@ -59,7 +59,7 @@ class TestInitAndCommit:
 
     def test_commit_initial_on_empty_repo(self, articles_dir):
         """commit_article on a repo with only the init commit creates a second commit."""
-        from peerpedia_core.storage.git_backend import commit_article, init_article_repo
+        from peerpedia_core.storage.git import commit_article, init_article_repo
 
         rp = init_article_repo(articles_dir / "test-init-empty")
         (rp / "article.md").write_text("content")
@@ -69,7 +69,7 @@ class TestInitAndCommit:
 
 class TestHistory:
     def test_history_returns_commits(self, repo):
-        from peerpedia_core.storage.git_backend import get_commit_history
+        from peerpedia_core.storage.git import get_commit_history
 
         history = get_commit_history(repo)
         assert len(history) >= 1
@@ -78,7 +78,7 @@ class TestHistory:
         assert "author" in history[0]
 
     def test_history_order_is_newest_first(self, articles_dir):
-        from peerpedia_core.storage.git_backend import (
+        from peerpedia_core.storage.git import (
             commit_article,
             get_commit_history,
             init_article_repo,
@@ -96,7 +96,7 @@ class TestHistory:
 
     def test_history_empty_repo_raises(self, articles_dir):
         """get_commit_history on a repo with no commits raises ValueError."""
-        from peerpedia_core.storage.git_backend import get_commit_history
+        from peerpedia_core.storage.git import get_commit_history
 
         rp = articles_dir / "test-empty-history"
         rp.mkdir(parents=True, exist_ok=True)
@@ -109,7 +109,7 @@ class TestHistory:
 
 class TestDiff:
     def test_diff_returns_text(self, articles_dir):
-        from peerpedia_core.storage.git_backend import (
+        from peerpedia_core.storage.git import (
             commit_article,
             get_commit_history,
             get_diff_between,
@@ -129,7 +129,7 @@ class TestDiff:
         assert "stats" in result
 
     def test_diff_between_two_commits(self, articles_dir):
-        from peerpedia_core.storage.git_backend import (
+        from peerpedia_core.storage.git import (
             commit_article,
             get_commit_history,
             get_diff_between,
@@ -148,7 +148,7 @@ class TestDiff:
 
     def test_diff_between_has_real_stats(self, articles_dir):
         """Bug 12: get_diff_between returns 'stats': {} — should compute real stats."""
-        from peerpedia_core.storage.git_backend import (
+        from peerpedia_core.storage.git import (
             commit_article,
             get_commit_history,
             get_diff_between,
@@ -178,7 +178,7 @@ class TestBundleSync:
         import git as gitmod
 
         from peerpedia_core.bundle.git_bundle import ingest_bundle
-        from peerpedia_core.storage.git_backend import (
+        from peerpedia_core.storage.git import (
             commit_article,
             init_article_repo,
         )
@@ -225,7 +225,7 @@ class TestBundleSync:
     def test_create_incremental_bundle(self, articles_dir):
         """create_bundle returns bytes for since..HEAD range."""
         from peerpedia_core.bundle.git_bundle import create_bundle
-        from peerpedia_core.storage.git_backend import (
+        from peerpedia_core.storage.git import (
             commit_article,
             init_article_repo,
         )
@@ -245,7 +245,7 @@ class TestBundleSync:
     def test_create_bundle_bad_since_raises(self, articles_dir):
         """create_bundle with non-ancestor since_hash raises ValueError."""
         from peerpedia_core.bundle.git_bundle import create_bundle
-        from peerpedia_core.storage.git_backend import (
+        from peerpedia_core.storage.git import (
             commit_article,
             init_article_repo,
         )
@@ -300,7 +300,7 @@ class TestBundleSync:
         import git as gitmod
 
         from peerpedia_core.bundle.git_bundle import ingest_bundle
-        from peerpedia_core.storage.git_backend import (
+        from peerpedia_core.storage.git import (
             commit_article,
             init_article_repo,
         )
@@ -372,7 +372,7 @@ class TestFindCommonAncestor:
         """
         import git as _git
 
-        from peerpedia_core.storage.git_backend import commit_article, init_article_repo
+        from peerpedia_core.storage.git import commit_article, init_article_repo
 
         rp = init_article_repo(base_dir / article_id)
         hashes = []
@@ -545,7 +545,7 @@ class TestFindCommonAncestor:
         import git
 
         from peerpedia_core.bundle.git_bundle import find_common_ancestor
-        from peerpedia_core.storage.git_backend import (
+        from peerpedia_core.storage.git import (
             commit_article,
             init_article_repo,
         )
@@ -596,7 +596,7 @@ class TestClosedLoopSync:
         self, base_dir: Path, article_id: str, content: str, author_name: str, author_email: str
     ) -> tuple[Path, str]:
         """Create a repo simulating a Tauri client with one commit. Returns (rp, head)."""
-        from peerpedia_core.storage.git_backend import commit_article, init_article_repo
+        from peerpedia_core.storage.git import commit_article, init_article_repo
 
         rp = init_article_repo(base_dir / article_id)
         (rp / "article.md").write_text(content)
@@ -608,7 +608,7 @@ class TestClosedLoopSync:
         import git as gitmod
 
         from peerpedia_core.bundle.git_bundle import create_bundle, ingest_bundle
-        from peerpedia_core.storage.git_backend import (
+        from peerpedia_core.storage.git import (
             commit_article,
             init_article_repo,
         )
@@ -693,7 +693,7 @@ class TestClosedLoopSync:
         import git as gitmod
 
         from peerpedia_core.bundle.git_bundle import create_bundle, ingest_bundle
-        from peerpedia_core.storage.git_backend import (
+        from peerpedia_core.storage.git import (
             commit_article,
             init_article_repo,
         )
@@ -741,7 +741,7 @@ class TestCommitStatusMarker:
     """Tests for ``commit_status_marker`` — platform [status] commits."""
 
     def test_writes_platform_commit(self, articles_dir):
-        from peerpedia_core.storage.git_backend import (
+        from peerpedia_core.storage.git import (
             commit_status_marker, init_article_repo, get_commit_history,
         )
 
@@ -759,7 +759,7 @@ class TestCommitStatusMarker:
         assert "PeerPedia" in top["author"]
 
     def test_rejects_invalid_status(self, articles_dir):
-        from peerpedia_core.storage.git_backend import (
+        from peerpedia_core.storage.git import (
             commit_status_marker, init_article_repo,
         )
 
@@ -780,7 +780,7 @@ class TestBranchProtection:
     def test_init_creates_on_main(self, articles_dir):
         """init_article_repo creates initial commit on main, not init.defaultBranch."""
         import git as _git
-        from peerpedia_core.storage.git_backend import init_article_repo
+        from peerpedia_core.storage.git import init_article_repo
 
         rp = init_article_repo(articles_dir / "test-init-main")
         repo = _git.Repo(rp)
@@ -790,7 +790,7 @@ class TestBranchProtection:
     def test_empty_repo_guard_noop(self, articles_dir):
         """_assert_on_main returns early (no-op) on empty repo with no commits."""
         import git as _git
-        from peerpedia_core.storage.git_backend import _assert_on_main
+        from peerpedia_core.storage.git import _assert_on_main
 
         # Create empty repo with main branch but no commits
         rp = articles_dir / "test-empty"
@@ -802,7 +802,7 @@ class TestBranchProtection:
     def test_commit_on_wrong_branch_raises(self, articles_dir):
         """commit_article raises when HEAD is not on main."""
         import git as _git
-        from peerpedia_core.storage.git_backend import init_article_repo
+        from peerpedia_core.storage.git import init_article_repo
 
         rp = init_article_repo(articles_dir / "test-wrong-commit")
         repo = _git.Repo(rp)
@@ -819,7 +819,7 @@ class TestBranchProtection:
     def test_get_head_hash_on_wrong_branch_raises(self, articles_dir):
         """get_head_hash raises when HEAD is not on main."""
         import git as _git
-        from peerpedia_core.storage.git_backend import get_head_hash, init_article_repo
+        from peerpedia_core.storage.git import get_head_hash, init_article_repo
 
         rp = init_article_repo(articles_dir / "test-wrong-head")
         repo = _git.Repo(rp)
@@ -832,7 +832,7 @@ class TestBranchProtection:
     def test_get_commit_history_on_wrong_branch_raises(self, articles_dir):
         """get_commit_history raises when HEAD is not on main."""
         import git as _git
-        from peerpedia_core.storage.git_backend import get_commit_history, init_article_repo
+        from peerpedia_core.storage.git import get_commit_history, init_article_repo
 
         rp = init_article_repo(articles_dir / "test-wrong-history")
         repo = _git.Repo(rp)
@@ -845,7 +845,7 @@ class TestBranchProtection:
     def test_get_commit_authors_on_wrong_branch_raises(self, articles_dir):
         """get_commit_authors raises when HEAD is not on main."""
         import git as _git
-        from peerpedia_core.storage.git_backend import get_commit_authors, init_article_repo
+        from peerpedia_core.storage.git import get_commit_authors, init_article_repo
 
         rp = init_article_repo(articles_dir / "test-wrong-authors")
         repo = _git.Repo(rp)
@@ -858,7 +858,7 @@ class TestBranchProtection:
     def test_detached_head_raises(self, articles_dir):
         """_assert_on_main raises RuntimeError on detached HEAD."""
         import git as _git
-        from peerpedia_core.storage.git_backend import _assert_on_main, init_article_repo
+        from peerpedia_core.storage.git import _assert_on_main, init_article_repo
 
         rp = init_article_repo(articles_dir / "test-detached")
         (rp / "article.md").write_text("# Content\n")
@@ -875,7 +875,7 @@ class TestBranchProtection:
     def test_merge_git_repos_target_wrong_branch_raises(self, articles_dir):
         """merge_git_repos raises when target is not on main."""
         import git as _git
-        from peerpedia_core.storage.git_backend import (
+        from peerpedia_core.storage.git import (
             commit_article, init_article_repo, merge_git_repos,
         )
 

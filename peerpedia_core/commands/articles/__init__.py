@@ -3,12 +3,12 @@
 
 """Article lifecycle — create, fork, publish, rollback, update, delete, query."""
 
-from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR  # noqa: F401 — re-exported for test mocks
-from peerpedia_core.commands.articles._helpers import rebuild_article_authors
+from peerpedia_core.storage.git import DEFAULT_ARTICLES_DIR  # noqa: F401 — re-exported for test mocks
 from peerpedia_core.commands.articles.create import create_article_with_content
 from peerpedia_core.commands.articles.delete import delete_article
 from peerpedia_core.commands.articles.fork import fork_article
 from peerpedia_core.commands.articles.publish import publish_article
+from peerpedia_core.commands.articles.sink import publish_ready_articles
 from peerpedia_core.commands.articles.rollback import rollback_article
 from peerpedia_core.commands.articles.update import update_article_content
 from peerpedia_core.commands.articles.diff import diff_article

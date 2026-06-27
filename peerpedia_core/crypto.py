@@ -153,6 +153,18 @@ def temp_signing_key(private_key_bytes: bytes) -> Generator[Path, None, None]:
         key_path.unlink(missing_ok=True)
 
 
+def write_allowed_signers_file(email: str, pubkey_ssh_line: str) -> Path:
+    """Write a temporary allowed_signers file and return its path.
+
+    *pubkey_ssh_line* is a full SSH public key line
+    (``"ssh-ed25519 AAAAC3NzaC1..."``).
+    """
+    fd, path = tempfile.mkstemp(suffix="_allowed_signers")
+    with os.fdopen(fd, "w") as f:
+        f.write(f"{email} {pubkey_ssh_line}\n")
+    return Path(path)
+
+
 def new_salt() -> str:
     """Generate a new random 16-byte salt, hex-encoded."""
     return secrets.token_bytes(16).hex()

@@ -80,7 +80,7 @@ def commit_article_signed(repo_path, message, author_name, author_email):
     """
     import hashlib
 
-    from peerpedia_core.storage.git_backend import commit_article
+    from peerpedia_core.storage.git import commit_article
 
     salt = hashlib.sha256(author_email.encode()).hexdigest()[:32]
     priv_bytes, pub_bytes = derive_key_pair(_TEST_PASSWORD, salt)

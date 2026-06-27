@@ -18,7 +18,7 @@ from peerpedia_core.storage.db.crud_bookmark import (
 
 
 def add_bookmark(db: Session, user_id: str, article_id: str):
-    """Add a bookmark. Returns the Bookmark row."""
+    """Add a bookmark. Returns the BookmarkStorage row."""
     return _add(db, user_id, article_id)
 
 

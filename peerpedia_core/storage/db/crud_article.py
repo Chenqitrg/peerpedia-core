@@ -10,7 +10,7 @@ operations within a single command either all succeed or all roll back.
 Functions
 ---------
 Author helpers (join table)
-    add_article_authors       Insert ArticleAuthor rows
+    add_article_authors       Insert ArticleAuthorStorage rows
     set_article_authors       Replace all authors (delete + re-insert)
     get_author_ids            Ordered author list for one article
     get_author_ids_batch      Batch version for multiple articles
@@ -42,14 +42,15 @@ Reviewer's checklist
 """
 
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from peerpedia_core.exceptions import NotFoundError
 from peerpedia_core.storage.db.models import (
-    Article, ArticleAuthor, Bookmark, Citation, Follow, MergeProposal,
-    Review, ScriptMaintainer,
+    ArticleMetaStorage, ArticleAuthorStorage, BookmarkStorage, CitationStorage, FollowStorage, MergeProposalStorage,
+    ReviewMetaStorage, ScriptMaintainerStorage,
 )
 from peerpedia_core.storage.db.crud_user import create_user_stub
 
@@ -57,10 +58,10 @@ from peerpedia_core.storage.db.crud_user import create_user_stub
 
 
 def add_article_authors(session: Session, article_id: str, author_ids: list[str]) -> None:
-    """Insert ArticleAuthor rows for an article."""
+    """Insert ArticleAuthorStorage rows for an article."""
     for pos, author_id in enumerate(author_ids):
         session.add(
-            ArticleAuthor(
+            ArticleAuthorStorage(
                 article_id=article_id,
                 author_id=author_id,
                 position=pos,
@@ -70,13 +71,13 @@ def add_article_authors(session: Session, article_id: str, author_ids: list[str]
 
 def set_article_authors(session: Session, article_id: str, author_ids: list[str]) -> None:
     """Replace all author rows for an article (delete + re-insert)."""
-    session.query(ArticleAuthor).filter(ArticleAuthor.article_id == article_id).delete()
+    session.query(ArticleAuthorStorage).filter(ArticleAuthor.article_id == article_id).delete()
     add_article_authors(session, article_id, author_ids)
 
 
 def get_author_ids(session: Session, article_id: str) -> list[str]:
     """Get all author IDs for an article (ordered by position)."""
-    rows = session.query(ArticleAuthor).filter(ArticleAuthor.article_id == article_id).order_by(ArticleAuthor.position).all()
+    rows = session.query(ArticleAuthorStorage).filter(ArticleAuthor.article_id == article_id).order_by(ArticleAuthor.position).all()
     return [r.author_id for r in rows]
 
 
@@ -90,9 +91,9 @@ def get_author_ids_batch(session: Session, article_ids: list[str]) -> dict[str, 
     if not article_ids:
         return result
     rows = (
-        session.query(ArticleAuthor)
+        session.query(ArticleAuthorStorage)
         .filter(ArticleAuthor.article_id.in_(article_ids))
-        .order_by(ArticleAuthor.article_id, ArticleAuthor.position)
+        .order_by(ArticleAuthor.article_id, ArticleAuthorStorage.position)
         .all()
     )
     for r in rows:
@@ -100,11 +101,11 @@ def get_author_ids_batch(session: Session, article_ids: list[str]) -> dict[str, 
     return result
 
 
-def get_articles_by_author(session: Session, author_id: str) -> list[Article]:
+def get_articles_by_author(session: Session, author_id: str) -> list[ArticleMetaStorage]:
     """Return all articles where *author_id* is an author."""
     return (
-        session.query(Article)
-        .join(ArticleAuthor, Article.id == ArticleAuthor.article_id)
+        session.query(ArticleMetaStorage)
+        .join(ArticleAuthorStorage, ArticleMetaStorage.id == ArticleAuthorStorage.article_id)
         .filter(ArticleAuthor.author_id == author_id)
         .all()
     )
@@ -119,9 +120,9 @@ def create_article(
     title: str,
     status: str = "draft",
     **kwargs,
-) -> Article:
+) -> ArticleMetaStorage:
     """Create a new article record with author rows in the join table."""
-    a = Article(title=title, status=status, **kwargs)
+    a = ArticleMetaStorage(title=title, status=status, **kwargs)
     session.add(a)
     session.flush()  # ensure a.id is available
     add_article_authors(session, a.id, authors)
@@ -131,13 +132,13 @@ def create_article(
 
 def create_article_from_orm(
     session: Session,
-    article: Article,
+    article: ArticleMetaStorage,
     author_ids: list[str],
-) -> Article:
-    """Create an Article row from a pre-built ORM object with author join rows.
+) -> ArticleMetaStorage:
+    """Create an ArticleMetaStorage row from a pre-built ORM object with author join rows.
 
-    Unlike ``create_article`` which constructs the Article from keyword
-    parameters, this takes an already-built Article object. Use when the
+    Unlike ``create_article`` which constructs the ArticleMetaStorage from keyword
+    parameters, this takes an already-built ArticleMetaStorage object. Use when the
     caller has deserialized article metadata from a peer or otherwise
     constructed the ORM object externally.
     """
@@ -149,12 +150,12 @@ def create_article_from_orm(
 
 
 def ensure_article_stub(
-    session: Session, data: dict, *, author_ids: list[str],
-) -> Article | None:
+    session: Session, data: dict[str, Any], *, author_ids: list[str],
+) -> ArticleMetaStorage | None:
     """Create an article stub from peer data, or return None if it already exists.
 
     Converts ISO datetime strings in *data* to Python datetime objects.
-    Creates User stubs for any *author_ids* not yet in the local DB.
+    Creates UserStorage stubs for any *author_ids* not yet in the local DB.
     """
     if get_article(session, data["id"]) is not None:
         return None
@@ -168,13 +169,13 @@ def ensure_article_stub(
     for aid in author_ids:
         create_user_stub(session, user_id=aid, name=aid, public_key="", salt="")
 
-    article = Article(**{k: v for k, v in data.items() if k != "authors"})
+    article = ArticleMetaStorage(**{k: v for k, v in data.items() if k != "authors"})
     return create_article_from_orm(session, article, author_ids)
 
 
-def get_article(session: Session, article_id: str) -> Article | None:
+def get_article(session: Session, article_id: str) -> ArticleMetaStorage | None:
     """Return an article by ID, or None if not found."""
-    return session.get(Article, article_id)
+    return session.get(ArticleMetaStorage, article_id)
 
 
 def list_articles(
@@ -187,11 +188,11 @@ def list_articles(
     bookmarked_by: str | None = None,
     limit: int | None = None,
     offset: int = 0,
-) -> list[Article]:
+) -> list[ArticleMetaStorage]:
     """List articles with optional SQL-level AND filters, ordered by created_at desc.
 
     Args:
-        status: Filter by Article.status.
+        status: Filter by ArticleMetaStorage.status.
         search_query: Fuzzy title match (case-insensitive ILIKE).
         id_prefix: UUID prefix match (``Article.id.startswith``).
         author_id: Only articles authored by this user (JOIN on article_authors).
@@ -199,7 +200,7 @@ def list_articles(
         limit: Max results. None = unlimited.
         offset: Pagination offset.
     """
-    q = session.query(Article)
+    q = session.query(ArticleMetaStorage)
     joined = False
     if isinstance(status, set):
         if status:
@@ -211,7 +212,7 @@ def list_articles(
     if search_query:
         q = q.filter(Article.title.ilike(f"%{search_query}%"))
     if author_ids:
-        q = q.join(ArticleAuthor, ArticleAuthor.article_id == Article.id)
+        q = q.join(ArticleAuthorStorage, ArticleAuthorStorage.article_id == ArticleMetaStorage.id)
         joined = True
         if isinstance(author_ids, list):
             q = q.filter(ArticleAuthor.author_id.in_(author_ids))
@@ -220,13 +221,13 @@ def list_articles(
     elif viewer_id:
         followed_sub = (
             select(Follow.followed_id)
-            .where(Follow.follower_id == viewer_id, Follow.deleted_at.is_(None))
+            .where(Follow.follower_id == viewer_id, FollowStorage.deleted_at.is_(None))
         )
-        q = q.join(ArticleAuthor, ArticleAuthor.article_id == Article.id)\
+        q = q.join(ArticleAuthorStorage, ArticleAuthorStorage.article_id == ArticleMetaStorage.id)\
              .filter(ArticleAuthor.author_id.in_(followed_sub))
         joined = True
     if bookmarked_by:
-        q = q.join(Bookmark, Bookmark.article_id == Article.id)\
+        q = q.join(BookmarkStorage, BookmarkStorage.article_id == ArticleMetaStorage.id)\
              .filter(Bookmark.user_id == bookmarked_by)
         joined = True
     if joined:
@@ -243,14 +244,14 @@ def get_all_article_ids(session: Session) -> list[str]:
 
 def count_articles(session: Session, status: str | set[str] | None = None, author_id: str | None = None) -> int:
     """Count articles matching optional status and author filters."""
-    q = session.query(Article)
+    q = session.query(ArticleMetaStorage)
     if isinstance(status, set):
         if status:
             q = q.filter(Article.status.in_(list(status)))
     elif status:
         q = q.filter(Article.status == status)
     if author_id:
-        q = q.join(ArticleAuthor, Article.id == ArticleAuthor.article_id).filter(ArticleAuthor.author_id == author_id)
+        q = q.join(ArticleAuthorStorage, ArticleMetaStorage.id == ArticleAuthorStorage.article_id).filter(ArticleAuthor.author_id == author_id)
     return q.count()
 
 
@@ -270,7 +271,7 @@ def update_article_compiled(
 
     Raises NotFoundError if the article does not exist.
     """
-    rows = session.query(Article).filter(Article.id == article_id).update(
+    rows = session.query(ArticleMetaStorage).filter(Article.id == article_id).update(
         {"compiled_format": html_format, "compiled_output": output, "compiled_pages": pages},
         synchronize_session="fetch",
     )
@@ -289,7 +290,7 @@ def update_article_status(session: Session, article_id: str, new_status: str) ->
     _VALID_STATUSES = {"draft", "sedimentation", "published", "rejected"}
     if new_status not in _VALID_STATUSES:
         raise ValueError(f"Invalid status {new_status!r}, must be one of {_VALID_STATUSES}")
-    rows = session.query(Article).filter(Article.id == article_id).update(
+    rows = session.query(ArticleMetaStorage).filter(Article.id == article_id).update(
         {"status": new_status}, synchronize_session="fetch"
     )
     if rows == 0:
@@ -297,9 +298,9 @@ def update_article_status(session: Session, article_id: str, new_status: str) ->
     session.expire_all()
 
 
-def update_article_score(session: Session, article_id: str, score: dict) -> None:
+def update_article_score(session: Session, article_id: str, score: dict[str, float]) -> None:
     """Set the computed score for an article. Raises NotFoundError if not found."""
-    rows = session.query(Article).filter(Article.id == article_id).update(
+    rows = session.query(ArticleMetaStorage).filter(Article.id == article_id).update(
         {"score": score}, synchronize_session="fetch"
     )
     if rows == 0:
@@ -309,8 +310,8 @@ def update_article_score(session: Session, article_id: str, score: dict) -> None
 
 def increment_fork_count(session: Session, article_id: str) -> None:
     """Atomically increment ``fork_count`` by 1. Raises NotFoundError if not found."""
-    rows = session.query(Article).filter(Article.id == article_id).update(
-        {"fork_count": Article.fork_count + 1}, synchronize_session="fetch"
+    rows = session.query(ArticleMetaStorage).filter(Article.id == article_id).update(
+        {"fork_count": ArticleMetaStorage.fork_count + 1}, synchronize_session="fetch"
     )
     if rows == 0:
         raise NotFoundError("Article not found", resource_type="article", resource_id=article_id)
@@ -320,8 +321,8 @@ def increment_fork_count(session: Session, article_id: str) -> None:
 def decrement_fork_count(session: Session, article_id: str) -> None:
     """Atomically decrement ``fork_count`` by 1 (floor at 0). Raises NotFoundError if not found."""
     from sqlalchemy import case
-    rows = session.query(Article).filter(Article.id == article_id).update(
-        {"fork_count": case((Article.fork_count > 0, Article.fork_count - 1), else_=0)},
+    rows = session.query(ArticleMetaStorage).filter(Article.id == article_id).update(
+        {"fork_count": case((Article.fork_count > 0, ArticleMetaStorage.fork_count - 1), else_=0)},
         synchronize_session="fetch",
     )
     if rows == 0:
@@ -336,7 +337,7 @@ def set_sink_start(session: Session, article_id: str, duration_days: int) -> Non
     """
     from datetime import datetime, timezone
 
-    rows = session.query(Article).filter(Article.id == article_id).update(
+    rows = session.query(ArticleMetaStorage).filter(Article.id == article_id).update(
         {"status": "sedimentation", "sink_start": datetime.now(timezone.utc),
          "sink_duration_days": duration_days},
         synchronize_session="fetch",
@@ -357,16 +358,16 @@ def delete_article(session: Session, article_id: str) -> None:
     Raises NotFoundError if the article does not exist.
     """
     # Delete related records
-    session.query(ArticleAuthor).filter(ArticleAuthor.article_id == article_id).delete()
-    session.query(ScriptMaintainer).filter(ScriptMaintainer.article_id == article_id).delete()
-    session.query(Review).filter(Review.article_id == article_id).delete()
-    session.query(Bookmark).filter(Bookmark.article_id == article_id).delete()
-    session.query(Citation).filter((Citation.from_article_id == article_id) | (Citation.to_article_id == article_id)).delete()
-    session.query(MergeProposal).filter(
+    session.query(ArticleAuthorStorage).filter(ArticleAuthor.article_id == article_id).delete()
+    session.query(ScriptMaintainerStorage).filter(ScriptMaintainer.article_id == article_id).delete()
+    session.query(ReviewMetaStorage).filter(Review.article_id == article_id).delete()
+    session.query(BookmarkStorage).filter(Bookmark.article_id == article_id).delete()
+    session.query(CitationStorage).filter((Citation.from_article_id == article_id) | (Citation.to_article_id == article_id)).delete()
+    session.query(MergeProposalStorage).filter(
         (MergeProposal.fork_article_id == article_id) | (MergeProposal.target_article_id == article_id)
     ).delete()
 
-    rows = session.query(Article).filter(Article.id == article_id).delete()
+    rows = session.query(ArticleMetaStorage).filter(Article.id == article_id).delete()
     if rows == 0:
         raise NotFoundError("Article not found", resource_type="article", resource_id=article_id)
     session.flush()
@@ -381,15 +382,15 @@ def extend_sink(session: Session, article_id: str, extra_days: int, max_days: in
     """
     if extra_days <= 0:
         raise ValueError(f"extra_days must be positive, got {extra_days}")
-    row = session.query(Article.sink_duration_days, Article.sink_extended_count).filter(
-        Article.id == article_id
+    row = session.query(Article.sink_duration_days, ArticleMetaStorage.sink_extended_count).filter(
+        ArticleMetaStorage.id == article_id
     ).first()
     if row is None:
         raise NotFoundError("Article not found", resource_type="article", resource_id=article_id)
     old_total, old_count = row
     new_total = min(old_total + extra_days, max_days)
     extended_count = old_count + 1 if new_total > old_total else old_count
-    session.query(Article).filter(Article.id == article_id).update(
+    session.query(ArticleMetaStorage).filter(Article.id == article_id).update(
         {"sink_duration_days": new_total, "sink_extended_count": extended_count},
         synchronize_session="fetch",
     )
@@ -400,11 +401,11 @@ def get_article_by_fork_and_author(
     session: Session,
     forked_from: str,
     author_id: str,
-) -> Article | None:
+) -> ArticleMetaStorage | None:
     """Find an article forked from *forked_from* by *author_id*."""
     return (
-        session.query(Article)
-        .join(ArticleAuthor, Article.id == ArticleAuthor.article_id)
+        session.query(ArticleMetaStorage)
+        .join(ArticleAuthorStorage, ArticleMetaStorage.id == ArticleAuthorStorage.article_id)
         .filter(Article.forked_from == forked_from)
         .filter(ArticleAuthor.author_id == author_id)
         .first()
@@ -422,7 +423,7 @@ def update_witnessed_at(session: Session, article_id: str) -> None:
     """
     from datetime import datetime, timezone
 
-    rows = session.query(Article).filter(Article.id == article_id).update(
+    rows = session.query(ArticleMetaStorage).filter(Article.id == article_id).update(
         {"witnessed_at": datetime.now(timezone.utc)},
         synchronize_session="fetch",
     )
@@ -434,9 +435,9 @@ def update_witnessed_at(session: Session, article_id: str) -> None:
 # ── Publish consent ─────────────────────────────────────────────────────
 
 
-def _get_article_or_raise(session: Session, article_id: str) -> Article:
+def _get_article_or_raise(session: Session, article_id: str) -> ArticleMetaStorage:
     """Return an article or raise NotFoundError."""
-    article = session.get(Article, article_id)
+    article = session.get(ArticleMetaStorage, article_id)
     if article is None:
         raise NotFoundError("Article not found", resource_type="article", resource_id=article_id)
     return article

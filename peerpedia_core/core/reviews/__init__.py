@@ -56,7 +56,7 @@ def rate_review_helpfulness(
 ) -> dict:
     """Rate a review's helpfulness (1-5).  Only article maintainers can rate.
 
-    Updates the Review record in DB and writes to git.
+    Updates the ReviewMetaStorage record in DB and writes to git.
 
     Raises NotFoundError if the article or review is not found.
     Raises NotAuthorizedError if the rater is not a maintainer.

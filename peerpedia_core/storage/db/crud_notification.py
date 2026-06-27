@@ -5,7 +5,7 @@
 
 from sqlalchemy.orm import Session
 
-from peerpedia_core.storage.db.models import Notification
+from peerpedia_core.storage.db.models import NotificationStorage
 
 
 def create_notification(
@@ -16,9 +16,9 @@ def create_notification(
     message: str,
     article_id: str | None = None,
     actor_id: str | None = None,
-) -> Notification:
+) -> NotificationStorage:
     """Create a notification.  Caller must commit()."""
-    n = Notification(
+    n = NotificationStorage(
         user_id=user_id, event=event, message=message,
         article_id=article_id, actor_id=actor_id,
     )
@@ -36,21 +36,21 @@ def ensure_notification(
     article_id: str | None = None,
     actor_id: str | None = None,
     notification_id: str | None = None,
-) -> Notification:
+) -> NotificationStorage:
     """Idempotent notification insert — skips if an identical notification exists.
 
     Dedup by (user_id, event, actor_id, article_id, message).
     """
-    existing = session.query(Notification).filter(
-        Notification.user_id == user_id,
-        Notification.event == event,
-        Notification.actor_id == actor_id,
-        Notification.article_id == article_id,
-        Notification.message == message,
+    existing = session.query(NotificationStorage).filter(
+        NotificationStorage.user_id == user_id,
+        NotificationStorage.event == event,
+        NotificationStorage.actor_id == actor_id,
+        NotificationStorage.article_id == article_id,
+        NotificationStorage.message == message,
     ).first()
     if existing is not None:
         return existing
-    n = Notification(
+    n = NotificationStorage(
         id=notification_id,
         user_id=user_id, event=event, message=message,
         article_id=article_id, actor_id=actor_id,
@@ -66,9 +66,9 @@ def get_notifications(
     *,
     unread_only: bool = False,
     limit: int = 50,
-) -> list[Notification]:
+) -> list[NotificationStorage]:
     """Return notifications for a user, newest first."""
-    q = session.query(Notification).filter(Notification.user_id == user_id)
+    q = session.query(NotificationStorage).filter(Notification.user_id == user_id)
     if unread_only:
         q = q.filter(Notification.read == 0)
     return q.order_by(Notification.created_at.desc()).limit(limit).all()
@@ -76,7 +76,7 @@ def get_notifications(
 
 def mark_read(session: Session, notification_id: str) -> None:
     """Mark a notification as read.  Raises ValueError if not found."""
-    n = session.get(Notification, notification_id)
+    n = session.get(NotificationStorage, notification_id)
     if n is None:
         raise ValueError(f"Notification {notification_id} not found")
     if n.read == 0:
@@ -87,7 +87,7 @@ def mark_read(session: Session, notification_id: str) -> None:
 def count_unread_notifications(session: Session, user_id: str) -> int:
     """Return the number of unread notifications for a user."""
     return (
-        session.query(Notification)
-        .filter(Notification.user_id == user_id, Notification.read == 0)
+        session.query(NotificationStorage)
+        .filter(Notification.user_id == user_id, NotificationStorage.read == 0)
         .count()
     )

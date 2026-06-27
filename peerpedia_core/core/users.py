@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from peerpedia_core.storage.db import Session
 from peerpedia_core.core.notifications import create_notification
-from peerpedia_core.storage.db.models import User
+from peerpedia_core.storage.db.models import UserStorage
 from peerpedia_core.storage.db.crud_user import (
     create_user as _create,
     create_user_stub as _create_stub,
@@ -39,12 +39,12 @@ def create_user(db: Session, *, name: str, public_key: str, affiliation: str = "
 
 
 def create_user_stub(db: Session, *, user_id: str, name: str, public_key: str, salt: str):
-    """Create a minimal User record with all fields set — for device bootstrap.
+    """Create a minimal UserStorage record with all fields set — for device bootstrap.
 
     Used when setting up a new device: the user copies their user_id, name,
     public_key, and salt from their original device (via ``account whoami
     --verbose --json``) and runs ``account bootstrap`` on the new device so
-    that ``account recover`` can find the User row and re-derive the key.
+    that ``account recover`` can find the UserStorage row and re-derive the key.
 
     Does NOT write a session file — the user still needs ``account recover``
     to verify their password and obtain a session.
@@ -67,7 +67,7 @@ def update_user_public_key(db: Session, user_id: str, pubkey_hex: str):
     # TODO(social-recovery): Implement key recovery via trusted contacts.
     # When a user loses their private key (new device, lost password), they
     # need a way to prove identity without the old key.  Approach:
-    #   1. User designates N "recovery contacts" (N ≥ 3) from their follows.
+    #   1. UserStorage designates N "recovery contacts" (N ≥ 3) from their follows.
     #   2. Recovery contacts store encrypted shards of the user's salt.
     #   3. On recovery, user contacts M-of-N contacts to reassemble the salt.
     #   4. Then re-derives key from password + reassembled salt.
@@ -152,7 +152,7 @@ def soft_delete_user(db: Session, user_id: str) -> None:
     _soft_delete(db, user_id)
 
 
-def find_users(db: Session, ref: str, *, limit: int = 20) -> list[User]:
+def find_users(db: Session, ref: str, *, limit: int = 20) -> list[UserStorage]:
     """Search users by UUID prefix, then fall back to name ILIKE.
 
     Always returns a list (0..N).

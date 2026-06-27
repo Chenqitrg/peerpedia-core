@@ -15,7 +15,7 @@ from peerpedia_core.core.guards import (
     require_article, require_maintainer, require_not_same,
     require_sedimentation, require_user,
 )
-from peerpedia_core.storage.db.models import Review
+from peerpedia_core.storage.db.models import ReviewMetaStorage
 from peerpedia_core.storage.db.crud_review import (
     get_pending_invitation, update_review_status,
 )
@@ -31,7 +31,7 @@ def invite_reviewer(
     """Invite a user to review an article during sedimentation.
 
     Only a maintainer of the article can send invitations.  The invitation
-    is recorded as a Review row with ``status='invited'``.
+    is recorded as a ReviewMetaStorage row with ``status='invited'``.
 
     Raises NotFoundError if the article or invited user is not found.
     Raises BadRequestError if the article is not in sedimentation or inviter == invited.
@@ -62,9 +62,9 @@ def invite_reviewer(
     return {"invitation_id": inv.id, "article_id": article_id, "reviewer_id": invited_id}
 
 
-def _create_invitation(db, article_id: str, inviter_id: str, invited_id: str) -> Review:
-    """Insert a pending invitation Review row and flush.  Returns the new row."""
-    inv = Review(
+def _create_invitation(db, article_id: str, inviter_id: str, invited_id: str) -> ReviewMetaStorage:
+    """Insert a pending invitation ReviewMetaStorage row and flush.  Returns the new row."""
+    inv = ReviewMetaStorage(
         article_id=article_id,
         commit_hash="pending",
         reviewer_id=invited_id,
@@ -86,7 +86,7 @@ def accept_invitation(
 ) -> dict:
     """Accept a pending review invitation.
 
-    Transitions the Review row from ``status='invited'`` to ``status='accepted'``.
+    Transitions the ReviewMetaStorage row from ``status='invited'`` to ``status='accepted'``.
 
     Raises NotFoundError if no pending invitation exists.
     Raises BadRequestError if the invitation was already declined.
@@ -115,7 +115,7 @@ def decline_invitation(
 ) -> dict:
     """Decline a pending review invitation.
 
-    Transitions the Review row from ``status='invited'`` to ``status='declined'``.
+    Transitions the ReviewMetaStorage row from ``status='invited'`` to ``status='declined'``.
 
     Raises NotFoundError if no pending invitation exists.
     Raises BadRequestError if the invitation was already accepted.

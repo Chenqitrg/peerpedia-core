@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from peerpedia_core.exceptions import BadRequestError
 from peerpedia_core.storage.db._validators import require_merge_proposal_open, require_not_same
-from peerpedia_core.storage.db.models import MergeProposal
+from peerpedia_core.storage.db.models import MergeProposalStorage
 
 
 def create_merge_proposal(
@@ -18,13 +18,13 @@ def create_merge_proposal(
     fork_id: str,
     target_id: str,
     proposer_id: str,
-) -> MergeProposal:
+) -> MergeProposalStorage:
     """Create a merge request from *fork_id* into *target_id*.
 
     Raises BadRequestError if foreign key constraints fail (e.g. fork/target don't exist).
     """
     require_not_same(fork_id, target_id, label="merge")
-    mp = MergeProposal(
+    mp = MergeProposalStorage(
         fork_article_id=fork_id,
         target_article_id=target_id,
         proposer_id=proposer_id,
@@ -48,23 +48,23 @@ def create_merge_proposal(
     return mp
 
 
-def get_merge_proposal(session: Session, proposal_id: str) -> MergeProposal | None:
+def get_merge_proposal(session: Session, proposal_id: str) -> MergeProposalStorage | None:
     """Return a merge proposal by ID, or None."""
-    return session.get(MergeProposal, proposal_id)
+    return session.get(MergeProposalStorage, proposal_id)
 
 
-def get_merge_proposals_for_article(session: Session, article_id: str) -> list[MergeProposal]:
+def get_merge_proposals_for_article(session: Session, article_id: str) -> list[MergeProposalStorage]:
     """Return all merge proposals targeting *article_id*, newest first."""
     return (
-        session.query(MergeProposal)
+        session.query(MergeProposalStorage)
         .filter(MergeProposal.target_article_id == article_id)
         .order_by(MergeProposal.created_at.desc())
         .all()
     )
 
 
-def _resolve(session: Session, proposal_id: str, new_status: str) -> MergeProposal:
-    mp = session.get(MergeProposal, proposal_id)
+def _resolve(session: Session, proposal_id: str, new_status: str) -> MergeProposalStorage:
+    mp = session.get(MergeProposalStorage, proposal_id)
     if mp is None:
         raise ValueError(f"MergeProposal {proposal_id} not found")
     require_merge_proposal_open(mp)
@@ -74,17 +74,17 @@ def _resolve(session: Session, proposal_id: str, new_status: str) -> MergePropos
     return mp
 
 
-def accept_merge_proposal(session: Session, proposal_id: str) -> MergeProposal:
+def accept_merge_proposal(session: Session, proposal_id: str) -> MergeProposalStorage:
     """Accept a merge proposal.  Raises ValueError if not found or already resolved."""
     return _resolve(session, proposal_id, "accepted")
 
 
-def reject_merge_proposal(session: Session, proposal_id: str) -> MergeProposal:
+def reject_merge_proposal(session: Session, proposal_id: str) -> MergeProposalStorage:
     """Intentionally unwired — target maintainers cannot reject contributions."""
     return _resolve(session, proposal_id, "rejected")
 
 
-def withdraw_merge_proposal(session: Session, proposal_id: str) -> MergeProposal:
+def withdraw_merge_proposal(session: Session, proposal_id: str) -> MergeProposalStorage:
     """Change a merge proposal status to ``withdrawn``.
 
     Authorization (proposer-only) is enforced by the commands layer.

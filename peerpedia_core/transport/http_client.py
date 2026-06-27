@@ -20,7 +20,7 @@ All public functions raise ``TransportError`` on network failure and
 # Infrastructure (shared client, close on shutdown)
 from peerpedia_core.transport._http_core import close_client
 
-# Article sync + bundle protocol
+# ArticleMetaStorage sync + bundle protocol
 from peerpedia_core.transport.http_articles import (
     ancestor_probe,
     fetch_article_meta,

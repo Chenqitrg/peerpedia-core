@@ -69,7 +69,7 @@ def merge_fetch_head(repo_path: Path, *, ff_only: bool = True) -> str:
 # ── Helpers ────────────────────────────────────────────────────────────────
 
 
-def _resolve_fork_ref(target_repo, remote_name: str, fork_name: str):
+def _resolve_fork_ref(target_repo: git.Repo, remote_name: str, fork_name: str):
     """Return the main-branch ref of *remote_name*, or raise MergeConflictError."""
     refs = [r for r in target_repo.remotes[remote_name].refs if r.name.endswith("/main")]
     if not refs:
@@ -80,7 +80,7 @@ def _resolve_fork_ref(target_repo, remote_name: str, fork_name: str):
     return refs[0]
 
 
-def _merge_env(author_name: str) -> dict:
+def _merge_env(author_name: str) -> dict[str, str]:
     """Build env dict for a predictable merge commit author."""
     return {
         **os.environ,
@@ -91,7 +91,7 @@ def _merge_env(author_name: str) -> dict:
     }
 
 
-def _abort_merge(repo) -> None:
+def _abort_merge(repo: git.Repo) -> None:
     """Best-effort abort an in-progress merge."""
     try:
         repo.git.merge("--abort")
@@ -99,7 +99,7 @@ def _abort_merge(repo) -> None:
         logger.warning("Failed to abort merge: %s", e.stderr.strip())
 
 
-def _cleanup_remote(repo, remote_name: str) -> None:
+def _cleanup_remote(repo: git.Repo, remote_name: str) -> None:
     """Best-effort delete a git remote."""
     try:
         repo.delete_remote(repo.remotes[remote_name])

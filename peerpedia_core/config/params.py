@@ -39,7 +39,7 @@ def extract_user_id_from_email(email: str) -> str:
     return email.split("@")[0]
 
 
-# ── Article format constants ────────────────────────────────────────────────
+# ── ArticleMetaStorage format constants ────────────────────────────────────────────────
 
 _ARTICLE_EXT_TO_FMT = {".md": "markdown", ".typ": "typst"}
 _ARTICLE_FMT_TO_EXT = {"markdown": ".md", "typst": ".typ"}
@@ -86,7 +86,7 @@ class SinkParams:
     max_days: int = 180
     max_sedimentation_per_author: int = 5  # anti-spam: max concurrent articles in pool
 
-    # Review gate
+    # ReviewMetaStorage gate
     min_approvals: int = 3                # minimum reviewers who must approve (score ≥ threshold)
     approval_score_threshold: float = 3.0 # avg score ≥ this → "approve"
     review_deficit_extend_days: int = 3   # extra days when not enough reviewers

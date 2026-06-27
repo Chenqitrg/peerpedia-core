@@ -16,12 +16,12 @@ from peerpedia_core.storage.db.engine import (  # noqa: F401 — facade re-expor
 from peerpedia_core.storage.db.session_utils import db_session_scope as _db_session_scope
 
 
-def db_session(database_url: str):
+def db_session(database_url: str) -> Session:
     """Context manager for a database session with auto commit/rollback/close."""
     return _db_session_scope(database_url)
 
 
-def db_repl_setup(database_url: str):
+def db_repl_setup(database_url: str) -> tuple[Engine, Session]:
     """Set up the database for a long-lived REPL or server session.
 
     Creates tables, applies migrations.  Returns (engine, session).

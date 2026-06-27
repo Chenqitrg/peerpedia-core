@@ -69,7 +69,7 @@ PENDING_OPS_FILE = DATA_ROOT / "pending_ops.json"
 #   ~/.peerpedia/blobs/{sha256[:2]}/{sha256}
 #   — same structure as git objects, zero new concepts.
 #
-# Article repos store a blobs.json manifest:
+# ArticleMetaStorage repos store a blobs.json manifest:
 #   {"fig1.png": "sha256:abc123...", "data.csv": "sha256:def456..."}
 #
 # Peer exchange:

@@ -22,7 +22,7 @@ from peerpedia_core.crypto import pubkey_hex_to_ssh_line, write_allowed_signers_
 from peerpedia_core.exceptions import NotFoundError, SignatureVerificationError
 from peerpedia_core.storage.git.read import assert_on_main, read_review_scores
 
-# ── Article status ─────────────────────────────────────────────────────────
+# ── ArticleMetaStorage status ─────────────────────────────────────────────────────────
 
 
 def require_valid_article_status(status: str) -> None:
@@ -132,7 +132,7 @@ def require_commit_pubkey_signature(
 # ── Commit guards ──────────────────────────────────────────────────────────
 
 
-def guard_not_empty(repo, *, allow_empty: bool) -> None:
+def guard_not_empty(repo: git.Repo, *, allow_empty: bool) -> None:
     """Raise ValueError if the repo is clean and *allow_empty* is False."""
     if not allow_empty and not repo.is_dirty(untracked_files=True) and repo.head.is_valid():
         raise ValueError(
@@ -155,7 +155,7 @@ def require_article_repo(article_id: str) -> Path:
     return rp
 
 
-def require_review_scores(repo_path: Path, reviewer_dir: str, article_id: str) -> dict:
+def require_review_scores(repo_path: Path, reviewer_dir: str, article_id: str) -> dict[str, Any]:
     """Return parsed review scores or raise NotFoundError."""
     scores = read_review_scores(repo_path, reviewer_dir)
     if scores is None:

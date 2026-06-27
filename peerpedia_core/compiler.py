@@ -60,7 +60,7 @@ TODO(citation-compile): resolve @key citation markers in Markdown/Typst
 source and render a references list.  Currently citation markers pass through
 unchanged to output.
 
-  Citation syntax uses bare @key — no brackets:
+  CitationStorage syntax uses bare @key — no brackets:
     @wiles1995 showed that ...          →  "Wiles (1995) showed that ..."
     ... as demonstrated previously @wiles1995, @smith2020  →  "... as
     demonstrated previously [1, 3]."

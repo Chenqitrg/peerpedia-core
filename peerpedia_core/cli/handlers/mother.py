@@ -23,7 +23,7 @@ own computer, where every paper lives in its own version-controlled history.
 
   • Write papers in Markdown (plain text with simple formatting)
   • Submit your work for peer review by colleagues
-  • Review other people's papers and discuss them
+  • ReviewMetaStorage other people's papers and discuss them
   • Publish finished papers so others can find and cite them
   • Collaborate with co-authors and track every change
   • Sync your work with remote servers to share with the world
@@ -178,7 +178,7 @@ own computer, where every paper lives in its own version-controlled history.
       [accent]peerpedia follow @einstein[/]
       (The @ sign tells PeerPedia you mean a person, not a paper.)
 
-    • Bookmark important papers:
+    • BookmarkStorage important papers:
       [accent]peerpedia bookmark add abc12345[/]
       [accent]peerpedia article list --bookmarked[/]
 

@@ -34,13 +34,13 @@ from peerpedia_core.storage.db.crud_review import (
     get_accepted_invitation, get_pending_invitation, get_reviews_for_article,
 )
 from peerpedia_core.storage.db.crud_user import get_user, is_following
-from peerpedia_core.storage.db.models import MergeProposal, Review
+from peerpedia_core.storage.db.models import ArticleMetaStorage, MergeProposalStorage, ReviewMetaStorage, UserStorage
 
 
 # ── Resource existence ─────────────────────────────────────────────────────
 
 
-def require_user(db: Session, user_id: str):
+def require_user(db: Session, user_id: str) -> UserStorage:
     """Return the user or raise NotFoundError."""
     user = get_user(db, user_id)
     if user is None:
@@ -48,7 +48,7 @@ def require_user(db: Session, user_id: str):
     return user
 
 
-def require_article(db: Session, article_id: str):
+def require_article(db: Session, article_id: str) -> ArticleMetaStorage:
     """Return the article or raise NotFoundError."""
     article = get_article(db, article_id)
     if article is None:
@@ -98,7 +98,7 @@ def require_following_for_alias(db: Session, owner_id: str, target_id: str) -> N
         raise BadRequestError(f"You must follow {target_id} to set an alias")
 
 
-def require_review(db: Session, article_id: str, reviewer_id: str):
+def require_review(db: Session, article_id: str, reviewer_id: str) -> ReviewMetaStorage:
     """Return the review by *reviewer_id* or raise NotFoundError."""
     for r in get_reviews_for_article(db, article_id):
         if r.reviewer_id == reviewer_id:
@@ -111,7 +111,7 @@ def require_review(db: Session, article_id: str, reviewer_id: str):
 
 def authorize_article_action(
     db: Session, article_id: str, user_id: str,
-):
+) -> tuple[User, ArticleMetaStorage, list[str]]:
     """Resolve user, article, and maintainer_ids; block if article is folded."""
     user = require_user(db, user_id)
     article = require_article(db, article_id)
@@ -133,7 +133,7 @@ def guard_sedimentation_limit(db: Session, user_id: str) -> None:
         )
 
 
-# ── Review invitations ───────────────────────────────────────────────────────
+# ── ReviewMetaStorage invitations ───────────────────────────────────────────────────────
 
 
 def require_invitation(db: Session, article_id: str, reviewer_id: str) -> None:
@@ -148,9 +148,9 @@ def require_invitation(db: Session, article_id: str, reviewer_id: str) -> None:
 def guard_invitation_not_declined(db: Session, article_id: str, reviewer_id: str) -> None:
     """Raise BadRequestError if invitation was already declined."""
     declined = (
-        db.query(Review)
-        .filter(Review.article_id == article_id, Review.reviewer_id == reviewer_id,
-                Review.status == "declined")
+        db.query(ReviewMetaStorage)
+        .filter(Review.article_id == article_id, ReviewMetaStorage.reviewer_id == reviewer_id,
+                ReviewMetaStorage.status == "declined")
         .first()
     )
     if declined is not None:
@@ -180,7 +180,7 @@ def guard_not_last_maintainer(db: Session, article_id: str, caller_id: str, user
 # ── Merge proposal ───────────────────────────────────────────────────────────
 
 
-def require_open_proposal(db: Session, proposal_id: str, article_id: str):
+def require_open_proposal(db: Session, proposal_id: str, article_id: str) -> MergeProposalStorage:
     """Return the merge proposal, or raise if missing/wrong article/not open."""
     from peerpedia_core.storage.db.crud_merge import get_merge_proposal
 

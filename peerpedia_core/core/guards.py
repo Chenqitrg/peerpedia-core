@@ -170,7 +170,7 @@ def verify_new_commits(db: Session, repo_path: Path, *, since_hash: str) -> None
             verify_commit_signature_and_tofu(db, repo_path, c, users_by_id)
 
 
-# ── Article integrity ────────────────────────────────────────────────────────
+# ── ArticleMetaStorage integrity ────────────────────────────────────────────────────────
 
 
 def assert_article_integrity(db: Session, article_id: str, *, level: str = "light") -> None:

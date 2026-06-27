@@ -3,8 +3,11 @@
 
 """Git read operations — history, authors, diff, review files."""
 
+from __future__ import annotations
+
 import json
 from pathlib import Path
+from typing import TypedDict
 
 import git
 
@@ -14,13 +17,23 @@ from peerpedia_core.config.params import (
 )
 from peerpedia_core.types.status import parse_status_tag
 
+
+class CommitInfo(TypedDict):
+    hash: str
+    parents: list[str]
+    message: str
+    author: str
+    author_email: str
+    timestamp: str
+    stats: dict[str, object]
+
 _EXPECTED_BRANCH = "refs/heads/main"
 
 
 def assert_on_main(repo: git.Repo) -> None:
     """Raise RuntimeError if HEAD is not on refs/heads/main.
 
-    Article repos use a single-mainline model — all git operations
+    ArticleMetaStorage repos use a single-mainline model — all git operations
     expect HEAD to point to ``refs/heads/main``.
     """
     if not repo.head.is_valid():
@@ -50,7 +63,7 @@ def get_commit_history(
     repo_path: Path,
     max_count: int = 50,
     since_hash: str | None = None,
-) -> list[dict]:
+) -> list[CommitInfo]:
     """Get commit history for an article.
 
     If *since_hash* is given, only commits reachable from HEAD but not
@@ -134,7 +147,7 @@ def _count_diff_lines(patch: str) -> tuple[int, int]:
     return ins, dels
 
 
-def get_diff_between(repo_path: Path, hash1: str, hash2: str) -> dict:
+def get_diff_between(repo_path: Path, hash1: str, hash2: str) -> dict[str, object]:
     """Get the diff between two arbitrary commits.
 
     hash1 is the "old" commit, hash2 is the "new" commit.
@@ -204,7 +217,7 @@ def get_head_or_none(repo_path: Path) -> str | None:
         return None
 
 
-# ── Article source ─────────────────────────────────────────────────────────
+# ── ArticleMetaStorage source ─────────────────────────────────────────────────────────
 
 
 def resolve_article_format(repo_path: Path) -> str:
@@ -241,7 +254,7 @@ def read_article_source(repo_path: Path) -> tuple[str, str] | None:
     return None
 
 
-# ── Review files ───────────────────────────────────────────────────────────
+# ── ReviewMetaStorage files ───────────────────────────────────────────────────────────
 
 
 def list_review_dirs(repo_path: Path) -> list[str]:
@@ -252,7 +265,7 @@ def list_review_dirs(repo_path: Path) -> list[str]:
     return [d.name for d in reviews_dir.iterdir() if d.is_dir()]
 
 
-def read_review_scores(repo_path: Path, reviewer_dir: str) -> dict | None:
+def read_review_scores(repo_path: Path, reviewer_dir: str) -> dict[str, Any] | None:
     """Read reviews/{reviewer_dir}/scores.json and return the parsed dict.
 
     Returns None if the scores file does not exist.

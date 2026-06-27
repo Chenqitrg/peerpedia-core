@@ -44,7 +44,7 @@ def reconcile_authors(
 
 
 def reconcile_reviews(db: Session, article_id: str) -> None:
-    """Sync review scores from git worktree into the DB Review cache."""
+    """Sync review scores from git worktree into the DB ReviewMetaStorage cache."""
     rp = require_article_repo(article_id)
     head_hash = get_head_hash(rp)
 

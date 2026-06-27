@@ -154,7 +154,7 @@ def migrate_db(engine: Engine) -> None:
                 conn.rollback()
 
 
-_factory_cache: dict = {}
+_factory_cache: dict[str, Any] = {}
 
 
 def get_session(engine: Engine) -> Session:

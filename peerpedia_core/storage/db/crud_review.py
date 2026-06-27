@@ -21,7 +21,7 @@ upsert_review(session, article_id, commit_hash, reviewer_id, scores) → Review
     reviews written during sedimentation are tagged ``scope="sedimentation"``
     and reviews written after publish are tagged ``scope="published"``.
 
-get_reviews_for_article(session, article_id) → list[Review]
+get_reviews_for_article(session, article_id) → list[ReviewMetaStorage]
     All cached reviews for an article, newest first.  Used by
     ``recompute_article_score`` to gather input for scoring.
 
@@ -37,7 +37,7 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from peerpedia_core.storage.db.models import Article, Review
+from peerpedia_core.storage.db.models import ArticleMetaStorage, ReviewMetaStorage
 
 
 def upsert_review(
@@ -45,8 +45,8 @@ def upsert_review(
     article_id: str,
     commit_hash: str,
     reviewer_id: str,
-    scores: dict,
-) -> Review:
+    scores: dict[str, float],
+) -> ReviewMetaStorage:
     """Create or update the scores cache for a review.
 
     Called AFTER review files are committed to git.  Scope is the
@@ -58,19 +58,19 @@ def upsert_review(
     from sqlalchemy.orm import load_only  # noqa: PLC0415
 
     article = session.get(
-        Article, article_id,
+        ArticleMetaStorage, article_id,
         options=[load_only(Article.status)],
     )
     if article is None:
         raise ValueError(f"Article {article_id} not found")
 
     existing = (
-        session.query(Review)
+        session.query(ReviewMetaStorage)
         .filter(
-            Review.article_id == article_id,
-            Review.reviewer_id == reviewer_id,
-            Review.scope == article.status,
-            Review.commit_hash == commit_hash,
+            ReviewMetaStorage.article_id == article_id,
+            ReviewMetaStorage.reviewer_id == reviewer_id,
+            ReviewMetaStorage.scope == article.status,
+            ReviewMetaStorage.commit_hash == commit_hash,
         )
         .first()
     )
@@ -79,7 +79,7 @@ def upsert_review(
         session.flush()
         return existing
 
-    r = Review(
+    r = ReviewMetaStorage(
         article_id=article_id,
         commit_hash=commit_hash,
         reviewer_id=reviewer_id,
@@ -95,10 +95,10 @@ def upsert_review(
 def get_reviews_for_article(
     session: Session,
     article_id: str,
-) -> list[Review]:
+) -> list[ReviewMetaStorage]:
     """Return all cached reviews for an article, newest first."""
     return (
-        session.query(Review)
+        session.query(ReviewMetaStorage)
         .filter(Review.article_id == article_id)
         .order_by(Review.created_at.desc())
         .all()
@@ -109,14 +109,14 @@ def get_pending_invitation(
     session: Session,
     article_id: str,
     reviewer_id: str,
-) -> Review | None:
+) -> ReviewMetaStorage | None:
     """Return the pending invitation for (article, reviewer), or None."""
     return (
-        session.query(Review)
+        session.query(ReviewMetaStorage)
         .filter(
-            Review.article_id == article_id,
-            Review.reviewer_id == reviewer_id,
-            Review.status == "invited",
+            ReviewMetaStorage.article_id == article_id,
+            ReviewMetaStorage.reviewer_id == reviewer_id,
+            ReviewMetaStorage.status == "invited",
         )
         .first()
     )
@@ -126,14 +126,14 @@ def get_accepted_invitation(
     session: Session,
     article_id: str,
     reviewer_id: str,
-) -> Review | None:
+) -> ReviewMetaStorage | None:
     """Return the accepted invitation for (article, reviewer), or None."""
     return (
-        session.query(Review)
+        session.query(ReviewMetaStorage)
         .filter(
-            Review.article_id == article_id,
-            Review.reviewer_id == reviewer_id,
-            Review.status == "accepted",
+            ReviewMetaStorage.article_id == article_id,
+            ReviewMetaStorage.reviewer_id == reviewer_id,
+            ReviewMetaStorage.status == "accepted",
         )
         .first()
     )
@@ -141,10 +141,10 @@ def get_accepted_invitation(
 
 def update_review_status(
     session: Session,
-    review: Review,
+    review: ReviewMetaStorage,
     status: str,
 ) -> None:
-    """Update the status of a Review row and flush.
+    """Update the status of a ReviewMetaStorage row and flush.
 
     Used by accept_invitation, decline_invitation, and submit_review
     to transition reviews through the invitation lifecycle state machine.
@@ -159,15 +159,15 @@ def get_review(
     reviewer_id: str,
     scope: str,
     commit_hash: str,
-) -> Review | None:
+) -> ReviewMetaStorage | None:
     """Return a specific review by composite key, or None."""
     return (
-        session.query(Review)
+        session.query(ReviewMetaStorage)
         .filter(
-            Review.article_id == article_id,
-            Review.reviewer_id == reviewer_id,
-            Review.scope == scope,
-            Review.commit_hash == commit_hash,
+            ReviewMetaStorage.article_id == article_id,
+            ReviewMetaStorage.reviewer_id == reviewer_id,
+            ReviewMetaStorage.scope == scope,
+            ReviewMetaStorage.commit_hash == commit_hash,
         )
         .first()
     )

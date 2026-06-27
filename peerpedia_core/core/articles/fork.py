@@ -24,7 +24,7 @@ from peerpedia_core.core.guards import authorize_article_action, require_article
 
 
 def fork_article(db: Session, article_id: str, user_id: str) -> dict:
-    """Fork an article: clone its git repo and create a new Article record.
+    """Fork an article: clone its git repo and create a new ArticleMetaStorage record.
 
     Returns:
         {"id": <fork_id>, "forked_from": <original_id>, "status": "draft"}

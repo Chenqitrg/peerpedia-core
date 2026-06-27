@@ -6,7 +6,7 @@
 from sqlalchemy.orm import Session
 
 from peerpedia_core.storage.db._validators import require_not_same
-from peerpedia_core.storage.db.models import Citation
+from peerpedia_core.storage.db.models import CitationStorage
 
 
 def create_or_update_citation(
@@ -15,15 +15,15 @@ def create_or_update_citation(
     to_id: str,
     forward: float = 0.0,
     backward: float = 0.0,
-) -> Citation:
+) -> CitationStorage:
     """Create or update a citation edge between two articles."""
     require_not_same(from_id, to_id, label="cite")
-    c = session.query(Citation).filter(Citation.from_article_id == from_id, Citation.to_article_id == to_id).first()
+    c = session.query(CitationStorage).filter(Citation.from_article_id == from_id, CitationStorage.to_article_id == to_id).first()
     if c:
         c.forward_prob = forward
         c.backward_prob = backward
     else:
-        c = Citation(
+        c = CitationStorage(
             from_article_id=from_id,
             to_article_id=to_id,
             forward_prob=forward,
@@ -34,21 +34,21 @@ def create_or_update_citation(
     return c
 
 
-def get_citation(session: Session, from_id: str, to_id: str) -> Citation | None:
+def get_citation(session: Session, from_id: str, to_id: str) -> CitationStorage | None:
     """Return the citation edge from *from_id* to *to_id*, or None."""
-    return session.query(Citation).filter(Citation.from_article_id == from_id, Citation.to_article_id == to_id).first()
+    return session.query(CitationStorage).filter(Citation.from_article_id == from_id, CitationStorage.to_article_id == to_id).first()
 
 
-def get_citations(session: Session, article_id: str) -> list[Citation]:
+def get_citations(session: Session, article_id: str) -> list[CitationStorage]:
     """All citation edges involving this article."""
-    return session.query(Citation).filter((Citation.from_article_id == article_id) | (Citation.to_article_id == article_id)).all()
+    return session.query(CitationStorage).filter((Citation.from_article_id == article_id) | (Citation.to_article_id == article_id)).all()
 
 
-def get_cites(session: Session, article_id: str) -> list[Citation]:
+def get_cites(session: Session, article_id: str) -> list[CitationStorage]:
     """Articles this article cites (outgoing edges)."""
-    return session.query(Citation).filter(Citation.from_article_id == article_id).all()
+    return session.query(CitationStorage).filter(Citation.from_article_id == article_id).all()
 
 
-def get_cited_by(session: Session, article_id: str) -> list[Citation]:
+def get_cited_by(session: Session, article_id: str) -> list[CitationStorage]:
     """Articles that cite this article (incoming edges)."""
-    return session.query(Citation).filter(Citation.to_article_id == article_id).all()
+    return session.query(CitationStorage).filter(Citation.to_article_id == article_id).all()

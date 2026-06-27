@@ -10,7 +10,10 @@ without circular-dependency risk because this module imports nothing from
 
 from __future__ import annotations
 
+from typing import Any
+
 from peerpedia_core.exceptions import BadRequestError, NotFoundError
+from peerpedia_core.storage.db.models import ArticleMetaStorage, MergeProposalStorage
 
 
 # ── Self-reference ─────────────────────────────────────────────────────────
@@ -49,7 +52,7 @@ def require_helpfulness_score_range(score: int) -> None:
 # ── Crypto / key validation ────────────────────────────────────────────────
 
 
-def require_signing_key(key_bytes, pubkey_hex, action: str) -> None:
+def require_signing_key(key_bytes: bytes | None, pubkey_hex: str | None, action: str) -> None:
     """Raise ValueError if signing key material is missing."""
     if key_bytes is None or not pubkey_hex:
         raise ValueError(f"signing_key_bytes and pubkey_hex are required for {action}")
@@ -58,7 +61,7 @@ def require_signing_key(key_bytes, pubkey_hex, action: str) -> None:
 # ── Entry / dict validation ────────────────────────────────────────────────
 
 
-def require_keys(entries: list[dict], *keys: str, label: str) -> None:
+def require_keys(entries: list[dict[str, Any]], *keys: str, label: str) -> None:
     """Raise ValueError if any entry is missing a required key."""
     for e in entries:
         for k in keys:
@@ -67,7 +70,7 @@ def require_keys(entries: list[dict], *keys: str, label: str) -> None:
 
 
 def validate_follow_entries(
-    entries: list[dict], source_id: str, label: str,
+    entries: list[dict[str, Any]], source_id: str, label: str,
 ) -> set[str]:
     """Validate follow entries and return the set of remote IDs."""
     require_keys(entries, "id", label=label)
@@ -80,19 +83,19 @@ def validate_follow_entries(
 # ── Object state ───────────────────────────────────────────────────────────
 
 
-def require_draft_status(article) -> None:
+def require_draft_status(article: Article) -> None:
     """Raise BadRequestError if the article is not in draft status."""
     if article.status != "draft":
         raise BadRequestError("Only draft articles can be published")
 
 
-def require_sedimentation(article) -> None:
+def require_sedimentation(article: Article) -> None:
     """Raise BadRequestError if the article is not in sedimentation."""
     if article.status != "sedimentation":
         raise BadRequestError("Can only invite reviewers to articles in sedimentation")
 
 
-def require_merge_proposal_open(mp) -> None:
+def require_merge_proposal_open(mp: MergeProposal) -> None:
     """Raise BadRequestError if the merge proposal is not open."""
     if mp.status != "open":
         raise BadRequestError(f"Merge proposal {mp.id} is already {mp.status}")

@@ -4,7 +4,7 @@
 """Notification commands — thin facade over CRUD."""
 
 from peerpedia_core.storage.db import Session
-from peerpedia_core.storage.db.models import Notification
+from peerpedia_core.storage.db.models import NotificationStorage
 from peerpedia_core.storage.db.crud_notification import (
     count_unread_notifications as _count_unread_notifications,
     create_notification as _create,
@@ -22,7 +22,7 @@ def create_notification(
     article_id: str | None = None,
     actor_id: str | None = None,
 ):
-    """Create a notification for *user_id*.  Returns the Notification ORM object."""
+    """Create a notification for *user_id*.  Returns the NotificationStorage ORM object."""
     return _create(db, user_id=user_id, event=event, message=message,
                    article_id=article_id, actor_id=actor_id)
 
@@ -102,12 +102,12 @@ def merge_notifications(
 def create_notifications_batch(
     db: Session,
     entries: list[dict],
-) -> list[Notification]:
+) -> list[NotificationStorage]:
     """Create multiple notifications in one batch flush.
 
     Each entry dict must have keys matching ``create_notification`` kwargs:
     user_id, event, message, plus optional article_id and actor_id.
-    Returns the list of created Notification ORM objects.
+    Returns the list of created NotificationStorage ORM objects.
 
     Delegates to ``create_notification`` for consistency with the single
     notification path — any future validation or side effects added there

@@ -10,18 +10,29 @@ with DB ingest and HTTP-style callbacks for social-graph crawling.
 from __future__ import annotations
 
 import logging
-from typing import Callable
+from typing import Callable, TypedDict
 
 from peerpedia_core.compute.bfs import bfs_traverse
 from peerpedia_core.exceptions import ProtocolError
 from peerpedia_core.storage.db import Session
 from peerpedia_core.storage.db.ingest import ingest_following, ingest_users
+from peerpedia_core.types.entities import FollowEntry, PeerUser
 
 logger = logging.getLogger(__name__)
 
-CrawlResult = dict  # {"users_discovered": int, "articles_discovered": int,
-                      #  "follows_added": int, "depth_reached": int,
-                      #  "errors": list[dict]}
+
+class CrawlResult(TypedDict):
+    users_discovered: int
+    articles_discovered: int
+    follows_added: int
+    depth_reached: int
+    errors: list[dict[str, str]]
+
+
+class _NodeIngestResult(TypedDict):
+    neighbors: list[str]
+    follows: int
+    articles: int
 
 
 def _bfs_walk(
@@ -65,8 +76,8 @@ def _bfs_walk(
 
 def _fetch_ingest_node(
     db: Session, server: str, user_id: str,
-    fetch_fn, discover_fn, errors: list[dict],
-) -> dict | None:
+    fetch_fn, discover_fn, errors: list[dict[str, str]],
+) -> _NodeIngestResult | None:
     """Fetch + ingest one user's following data. Returns {"neighbors": [...], "follows": int, "articles": int} or None."""
     # ── Fetch ─────────────────────────────────────────────────────────────
     try:
@@ -79,16 +90,18 @@ def _fetch_ingest_node(
         return None
 
     # ── Ingest users + follows ────────────────────────────────────────────
+    users = [PeerUser(id=e["id"], name=e.get("name", e["id"]), address=e.get("address", "")) for e in data]
     try:
-        ingest_users(db, data)
+        ingest_users(db, users)
     except ValueError as e:
         logger.debug("_bfs_walk: ingest_users failed for %s: %s", user_id, e)
         errors.append({"user": user_id, "stage": "ingest_users", "error": str(e)})
         return None
 
     n_follows = 0
+    follows = [FollowEntry(id=e["id"]) for e in data]
     try:
-        n_follows = ingest_following(db, user_id, data)
+        n_follows = ingest_following(db, user_id, follows)
     except ValueError as e:
         logger.debug("_bfs_walk: ingest_following failed for %s: %s", user_id, e)
         errors.append({"user": user_id, "stage": "ingest_following", "error": str(e)})

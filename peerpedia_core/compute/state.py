@@ -44,7 +44,7 @@ The optimization target is itself part of the algorithm — and therefore
 also forkable.  Examples of observable behaviors that could serve as
 optimization targets:
 
-  - Bookmark flow: total bookmark count weighted by article recency.
+  - BookmarkStorage flow: total bookmark count weighted by article recency.
     Bookmarks signal "worth returning to" — a quality proxy that resists
     clickbait better than view count.
 
@@ -58,7 +58,7 @@ optimization targets:
   - Review-thread depth: average length of review discussions.  Signals
     that the article provokes substantive engagement.
 
-  - Citation depth: weighted by the citing article's own score (PageRank
+  - CitationStorage depth: weighted by the citing article's own score (PageRank
     on the citation graph).
 
 Every choice of target produces a different academic ecosystem.  The

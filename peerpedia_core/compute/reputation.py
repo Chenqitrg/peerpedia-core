@@ -92,7 +92,7 @@ Dimension mapping (5 article dims → 4 reputation dims, PLACEHOLDER)
 #    | Scenario                              | Penalty                    |
 #    |---------------------------------------|----------------------------|
 #    | Reviewer catches issue → author fixes | professionalism: -0.01     |
-#    | Article published with major error    | professionalism: -0.5      |
+#    | ArticleMetaStorage published with major error    | professionalism: -0.5      |
 #    |                                       | credibility:   -0.3       |
 #    |                                       | article:       fold       |
 #
@@ -128,7 +128,7 @@ Dimension mapping (5 article dims → 4 reputation dims, PLACEHOLDER)
 #
 # ── Implementation notes ─────────────────────────────────────────────────────
 #
-# • No new database tables needed.  Review threads already live in git
+# • No new database tables needed.  ReviewMetaStorage threads already live in git
 #   (reviews/{reviewer_id}/threads/).  Commit trailers are parsed from
 #   existing git history via ``iter_commits()``.
 #

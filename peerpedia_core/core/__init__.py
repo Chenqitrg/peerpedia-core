@@ -1,65 +1,41 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""Commands layer — the sole module that touches both git and DB.
+r"""Core domain layer — the ONLY package that coordinates both git and DB.
 
-**This is the ONLY package that can import both ``storage/git_backend``
-and ``storage/db/``.**  CLI, REPL, sync — everything external — must go
-through this facade: ``from peerpedia_core.core import ...``.
+Architecture::
 
-Hard rules
-----------
-- External callers MUST import from here, never from submodules directly.
-- Submodules MAY import each other directly (``from .articles import ...``)
-  to avoid circular imports through ``__init__.py``.
-- No function may have an internal ``from peerpedia_core.*`` import — if
-  a function needs an import the module doesn't have, the function is in
-  the wrong module ("红杏出墙").
-- All CRUD calls use ``flush()`` only; ``commit()`` is the caller's job.
+    cli / repl / transport  ──→  core  ←──  storage/git + storage/db
+                                  │
+                    ┌─────────────┼─────────────┐
+                    ▼             ▼             ▼
+                 articles      reviews       reconcile
+                (lifecycle)   (lifecycle)   (git↔DB mirror)
 
-Submodules
-----------
-articles/ (package)
-    Article lifecycle — split into create, update, publish, fork, rollback,
-    delete (each ~50-80 lines).  ``__init__.py`` provides read wrappers and
-    re-exports the full public API for backward compatibility.
+    compute/  纯算法（零 IO）       rules/   纯授权规则（零 IO）
 
-reviews.py
-    Review submission.  ``submit_review`` writes review files to the git
-    worktree (scores.json + threads/*.md), commits, then caches scores in
-    the DB.
-
-merge.py
-    Merge proposal acceptance.  ``accept_merge`` runs git merge, rebuilds
-    authors from git history, and triggers re-sedimentation if the target
-    article was published.
-
-bundle.py
-    Bundle application.  ``apply_sync_bundle`` merges fetched git objects and
-    reconciles DB state.  ``sync_reviews_from_worktree`` reads reviews from
-    git worktree into the DB cache.
-
-workflow.py
-    Scoring and reputation orchestration.  ``recompute_article_score``,
-    ``recompute_author_reputation``, and ``recompute_article_and_author_scores``
-    gather data, call pure workflow/ functions,
-    and write results back.
-
-integrity.py
-    Article integrity verification — commit signatures and DB/git consistency
-    checks.  Three levels: light (access), full (sync/publish).
-
-views.py
-    View layer — returns response-ready dicts.  The ONLY place that calls
-    ``.to_dict()`` and composes author enrichment.
-
-Design invariants
------------------
-- All crud functions in this package call ``session.flush()`` only.
-  ``session.commit()`` is the caller's responsibility (CLI/REPL entry).
-- Public API is re-exported here; callers should import from
-  ``peerpedia_core.core``, not from submodules directly.
+External callers import from here — never from submodules or storage/ directly.
 """
+
+from peerpedia_core.config.paths import ARTICLES_DIR
+from peerpedia_core.frontmatter import parse_frontmatter
+from peerpedia_core.storage.db import db_repl_setup
+from peerpedia_core.storage.db.session_utils import db_session_scope as db_session
+
+
+def health_check(database_url: str) -> list[str]:
+    """Check that runtime dependencies (DB, articles directory) are reachable."""
+    problems: list[str] = []
+    if not ARTICLES_DIR.is_dir():
+        problems.append("articles_dir_missing")
+    try:
+        with db_session(database_url):
+            pass
+    except Exception as e:
+        problems.append(f"db_unreachable: {e}")
+    return problems
+
+# ── Articles ─────────────────────────────────────────────────────────────────
 
 from peerpedia_core.core.articles import (
     count_articles,
@@ -76,219 +52,77 @@ from peerpedia_core.core.articles import (
     rollback_article,
     update_article_content,
 )
-from peerpedia_core.core.bookmarks import add_bookmark, get_bookmarks_for_user, remove_bookmark
-from peerpedia_core.frontmatter import parse_frontmatter
-from peerpedia_core.core.maintainers import (
-    add_maintainer_to_article,
-    consent_to_publish,
-    list_maintainers,
-    remove_maintainer_from_article,
-    revoke_publish_consent,
+
+# ── Reviews ──────────────────────────────────────────────────────────────────
+
+from peerpedia_core.core.reviews import (
+    accept_invitation, decline_invitation, get_reviews_for_article,
+    invite_reviewer, rate_review_helpfulness, submit_reply, submit_review,
 )
+
+# ── Users ────────────────────────────────────────────────────────────────────
+
+from peerpedia_core.core.users import (
+    create_user, create_user_stub, find_users, follow_user,
+    get_followers, get_following, get_top_users_by_followers,
+    get_user, get_user_by_name, increment_failed_login, is_following,
+    list_users, reset_failed_login, search_users, soft_delete_user,
+    unfollow_user, update_user_public_key, update_user_salt,
+)
+
+# ── Maintainers ──────────────────────────────────────────────────────────────
+
+from peerpedia_core.core.maintainers import (
+    add_maintainer_to_article, consent_to_publish, list_maintainers,
+    remove_maintainer_from_article, revoke_publish_consent,
+)
+
+# ── Merge ────────────────────────────────────────────────────────────────────
+
 from peerpedia_core.core.merge import accept_merge, create_merge_proposal, withdraw_merge_proposal
-from peerpedia_core.core.reviews import accept_invitation, decline_invitation, get_reviews_for_article, invite_reviewer, rate_review_helpfulness, submit_reply, submit_review
+
+# ── Reconcile ────────────────────────────────────────────────────────────────
+
+from peerpedia_core.core.reconcile import (
+    reconcile_after_sync, reconcile_all_reputations,
+    reconcile_reputation, reconcile_reviews, reconcile_score,
+)
+
+# ── Guards & Integrity ───────────────────────────────────────────────────────
+
+from peerpedia_core.core.guards import assert_article_integrity
+
+# ── Social — bookmarks, shares, notifications ────────────────────────────────
+
+from peerpedia_core.core.bookmarks import add_bookmark, get_bookmarks_for_user, remove_bookmark
 from peerpedia_core.core.shares import (
     add_share, get_feed_shares, get_shares_for_user, remove_share,
 )
-from peerpedia_core.core.reconcile import (
-    reconcile_after_sync, reconcile_reviews,
-)
-from peerpedia_core.core.guards import assert_article_integrity
-from peerpedia_core.core.users import (
-    create_user,
-    create_user_stub,
-    find_users,
-    follow_user,
-    increment_failed_login,
-    list_users,
-    get_followers,
-    get_following,
-    get_top_users_by_followers,
-    get_user,
-    get_user_by_name,
-    is_following,
-    reset_failed_login,
-    search_users,
-    soft_delete_user,
-    unfollow_user,
-    update_user_public_key,
-    update_user_salt,
-)
-from peerpedia_core.core.reconcile import (
-    reconcile_all_reputations,
-    reconcile_reputation,
-    reconcile_score,
-)
-from peerpedia_core.core.views import (
-    get_article_view,
-    get_follower_views,
-    get_following_views,
-    get_user_view,
-    list_article_views,
-    list_user_article_views,
-)
-from peerpedia_core.storage.db.ingest import (
-    ingest_articles,
-    ingest_bookmarks,
-    ingest_followers,
-    ingest_following,
-    ingest_maintainers,
-    ingest_notifications,
-    ingest_shares,
-    ingest_users,
-    sync_followers,
-    sync_following,
-)
 from peerpedia_core.core.notifications import (
-    count_unread_notifications,
-    create_notification,
-    get_notifications,
-    get_notifications_for_user,
-    mark_read,
+    count_unread_notifications, create_notification,
+    get_notifications, get_notifications_for_user, mark_read,
 )
 
-# TODO(citation-system): three independent subsystems, ordered by dependency:
-#
-#   1. BIB PARSING (SOT — git) — parse .bib files in article git repos.
-#      BibTeX parser that reads author/title/venue/year/key from a .bib
-#      file inside the article repo.  ADR-007: git is SOT for citation
-#      metadata.  The BibTeX key is the canonical @key reference.
-#      Needs: a bib parser module (storage/bib_parser.py or similar).
-#
-#   2. INLINE @key PARSING (compiler) — resolve @key citation markers in
-#      Markdown/Typst source.  @ prefix is the delimiter (no brackets).
-#      Distinguish from email addresses (name@domain.com has a dot after @).
-#      Parse @key → look up BibTeX entry → format rendered reference.
-#      Needs: compiler.py changes, regex/parser for @key detection.
-#
-#   3. PROBABILITY ACCUMULATION (DB cache) — forward_prob / backward_prob
-#      are graph-topology scores computed from click/view events.  Need a
-#      click-tracking mechanism: user reads article A → clicks citation to
-#      article B → P(A→B) increases.  Could use a read-event table
-#      (article_id, viewer_id, timestamp, referrer_article_id).  Only
-#      forward_prob / backward_prob live in DB — everything else is SOT
-#      in git.  Needs: event table, click endpoint, scoring function.
-#
-#   CRUD (crud_citation.py) is fully implemented and tested.  The missing
-#   pieces are all above it: bib parsing, @key resolution, probability
-#   accumulation.  Without those three, the Citation table is inert.
-# Notification system: model + CRUD + CLI + P2P sync (completed).
+# ── Views ────────────────────────────────────────────────────────────────────
 
-from peerpedia_core.config.paths import ARTICLES_DIR
-from peerpedia_core.storage.db import db_repl_setup as _db_repl_setup
-from peerpedia_core.storage.db.session_utils import db_session_scope as _db_session_scope
+from peerpedia_core.core.views import (
+    get_article_view, get_follower_views, get_following_views,
+    get_user_view, list_article_views, list_user_article_views,
+)
+
+# ── Ingest (P2P) ─────────────────────────────────────────────────────────────
+
+from peerpedia_core.storage.db.ingest import (
+    ingest_articles, ingest_bookmarks, ingest_followers, ingest_following,
+    ingest_maintainers, ingest_notifications, ingest_shares, ingest_users,
+    sync_followers, sync_following,
+)
+
+# ── Pass-through (thin wrappers over storage/) ───────────────────────────────
+
 from peerpedia_core.storage.db.crud_article import create_article_from_orm, get_author_ids_batch
 from peerpedia_core.storage.db.crud_alias import (
     list_aliases, remove_alias, resolve_username_or_alias, set_alias,
 )
 from peerpedia_core.storage.db.crud_user import get_users_by_ids
 from peerpedia_core.storage.git import get_commit_history, get_head_hash, read_article_source
-
-
-def db_session(database_url: str):
-    """Context manager for a database session with auto commit/rollback/close.
-
-    CLI uses this to get a session; it never imports ``storage/`` directly.
-    """
-    return _db_session_scope(database_url)
-
-
-def db_repl_setup(database_url: str):
-    """Initialize the database engine and apply migrations.
-
-    Server startup calls this once per process lifetime.
-    """
-    return _db_repl_setup(database_url)
-
-
-def health_check(database_url: str) -> list[str]:
-    """Check that runtime dependencies (DB, articles directory) are reachable.
-
-    Returns a list of problem strings.  Empty list means healthy.
-    """
-    problems: list[str] = []
-    if not ARTICLES_DIR.is_dir():
-        problems.append("articles_dir_missing")
-    try:
-        with db_session(database_url):
-            pass
-    except Exception as e:
-        problems.append(f"db_unreachable: {e}")
-    return problems
-
-
-
-
-__all__ = [
-    "accept_merge",
-    "add_bookmark",
-    "add_share",
-    "db_session",
-    "withdraw_merge_proposal",
-    "add_maintainer_to_article",
-    "reconcile_after_sync",
-    "reconcile_reviews",
-    "assert_article_integrity",
-    "count_articles",
-    "create_article_with_content",
-    "create_merge_proposal",
-    "create_user",
-    "delete_article",
-    "follow_user",
-    "fork_article",
-    "create_article_from_orm",
-    "get_all_article_ids",
-    "get_article",
-    "get_article_view",
-    "get_author_ids",
-    "get_author_ids_batch",
-    "get_feed_shares",
-    "get_follower_views",
-    "get_following_views",
-    "get_shares_for_user",
-    "get_user_view",
-    "get_users_by_ids",
-    "list_aliases",
-    "get_followers",
-    "get_following",
-    "get_bookmarks_for_user",
-    "get_reviews_for_article",
-    "get_user",
-    "is_following",
-    "get_user_by_name",
-    "list_articles",
-    "list_article_views",
-    "list_user_article_views",
-    "list_maintainers",
-    "ingest_articles",
-    "ingest_bookmarks",
-    "ingest_followers",
-    "ingest_following",
-    "ingest_maintainers",
-    "ingest_notifications",
-    "ingest_shares",
-    "ingest_users",
-    "sync_followers",
-    "sync_following",
-    "parse_frontmatter",
-    "publish_article",
-    "publish_ready_articles",
-    "reconcile_authors",
-    "resolve_username_or_alias",
-    "find_users",
-    "reconcile_all_reputations",
-    "reconcile_reputation",
-    "reconcile_score",
-    "remove_alias",
-    "remove_bookmark",
-    "remove_share",
-    "remove_maintainer_from_article",
-    "rollback_article",
-    "search_users",
-    "set_alias",
-    "submit_review",
-    "unfollow_user",
-    "update_article_content",
-    "update_user_public_key",
-    "update_user_salt",
-]

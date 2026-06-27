@@ -9,7 +9,7 @@ from pathlib import Path
 
 import git
 
-from peerpedia_core.bundle.monotonic import search_monotonic_boundary
+from peerpedia_core.compute.monotonic import search_monotonic_boundary
 from peerpedia_core.storage.git.read import is_ancestor
 
 

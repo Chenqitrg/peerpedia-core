@@ -23,7 +23,7 @@ from peerpedia_core.core.guards import require_article
 from peerpedia_core.storage.db.state import extract_reputation_state
 
 
-def reconcile_score(db: Session, article_id: str) -> dict | None:
+def reconcile_score(db: Session, article_id: str) -> dict[str, float] | None:
     """Compute article score from cached reviews and write to DB."""
     # ── Setup ──────────────────────────────────────────────────────────────
     article = require_article(db, article_id)

@@ -103,12 +103,12 @@ def get_user(session: Session, user_id: str) -> UserStorage | None:
 
 def get_user_by_name(session: Session, name: str) -> list[UserStorage]:
     """Return all active users with the given name (may be multiple — P2P allows duplicates)."""
-    return session.query(UserStorage).filter(User.name == name, UserStorage.deleted_at.is_(None)).all()
+    return session.query(UserStorage).filter(UserStorage.name == name, UserStorage.deleted_at.is_(None)).all()
 
 
 def list_users(session: Session, limit: int | None = 100) -> list[UserStorage]:
     """Return active users, newest first.  Capped at *limit* (default 100)."""
-    q = session.query(UserStorage).filter(User.deleted_at.is_(None)).order_by(User.created_at.desc())
+    q = session.query(UserStorage).filter(UserStorage.deleted_at.is_(None)).order_by(UserStorage.created_at.desc())
     if limit is not None:
         q = q.limit(limit)
     return q.all()
@@ -118,12 +118,12 @@ def search_users(session: Session, query: str = "", *,
                  id_prefix: str = "", limit: int | None = None,
                  offset: int = 0) -> list[UserStorage]:
     """Search active users by name (ILIKE), UUID prefix, or both."""
-    q = session.query(UserStorage).filter(User.deleted_at.is_(None))
+    q = session.query(UserStorage).filter(UserStorage.deleted_at.is_(None))
     if id_prefix:
-        q = q.filter(User.id.startswith(id_prefix))
+        q = q.filter(UserStorage.id.startswith(id_prefix))
     elif query:
-        q = q.filter(User.name.ilike(f"%{query}%"))
-    q = q.order_by(User.created_at.desc())
+        q = q.filter(UserStorage.name.ilike(f"%{query}%"))
+    q = q.order_by(UserStorage.created_at.desc())
     if limit is not None:
         q = q.limit(limit).offset(offset)
     return q.all()
@@ -137,7 +137,7 @@ def get_users_by_ids(session: Session, user_ids: set[str]) -> list[UserStorage]:
     """
     if not user_ids:
         return []
-    users = session.query(UserStorage).filter(User.id.in_(user_ids)).all()
+    users = session.query(UserStorage).filter(UserStorage.id.in_(user_ids)).all()
     found = {u.id for u in users}
     missing = user_ids - found
     if missing:
@@ -147,7 +147,7 @@ def get_users_by_ids(session: Session, user_ids: set[str]) -> list[UserStorage]:
 
 def update_user_public_key(session: Session, user_id: str, pubkey_hex: str) -> None:
     """Set the public_key for a user. Raises ValueError if user not found."""
-    rows = session.query(UserStorage).filter(User.id == user_id).update(
+    rows = session.query(UserStorage).filter(UserStorage.id == user_id).update(
         {"public_key": pubkey_hex}, synchronize_session="fetch"
     )
     if rows == 0:
@@ -180,7 +180,7 @@ def set_user_pubkey_tofu(session: Session, user_id: str, pubkey_hex: str, *,
 
 def update_user_salt(session: Session, user_id: str, salt_hex: str) -> None:
     """Set the scrypt salt for a user. Raises ValueError if user not found."""
-    rows = session.query(UserStorage).filter(User.id == user_id).update(
+    rows = session.query(UserStorage).filter(UserStorage.id == user_id).update(
         {"salt": salt_hex}, synchronize_session="fetch"
     )
     if rows == 0:
@@ -190,7 +190,7 @@ def update_user_salt(session: Session, user_id: str, salt_hex: str) -> None:
 
 def update_user_reputation(session: Session, user_id: str, reputation: dict[str, float]) -> None:
     """Persist a new ReputationScores dict for *user_id*.  Raises NotFoundError if not found."""
-    rows = session.query(UserStorage).filter(User.id == user_id).update(
+    rows = session.query(UserStorage).filter(UserStorage.id == user_id).update(
         {"reputation": reputation}, synchronize_session="fetch"
     )
     if rows == 0:
@@ -228,7 +228,7 @@ def reset_failed_login(session: Session, user_id: str) -> None:
 
     Raises NotFoundError if the user does not exist.
     """
-    rows = session.query(UserStorage).filter(User.id == user_id).update(
+    rows = session.query(UserStorage).filter(UserStorage.id == user_id).update(
         {"failed_login_attempts": 0, "locked_until": None},
         synchronize_session="fetch",
     )
@@ -250,7 +250,7 @@ def soft_delete_user(session: Session, user_id: str) -> None:
     """
     from datetime import datetime, timezone
 
-    rows = session.query(UserStorage).filter(User.id == user_id, UserStorage.deleted_at.is_(None)).update(
+    rows = session.query(UserStorage).filter(UserStorage.id == user_id, UserStorage.deleted_at.is_(None)).update(
         {"deleted_at": datetime.now(timezone.utc)}, synchronize_session="fetch"
     )
     if rows == 0:
@@ -326,7 +326,7 @@ def set_following(session: Session, follower_id: str, followed_ids: set[str]) ->
         return 0
     rows = (
         session.query(FollowStorage)
-        .filter(Follow.follower_id == follower_id, FollowStorage.deleted_at.is_(None))
+        .filter(FollowStorage.follower_id == follower_id, FollowStorage.deleted_at.is_(None))
         .all()
     )
     removed = 0
@@ -350,7 +350,7 @@ def set_followers(session: Session, followed_id: str, follower_ids: set[str]) ->
         return 0
     rows = (
         session.query(FollowStorage)
-        .filter(Follow.followed_id == followed_id, FollowStorage.deleted_at.is_(None))
+        .filter(FollowStorage.followed_id == followed_id, FollowStorage.deleted_at.is_(None))
         .all()
     )
     removed = 0
@@ -389,7 +389,7 @@ def get_followers(session: Session, user_id: str) -> list[UserStorage]:
     return (
         session.query(UserStorage)
         .join(FollowStorage, UserStorage.id == FollowStorage.follower_id)
-        .filter(Follow.followed_id == user_id, FollowStorage.deleted_at.is_(None))
+        .filter(FollowStorage.followed_id == user_id, FollowStorage.deleted_at.is_(None))
         .all()
     )
 
@@ -399,7 +399,7 @@ def get_following(session: Session, user_id: str) -> list[UserStorage]:
     return (
         session.query(UserStorage)
         .join(FollowStorage, UserStorage.id == FollowStorage.followed_id)
-        .filter(Follow.follower_id == user_id, FollowStorage.deleted_at.is_(None))
+        .filter(FollowStorage.follower_id == user_id, FollowStorage.deleted_at.is_(None))
         .all()
     )
 
@@ -408,7 +408,7 @@ def get_follower_count(session: Session, user_id: str) -> int:
     """Return the number of active followers *user_id* has."""
     return (
         session.query(FollowStorage)
-        .filter(Follow.followed_id == user_id, FollowStorage.deleted_at.is_(None))
+        .filter(FollowStorage.followed_id == user_id, FollowStorage.deleted_at.is_(None))
         .count()
     )
 
@@ -417,7 +417,7 @@ def get_following_count(session: Session, user_id: str) -> int:
     """Return the number of active users *user_id* follows."""
     return (
         session.query(FollowStorage)
-        .filter(Follow.follower_id == user_id, FollowStorage.deleted_at.is_(None))
+        .filter(FollowStorage.follower_id == user_id, FollowStorage.deleted_at.is_(None))
         .count()
     )
 
@@ -433,12 +433,12 @@ def get_top_users_by_followers(session: Session, limit: int = 20) -> list[dict]:
     rows = (
         session.query(
             UserStorage.id, UserStorage.name,
-            func.count(Follow.follower_id).label("follower_count"),
+            func.count(FollowStorage.follower_id).label("follower_count"),
         )
-        .outerjoin(FollowStorage, (Follow.followed_id == UserStorage.id)
-                   & (Follow.deleted_at.is_(None)))
-        .group_by(User.id, UserStorage.name)
-        .order_by(func.count(Follow.follower_id).desc())
+        .outerjoin(FollowStorage, (FollowStorage.followed_id == UserStorage.id)
+                   & (FollowStorage.deleted_at.is_(None)))
+        .group_by(UserStorage.id, UserStorage.name)
+        .order_by(func.count(FollowStorage.follower_id).desc())
         .limit(limit)
         .all()
     )

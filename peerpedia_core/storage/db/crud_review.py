@@ -59,7 +59,7 @@ def upsert_review(
 
     article = session.get(
         ArticleMetaStorage, article_id,
-        options=[load_only(Article.status)],
+        options=[load_only(ArticleMetaStorage.status)],
     )
     if article is None:
         raise ValueError(f"Article {article_id} not found")
@@ -99,8 +99,8 @@ def get_reviews_for_article(
     """Return all cached reviews for an article, newest first."""
     return (
         session.query(ReviewMetaStorage)
-        .filter(Review.article_id == article_id)
-        .order_by(Review.created_at.desc())
+        .filter(ReviewMetaStorage.article_id == article_id)
+        .order_by(ReviewMetaStorage.created_at.desc())
         .all()
     )
 

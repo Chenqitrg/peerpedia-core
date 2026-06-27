@@ -57,8 +57,8 @@ def get_merge_proposals_for_article(session: Session, article_id: str) -> list[M
     """Return all merge proposals targeting *article_id*, newest first."""
     return (
         session.query(MergeProposalStorage)
-        .filter(MergeProposal.target_article_id == article_id)
-        .order_by(MergeProposal.created_at.desc())
+        .filter(MergeProposalStorage.target_article_id == article_id)
+        .order_by(MergeProposalStorage.created_at.desc())
         .all()
     )
 

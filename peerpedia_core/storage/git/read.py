@@ -265,7 +265,7 @@ def list_review_dirs(repo_path: Path) -> list[str]:
     return [d.name for d in reviews_dir.iterdir() if d.is_dir()]
 
 
-def read_review_scores(repo_path: Path, reviewer_dir: str) -> dict[str, Any] | None:
+def read_review_scores(repo_path: Path, reviewer_dir: str) -> dict[str, float] | None:
     """Read reviews/{reviewer_dir}/scores.json and return the parsed dict.
 
     Returns None if the scores file does not exist.

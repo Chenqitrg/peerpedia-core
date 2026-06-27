@@ -48,7 +48,7 @@ def _is_author(author_ids: list[str], user: UserStorage | None) -> bool:
     return user.id in author_ids
 
 
-def _is_maintainer(maintainer_ids: list[str], user: User) -> bool:
+def _is_maintainer(maintainer_ids: list[str], user: UserStorage) -> bool:
     return user.id in maintainer_ids
 
 
@@ -137,29 +137,29 @@ def assert_can_access_content(
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-def assert_can_edit_article(article: ArticleMetaStorage, maintainer_ids: list[str], user: User) -> ArticleMetaStorage:
+def assert_can_edit_article(article: ArticleMetaStorage, maintainer_ids: list[str], user: UserStorage) -> ArticleMetaStorage:
     _assert_maintainer(article, maintainer_ids, user, "edit")
     return article
 
 
-def assert_can_delete_article(article: ArticleMetaStorage, maintainer_ids: list[str], user: User) -> ArticleMetaStorage:
+def assert_can_delete_article(article: ArticleMetaStorage, maintainer_ids: list[str], user: UserStorage) -> ArticleMetaStorage:
     _assert_maintainer(article, maintainer_ids, user, "delete", allowed_statuses={"draft"})
     _assert_all_maintainers_consented(article, maintainer_ids)
     return article
 
 
-def assert_can_rollback_article(article: ArticleMetaStorage, maintainer_ids: list[str], user: User) -> ArticleMetaStorage:
+def assert_can_rollback_article(article: ArticleMetaStorage, maintainer_ids: list[str], user: UserStorage) -> ArticleMetaStorage:
     _assert_maintainer(article, maintainer_ids, user, "rollback")
     return article
 
 
-def assert_can_publish_article(article: ArticleMetaStorage, maintainer_ids: list[str], user: User) -> ArticleMetaStorage:
+def assert_can_publish_article(article: ArticleMetaStorage, maintainer_ids: list[str], user: UserStorage) -> ArticleMetaStorage:
     _assert_maintainer(article, maintainer_ids, user, "publish")
     _assert_all_maintainers_consented(article, maintainer_ids)
     return article
 
 
-def assert_can_accept_merge(article: ArticleMetaStorage, maintainer_ids: list[str], user: User) -> ArticleMetaStorage:
+def assert_can_accept_merge(article: ArticleMetaStorage, maintainer_ids: list[str], user: UserStorage) -> ArticleMetaStorage:
     _assert_maintainer(article, maintainer_ids, user, "accept merge")
     _assert_all_maintainers_consented(article, maintainer_ids)
     return article
@@ -181,12 +181,12 @@ def assert_can_reply_to_review(article: ArticleMetaStorage, maintainer_ids: list
     return article
 
 
-def assert_can_extend_sink(article: ArticleMetaStorage, maintainer_ids: list[str], user: User) -> ArticleMetaStorage:
+def assert_can_extend_sink(article: ArticleMetaStorage, maintainer_ids: list[str], user: UserStorage) -> ArticleMetaStorage:
     _assert_maintainer(article, maintainer_ids, user, "extend sink", allowed_statuses={"sedimentation"})
     return article
 
 
-def assert_can_sync_article(article: ArticleMetaStorage, maintainer_ids: list[str], user: User) -> ArticleMetaStorage:
+def assert_can_sync_article(article: ArticleMetaStorage, maintainer_ids: list[str], user: UserStorage) -> ArticleMetaStorage:
     _assert_maintainer(article, maintainer_ids, user, "sync", allowed_statuses=_SYNCABLE_STATUSES)
     return article
 

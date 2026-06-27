@@ -23,7 +23,7 @@ def add_bookmark(session: Session, user_id: str, article_id: str) -> BookmarkSto
 
 def remove_bookmark(session: Session, user_id: str, article_id: str) -> None:
     """Remove a bookmark.  No-op if not bookmarked."""
-    b = session.query(BookmarkStorage).filter(Bookmark.user_id == user_id, BookmarkStorage.article_id == article_id).first()
+    b = session.query(BookmarkStorage).filter(BookmarkStorage.user_id == user_id, BookmarkStorage.article_id == article_id).first()
     if b:
         session.delete(b)
         session.flush()
@@ -31,7 +31,7 @@ def remove_bookmark(session: Session, user_id: str, article_id: str) -> None:
 
 def is_bookmarked(session: Session, user_id: str, article_id: str) -> bool:
     """Return True if *user_id* has bookmarked *article_id*."""
-    return session.query(BookmarkStorage).filter(Bookmark.user_id == user_id, BookmarkStorage.article_id == article_id).first() is not None
+    return session.query(BookmarkStorage).filter(BookmarkStorage.user_id == user_id, BookmarkStorage.article_id == article_id).first() is not None
 
 
 def get_bookmarks_for_user(session: Session, user_id: str) -> list[ArticleMetaStorage]:
@@ -39,7 +39,7 @@ def get_bookmarks_for_user(session: Session, user_id: str) -> list[ArticleMetaSt
     return (
         session.query(ArticleMetaStorage)
         .join(BookmarkStorage, BookmarkStorage.article_id == ArticleMetaStorage.id)
-        .filter(Bookmark.user_id == user_id)
-        .order_by(Bookmark.created_at.desc())
+        .filter(BookmarkStorage.user_id == user_id)
+        .order_by(BookmarkStorage.created_at.desc())
         .all()
     )

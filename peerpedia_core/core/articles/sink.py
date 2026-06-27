@@ -20,7 +20,7 @@ from peerpedia_core.compute.sedimentation import apply_no_review_penalty, is_rea
 
 def publish_ready_articles(db: Session) -> int:
     """Scan sedimentation pool, publish/reject articles whose sink has elapsed."""
-    articles = list_articles(db, status="sedimentation")
+    articles = list_articles(db, statuses={"sedimentation"})
 
     # ── Process each elapsed article ───────────────────────────────────────
     affected_authors: set[str] = set()

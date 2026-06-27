@@ -18,26 +18,29 @@ from peerpedia_core.storage.db.crud_notification import ensure_notification
 from peerpedia_core.storage.db.crud_user import (
     add_followers, ensure_user, follow_users, set_followers, set_following,
 )
+from peerpedia_core.storage.db.models import (
+    ArticleMetaStorage, NotificationStorage, ShareStorage, UserStorage,
+)
 from peerpedia_core.types.entities import (
-    ArticleStub, BookmarkEntry, FollowEntry, MaintainerEntry,
-    NotificationEntry, PeerUser, ShareEntry,
+    ArticleMetaExchange, BookmarkExchange, FollowExchange, MaintainerExchange,
+    NotificationExchange, UserExchange, ShareExchange,
 )
 
 
-def ingest_users(db: Session, entries: list[PeerUser]) -> int:
+def ingest_users(db: Session, entries: list[UserExchange]) -> int:
     """Insert new users discovered from a peer — lazy social discovery."""
     for e in entries:
         ensure_user(db, e.id, e.name, address=e.address)
     return len(entries)
 
 
-def ingest_following(db: Session, follower_id: str, entries: list[FollowEntry]) -> int:
+def ingest_following(db: Session, follower_id: str, entries: list[FollowExchange]) -> int:
     """Insert FollowStorage rows discovered from a peer — never deletes."""
     ids = {e.id for e in entries}
     return follow_users(db, follower_id, ids)
 
 
-def sync_following(db: Session, follower_id: str, entries: list[FollowEntry]) -> int:
+def sync_following(db: Session, follower_id: str, entries: list[FollowExchange]) -> int:
     """Insert FollowStorage rows and soft-delete stale follows (home-server sync)."""
     ids = {e.id for e in entries}
     added = follow_users(db, follower_id, ids)
@@ -45,13 +48,13 @@ def sync_following(db: Session, follower_id: str, entries: list[FollowEntry]) ->
     return added
 
 
-def ingest_followers(db: Session, followed_id: str, entries: list[FollowEntry]) -> int:
+def ingest_followers(db: Session, followed_id: str, entries: list[FollowExchange]) -> int:
     """Insert FollowStorage rows for users who follow *followed_id* — never deletes."""
     ids = {e.id for e in entries}
     return add_followers(db, followed_id, ids)
 
 
-def sync_followers(db: Session, followed_id: str, entries: list[FollowEntry]) -> int:
+def sync_followers(db: Session, followed_id: str, entries: list[FollowExchange]) -> int:
     """Insert FollowStorage rows and soft-delete stale followers (home-server sync)."""
     ids = {e.id for e in entries}
     added = add_followers(db, followed_id, ids)
@@ -59,42 +62,39 @@ def sync_followers(db: Session, followed_id: str, entries: list[FollowEntry]) ->
     return added
 
 
-def ingest_articles(db: Session, entries: list[ArticleStub]) -> int:
+def ingest_articles(db: Session, entries: list[ArticleMetaExchange]) -> int:
     """Insert article stubs discovered from a peer — lazy discovery."""
     added = 0
     for e in entries:
-        data = {"id": e.id, "title": e.title, "status": e.status}
-        if ensure_article_stub(db, data, author_ids=list(e.authors)) is not None:
+        if ensure_article_stub(db, ArticleMetaStorage.from_exchange(e), author_ids=list(e.authors)) is not None:
             added += 1
     return added
 
 
-def ingest_bookmarks(db: Session, user_id: str, entries: list[BookmarkEntry]) -> int:
+def ingest_bookmarks(db: Session, user_id: str, entries: list[BookmarkExchange]) -> int:
     """Insert bookmarks discovered from a peer — lazy discovery."""
     for e in entries:
         add_bookmark(db, user_id, e.article_id)
     return len(entries)
 
 
-def ingest_maintainers(db: Session, article_id: str, entries: list[MaintainerEntry]) -> int:
+def ingest_maintainers(db: Session, article_id: str, entries: list[MaintainerExchange]) -> int:
     """Insert maintainers discovered from a peer — lazy discovery."""
     for e in entries:
         add_maintainer(db, article_id, e.user_id)
     return len(entries)
 
 
-def ingest_shares(db: Session, user_id: str, entries: list[ShareEntry]) -> int:
+def ingest_shares(db: Session, user_id: str, entries: list[ShareExchange]) -> int:
     """Insert shares discovered from a peer — lazy discovery."""
     for e in entries:
-        _add_share(
-            db, user_id, e.article_id,
-            recipient_id=e.recipient_id or None,
-            comment=e.comment or None,
-        )
+        _add_share(db, user_id, e.article_id,
+                   recipient_id=e.recipient_id or None,
+                   comment=e.comment or None)
     return len(entries)
 
 
-def ingest_notifications(db: Session, user_id: str, entries: list[NotificationEntry]) -> int:
+def ingest_notifications(db: Session, user_id: str, entries: list[NotificationExchange]) -> int:
     """Insert notifications from peer data — dedup via ensure_notification."""
     for entry in entries:
         n = ensure_notification(

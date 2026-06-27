@@ -42,7 +42,7 @@ from peerpedia_core.core.guards import (
 )
 
 
-def get_reviews_for_article(db: Session, article_id: str) -> list:
+def get_reviews_for_article(db: Session, article_id: str) -> list[ReviewMetaStorage]:
     """Return all cached reviews for an article, newest first."""
     return _get(db, article_id)
 

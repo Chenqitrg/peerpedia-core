@@ -44,7 +44,7 @@ def add_maintainer_to_article(
     article_id: str,
     user_id: str,
     caller_id: str,
-) -> dict:
+) -> dict[str, object]:
     """Grant maintainer status to *user_id* for *article_id*.
 
     Only an existing maintainer (*caller_id*) can add a new maintainer.
@@ -65,7 +65,7 @@ def remove_maintainer_from_article(
     article_id: str,
     user_id: str,
     caller_id: str,
-) -> dict:
+) -> dict[str, object]:
     """Revoke maintainer status from *user_id* for *article_id*.
 
     An existing maintainer can remove another maintainer.  Self-removal is
@@ -94,14 +94,14 @@ def list_maintainers(db: Session, article_id: str) -> list[str]:
     return crud_maintainer.get_maintainer_ids(db, article_id)
 
 
-def consent_to_publish(db: Session, article_id: str, user_id: str) -> dict:
+def consent_to_publish(db: Session, article_id: str, user_id: str) -> dict[str, object]:
     """Record a maintainer's consent to publish/merge the article."""
     assert_caller_is_maintainer(db, article_id, user_id)
     add_publish_consent(db, article_id, user_id)
     return {"article_id": article_id, "user_id": user_id, "action": "consented"}
 
 
-def revoke_publish_consent(db: Session, article_id: str, user_id: str) -> dict:
+def revoke_publish_consent(db: Session, article_id: str, user_id: str) -> dict[str, object]:
     """Revoke a maintainer's consent to publish/merge.
 
     Raises NotFoundError if the article is not found.

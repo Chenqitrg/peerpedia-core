@@ -52,8 +52,8 @@ def get_shares_for_user(
     """Return all shares by *user_id*, newest first."""
     return (
         session.query(ShareStorage)
-        .filter(Share.sharer_id == user_id)
-        .order_by(Share.created_at.desc())
+        .filter(ShareStorage.sharer_id == user_id)
+        .order_by(ShareStorage.created_at.desc())
         .limit(limit).offset(offset)
         .all()
     )
@@ -77,7 +77,7 @@ def get_shares_by_followed(
             FollowStorage.deleted_at.is_(None),
         )
         .distinct()
-        .order_by(Share.created_at.desc())
+        .order_by(ShareStorage.created_at.desc())
         .limit(limit).offset(offset)
         .all()
     )

@@ -23,7 +23,7 @@ from peerpedia_core.storage.git import clone_article_repo, get_commit_authors
 from peerpedia_core.core.guards import authorize_article_action, require_article_repo
 
 
-def fork_article(db: Session, article_id: str, user_id: str) -> dict:
+def fork_article(db: Session, article_id: str, user_id: str) -> dict[str, object]:
     """Fork an article: clone its git repo and create a new ArticleMetaStorage record.
 
     Returns:

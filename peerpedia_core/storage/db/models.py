@@ -17,6 +17,9 @@ from typing import Any
 from sqlalchemy import CheckConstraint, Column, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint
 
 from peerpedia_core.storage.db.engine import Base, JSONDict, JSONList
+from peerpedia_core.types.entities import (
+    ArticleMetaExchange, NotificationExchange, ShareExchange, UserExchange,
+)
 
 
 def _new_id() -> str:
@@ -74,6 +77,13 @@ class ArticleMetaStorage(Base):
             "created_at": str(self.created_at) if self.created_at else None,
             "witnessed_at": str(self.witnessed_at) if self.witnessed_at else None,
         }
+
+    @classmethod
+    def from_exchange(cls, e: ArticleMetaExchange) -> dict[str, object]:
+        return {"id": e.id, "title": e.title, "status": e.status}
+
+    def to_exchange(self) -> ArticleMetaExchange:
+        return ArticleMetaExchange(id=self.id, title=self.title, status=self.status)
 
 
 # ── ReviewMetaStorage ───────────────────────────────────────────────────────────────
@@ -162,6 +172,13 @@ class UserStorage(Base):
             "created_at": str(self.created_at) if self.created_at else None,
         }
 
+    @classmethod
+    def from_exchange(cls, e: UserExchange) -> dict[str, object]:
+        return {"id": e.id, "name": e.name, "address": e.address}
+
+    def to_exchange(self) -> UserExchange:
+        return UserExchange(id=self.id, name=self.name, address=self.address or "")
+
 
 # ── FollowStorage ───────────────────────────────────────────────────────────────
 
@@ -208,6 +225,16 @@ class ShareStorage(Base):
     comment: str | None = Column(String, nullable=True)
     created_at: datetime = Column(DateTime, nullable=False, default=_utcnow)
 
+    @classmethod
+    def from_exchange(cls, e: ShareExchange) -> dict[str, object]:
+        return {"article_id": e.article_id, "recipient_id": e.recipient_id or None,
+                "comment": e.comment or None}
+
+    def to_exchange(self) -> ShareExchange:
+        return ShareExchange(article_id=self.article_id,
+                             recipient_id=self.recipient_id or "",
+                             comment=self.comment or "")
+
 
 # ── BookmarkStorage ─────────────────────────────────────────────────────────────
 
@@ -249,6 +276,17 @@ class NotificationStorage(Base):
             "read": self.read,
             "created_at": str(self.created_at) if self.created_at else None,
         }
+
+    @classmethod
+    def from_exchange(cls, e: NotificationExchange) -> dict[str, object]:
+        return {"event": e.event, "message": e.message,
+                "id": e.id or None, "article_id": e.article_id or None,
+                "actor_id": e.actor_id or None, "read": 1 if e.read else 0}
+
+    def to_exchange(self) -> NotificationExchange:
+        return NotificationExchange(event=self.event, message=self.message,
+                                    id=self.id, article_id=self.article_id or "",
+                                    actor_id=self.actor_id or "", read=bool(self.read))
 
 
 # ── MergeProposalStorage ────────────────────────────────────────────────────────

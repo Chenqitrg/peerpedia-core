@@ -19,7 +19,7 @@ from peerpedia_core.storage.db.crud_user import get_followers, get_following, ge
 from peerpedia_core.core.articles import list_articles
 
 
-def get_article_view(db: Session, article_id: str) -> dict | None:
+def get_article_view(db: Session, article_id: str) -> dict[str, object] | None:
     """Return a complete article response dict (with authors), or None."""
     article = get_article(db, article_id)
     if article is None:
@@ -56,7 +56,7 @@ def list_article_views(
     return [{**a.to_dict(), "authors": author_map.get(a.id, [])} for a in articles]
 
 
-def get_user_view(db: Session, user_id: str) -> dict | None:
+def get_user_view(db: Session, user_id: str) -> dict[str, object] | None:
     """Return a complete user response dict, or None."""
     user = get_user(db, user_id)
     if user is None:

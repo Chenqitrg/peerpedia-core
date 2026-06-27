@@ -76,7 +76,7 @@ def _notify_maintainers_except(db, target_id, proposer_id, proposer_name):
 # ── Accept ─────────────────────────────────────────────────────────────────
 
 
-def accept_merge(db: Session, article_id: str, proposal_id: str, user_id: str) -> dict:
+def accept_merge(db: Session, article_id: str, proposal_id: str, user_id: str) -> dict[str, object]:
     """Accept a merge proposal: git merge fork into target, rebuild authors."""
     # ── Authorization ──────────────────────────────────────────────────────
     user, article, mids = authorize_article_action(db, article_id, user_id)
@@ -125,7 +125,7 @@ def create_merge_proposal(db: Session, fork_id: str, target_id: str, proposer_id
     return mp
 
 
-def withdraw_merge_proposal(db: Session, proposal_id: str, user_id: str) -> dict:
+def withdraw_merge_proposal(db: Session, proposal_id: str, user_id: str) -> dict[str, object]:
     """Withdraw a merge proposal — proposer only."""
     mp = get_merge_proposal(db, proposal_id)
     if mp is None:

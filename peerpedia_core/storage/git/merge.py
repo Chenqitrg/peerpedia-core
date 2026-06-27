@@ -22,7 +22,7 @@ from peerpedia_core.storage.git.guards import assert_on_main
 def merge_git_repos(target: Path, fork: Path, author_name: str) -> str:
     """Merge fork repo into target repo.
 
-    The DB (``Article.forked_from``) owns the fork relationship — remote
+    The DB (``ArticleMetaStorage.forked_from``) owns the fork relationship — remote
     refs in ``.git/refs/remotes/`` are an implementation detail.
     """
     target_repo = git.Repo(target)

@@ -155,7 +155,7 @@ def require_article_repo(article_id: str) -> Path:
     return rp
 
 
-def require_review_scores(repo_path: Path, reviewer_dir: str, article_id: str) -> dict[str, Any]:
+def require_review_scores(repo_path: Path, reviewer_dir: str, article_id: str) -> dict[str, float]:
     """Return parsed review scores or raise NotFoundError."""
     scores = read_review_scores(repo_path, reviewer_dir)
     if scores is None:

@@ -1,34 +1,30 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""Minimal transfer types for P2P social graph exchange.
+"""P2P exchange types — minimal fields exchanged between peers.
 
-NOT ORM models — these carry only the fields needed for peer discovery
-and ingest.  Deserialize JSON at the boundary, pass typed objects inward.
+NOT ORM models — deserialize JSON at the boundary, pass typed objects inward.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
-class PeerUser:
-    """A user as seen from a peer — minimal identity fields."""
+class UserExchange:
     id: str
     name: str
     address: str = ""
 
 
 @dataclass(frozen=True)
-class FollowEntry:
-    """A single follow edge from a peer."""
+class FollowExchange:
     id: str
 
 
 @dataclass(frozen=True)
-class ArticleStub:
-    """Article metadata for peer discovery — not the full entity."""
+class ArticleMetaExchange:
     id: str
     title: str
     status: str
@@ -36,28 +32,24 @@ class ArticleStub:
 
 
 @dataclass(frozen=True)
-class BookmarkEntry:
-    """A bookmark reference from a peer."""
+class BookmarkExchange:
     article_id: str
 
 
 @dataclass(frozen=True)
-class MaintainerEntry:
-    """A maintainer reference from a peer."""
+class MaintainerExchange:
     user_id: str
 
 
 @dataclass(frozen=True)
-class ShareEntry:
-    """A share event from a peer."""
+class ShareExchange:
     article_id: str
     recipient_id: str = ""
     comment: str = ""
 
 
 @dataclass(frozen=True)
-class NotificationEntry:
-    """A notification payload from a peer."""
+class NotificationExchange:
     event: str
     message: str
     id: str = ""

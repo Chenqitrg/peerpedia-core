@@ -56,8 +56,8 @@ def get_maintainer_ids(session: Session, article_id: str) -> list[str]:
     """Return maintainer IDs for an article, ordered by created_at."""
     rows = (
         session.query(ScriptMaintainerStorage)
-        .filter(ScriptMaintainer.article_id == article_id)
-        .order_by(ScriptMaintainer.created_at)
+        .filter(ScriptMaintainerStorage.article_id == article_id)
+        .order_by(ScriptMaintainerStorage.created_at)
         .all()
     )
     return [r.user_id for r in rows]

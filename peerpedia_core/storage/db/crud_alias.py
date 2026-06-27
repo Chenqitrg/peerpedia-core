@@ -51,8 +51,8 @@ def list_aliases(session: Session, owner_id: str) -> list[AliasStorage]:
     """Return all aliases set by *owner_id*, sorted alphabetically."""
     return (
         session.query(AliasStorage)
-        .filter(Alias.owner_id == owner_id)
-        .order_by(Alias.alias)
+        .filter(AliasStorage.owner_id == owner_id)
+        .order_by(AliasStorage.alias)
         .all()
     )
 
@@ -67,7 +67,7 @@ def resolve_username_or_alias(
     """
     # Exact username match
     by_name = (
-        session.query(UserStorage).filter(User.name == name).all()
+        session.query(UserStorage).filter(UserStorage.name == name).all()
     )
     if by_name:
         return by_name
@@ -76,6 +76,6 @@ def resolve_username_or_alias(
     return (
         session.query(UserStorage)
         .join(AliasStorage, UserStorage.id == AliasStorage.target_id)
-        .filter(Alias.owner_id == owner_id, AliasStorage.alias == name)
+        .filter(AliasStorage.owner_id == owner_id, AliasStorage.alias == name)
         .all()
     )

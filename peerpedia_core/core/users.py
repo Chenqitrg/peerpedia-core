@@ -57,7 +57,7 @@ def get_user(db: Session, user_ref: str):
     return _get(db, user_ref)
 
 
-def get_user_by_name(db: Session, name: str) -> list:
+def get_user_by_name(db: Session, name: str) -> list[UserStorage]:
     """Get users by exact name match. Returns empty list if none found."""
     return _get_by_name(db, name)
 
@@ -109,12 +109,12 @@ def is_following(db: Session, follower_id: str, followed_id: str) -> bool:
     return _is_following(db, follower_id, followed_id)
 
 
-def get_followers(db: Session, user_id: str) -> list:
+def get_followers(db: Session, user_id: str) -> list[UserStorage]:
     """Return users following user_id."""
     return _get_followers(db, user_id)
 
 
-def get_following(db: Session, user_id: str) -> list:
+def get_following(db: Session, user_id: str) -> list[UserStorage]:
     """Return users user_id follows."""
     return _get_following(db, user_id)
 
@@ -127,12 +127,12 @@ def get_top_users_by_followers(db: Session, limit: int = 20) -> list[dict]:
     return _get_top_users_by_followers(db, limit=limit)
 
 
-def search_users(db: Session, query: str, limit: int | None = None, offset: int = 0) -> list:
+def search_users(db: Session, query: str, limit: int | None = None, offset: int = 0) -> list[UserStorage]:
     """Fuzzy search users by name."""
     return _search_users(db, query, limit=limit, offset=offset)
 
 
-def list_users(db: Session) -> list:
+def list_users(db: Session) -> list[UserStorage]:
     """Return all active users, newest first."""
     return _list_users(db)
 

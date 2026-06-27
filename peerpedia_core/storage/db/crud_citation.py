@@ -18,7 +18,7 @@ def create_or_update_citation(
 ) -> CitationStorage:
     """Create or update a citation edge between two articles."""
     require_not_same(from_id, to_id, label="cite")
-    c = session.query(CitationStorage).filter(Citation.from_article_id == from_id, CitationStorage.to_article_id == to_id).first()
+    c = session.query(CitationStorage).filter(CitationStorage.from_article_id == from_id, CitationStorage.to_article_id == to_id).first()
     if c:
         c.forward_prob = forward
         c.backward_prob = backward
@@ -36,19 +36,19 @@ def create_or_update_citation(
 
 def get_citation(session: Session, from_id: str, to_id: str) -> CitationStorage | None:
     """Return the citation edge from *from_id* to *to_id*, or None."""
-    return session.query(CitationStorage).filter(Citation.from_article_id == from_id, CitationStorage.to_article_id == to_id).first()
+    return session.query(CitationStorage).filter(CitationStorage.from_article_id == from_id, CitationStorage.to_article_id == to_id).first()
 
 
 def get_citations(session: Session, article_id: str) -> list[CitationStorage]:
     """All citation edges involving this article."""
-    return session.query(CitationStorage).filter((Citation.from_article_id == article_id) | (Citation.to_article_id == article_id)).all()
+    return session.query(CitationStorage).filter((CitationStorage.from_article_id == article_id) | (CitationStorage.to_article_id == article_id)).all()
 
 
 def get_cites(session: Session, article_id: str) -> list[CitationStorage]:
     """Articles this article cites (outgoing edges)."""
-    return session.query(CitationStorage).filter(Citation.from_article_id == article_id).all()
+    return session.query(CitationStorage).filter(CitationStorage.from_article_id == article_id).all()
 
 
 def get_cited_by(session: Session, article_id: str) -> list[CitationStorage]:
     """Articles that cite this article (incoming edges)."""
-    return session.query(CitationStorage).filter(Citation.to_article_id == article_id).all()
+    return session.query(CitationStorage).filter(CitationStorage.to_article_id == article_id).all()

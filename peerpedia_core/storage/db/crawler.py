@@ -16,7 +16,7 @@ from peerpedia_core.compute.bfs import bfs_traverse
 from peerpedia_core.exceptions import ProtocolError
 from peerpedia_core.storage.db import Session
 from peerpedia_core.storage.db.ingest import ingest_following, ingest_users
-from peerpedia_core.types.entities import FollowEntry, PeerUser
+from peerpedia_core.types.entities import FollowExchange, UserExchange
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +90,7 @@ def _fetch_ingest_node(
         return None
 
     # ── Ingest users + follows ────────────────────────────────────────────
-    users = [PeerUser(id=e["id"], name=e.get("name", e["id"]), address=e.get("address", "")) for e in data]
+    users = [UserExchange(id=e["id"], name=e.get("name", e["id"]), address=e.get("address", "")) for e in data]
     try:
         ingest_users(db, users)
     except ValueError as e:
@@ -99,7 +99,7 @@ def _fetch_ingest_node(
         return None
 
     n_follows = 0
-    follows = [FollowEntry(id=e["id"]) for e in data]
+    follows = [FollowExchange(id=e["id"]) for e in data]
     try:
         n_follows = ingest_following(db, user_id, follows)
     except ValueError as e:

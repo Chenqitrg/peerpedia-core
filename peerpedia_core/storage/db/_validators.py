@@ -61,7 +61,7 @@ def require_signing_key(key_bytes: bytes | None, pubkey_hex: str | None, action:
 # ── Entry / dict validation ────────────────────────────────────────────────
 
 
-def require_keys(entries: list[dict[str, Any]], *keys: str, label: str) -> None:
+def require_keys(entries: list[dict[str, object]], *keys: str, label: str) -> None:
     """Raise ValueError if any entry is missing a required key."""
     for e in entries:
         for k in keys:
@@ -70,7 +70,7 @@ def require_keys(entries: list[dict[str, Any]], *keys: str, label: str) -> None:
 
 
 def validate_follow_entries(
-    entries: list[dict[str, Any]], source_id: str, label: str,
+    entries: list[dict[str, object]], source_id: str, label: str,
 ) -> set[str]:
     """Validate follow entries and return the set of remote IDs."""
     require_keys(entries, "id", label=label)
@@ -83,13 +83,13 @@ def validate_follow_entries(
 # ── Object state ───────────────────────────────────────────────────────────
 
 
-def require_draft_status(article: Article) -> None:
+def require_draft_status(article: ArticleMetaStorage) -> None:
     """Raise BadRequestError if the article is not in draft status."""
     if article.status != "draft":
         raise BadRequestError("Only draft articles can be published")
 
 
-def require_sedimentation(article: Article) -> None:
+def require_sedimentation(article: ArticleMetaStorage) -> None:
     """Raise BadRequestError if the article is not in sedimentation."""
     if article.status != "sedimentation":
         raise BadRequestError("Can only invite reviewers to articles in sedimentation")

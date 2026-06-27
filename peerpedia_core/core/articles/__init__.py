@@ -49,9 +49,11 @@ def list_articles(
     offset: int = 0,
 ) -> list:
     """List articles with AND filters — all pushed to SQL via JOINs/subqueries."""
+    statuses = _to_set(status)
+    author_ids = _to_set(author_id)
     return _list(
-        db, status=status, search_query=search_query,
-        author_ids=author_id, viewer_id=viewer_id,
+        db, statuses=statuses, search_query=search_query,
+        author_ids=author_ids, viewer_id=viewer_id,
         bookmarked_by=bookmarked_by,
         limit=limit, offset=offset,
     )
@@ -59,7 +61,17 @@ def list_articles(
 
 def count_articles(db: Session, **kwargs) -> int:
     """Count articles with optional filters."""
+    if "status" in kwargs:
+        kwargs["statuses"] = _to_set(kwargs.pop("status"))
     return _count(db, **kwargs)
+
+
+def _to_set(value: str | set[str] | None) -> set[str] | None:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        return {value}
+    return value
 
 
 def get_all_article_ids(db: Session) -> list[str]:

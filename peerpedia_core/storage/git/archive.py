@@ -9,7 +9,7 @@ from peerpedia_core.exceptions import ConflictError
 from peerpedia_core.storage.git.bundle import get_head
 
 
-def ingest_article(repo_path: Path, payload: dict[str, Any]) -> str:
+def ingest_article(repo_path: Path, payload: dict[str, str]) -> str:
     """Receive and unpack a full article repo upload.
 
     Thin wrapper around ``ingest_article_repo`` that converts
@@ -21,7 +21,7 @@ def ingest_article(repo_path: Path, payload: dict[str, Any]) -> str:
         raise ConflictError(f"Article already exists locally: {repo_path.name}") from None
 
 
-def ingest_article_repo(repo_path: Path, payload: dict[str, Any]) -> str:
+def ingest_article_repo(repo_path: Path, payload: dict[str, str]) -> str:
     """Unpack a full article repo from a base64-encoded tar.gz payload.
 
     *payload* must contain ``"repo_bundle"``: a base64-encoded gzipped

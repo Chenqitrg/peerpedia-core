@@ -125,7 +125,7 @@ def authorize_article_action(
 
 def guard_sedimentation_limit(db: Session, user_id: str) -> None:
     """Raise BadRequestError if *user_id* has too many articles in sedimentation."""
-    in_pool = count_articles(db, status="sedimentation", author_id=user_id)
+    in_pool = count_articles(db, statuses={"sedimentation"}, author_id=user_id)
     if in_pool >= params.sink.max_sedimentation_per_author:
         raise BadRequestError(
             f"Author already has {in_pool} article(s) in sedimentation "
@@ -149,7 +149,7 @@ def guard_invitation_not_declined(db: Session, article_id: str, reviewer_id: str
     """Raise BadRequestError if invitation was already declined."""
     declined = (
         db.query(ReviewMetaStorage)
-        .filter(Review.article_id == article_id, ReviewMetaStorage.reviewer_id == reviewer_id,
+        .filter(ReviewMetaStorage.article_id == article_id, ReviewMetaStorage.reviewer_id == reviewer_id,
                 ReviewMetaStorage.status == "declined")
         .first()
     )

@@ -68,10 +68,10 @@ def get_notifications(
     limit: int = 50,
 ) -> list[NotificationStorage]:
     """Return notifications for a user, newest first."""
-    q = session.query(NotificationStorage).filter(Notification.user_id == user_id)
+    q = session.query(NotificationStorage).filter(NotificationStorage.user_id == user_id)
     if unread_only:
-        q = q.filter(Notification.read == 0)
-    return q.order_by(Notification.created_at.desc()).limit(limit).all()
+        q = q.filter(NotificationStorage.read == 0)
+    return q.order_by(NotificationStorage.created_at.desc()).limit(limit).all()
 
 
 def mark_read(session: Session, notification_id: str) -> None:
@@ -88,6 +88,6 @@ def count_unread_notifications(session: Session, user_id: str) -> int:
     """Return the number of unread notifications for a user."""
     return (
         session.query(NotificationStorage)
-        .filter(Notification.user_id == user_id, NotificationStorage.read == 0)
+        .filter(NotificationStorage.user_id == user_id, NotificationStorage.read == 0)
         .count()
     )

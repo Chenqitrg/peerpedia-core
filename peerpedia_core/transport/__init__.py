@@ -6,6 +6,7 @@
 When switching from HTTP to P2P, only this file changes.
 """
 
+from peerpedia_core.transport.guards import require_fetch_response
 from peerpedia_core.transport.health import is_online
 from peerpedia_core.transport.http_client import (
     ancestor_probe,

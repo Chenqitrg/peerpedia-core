@@ -29,8 +29,9 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from peerpedia_core.commands import create_user_stub, get_user, update_user_public_key
+from peerpedia_core.core import create_user_stub, get_user, update_user_public_key
 from peerpedia_core.transport.auth import verify_auth_header
+from peerpedia_core.types import short_id
 
 
 class AuthMiddleware(BaseHTTPMiddleware):
@@ -86,7 +87,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         user = get_user(db, user_id)
         if user is None:
             create_user_stub(
-                db, user_id=user_id, name=user_id[:8],
+                db, user_id=user_id, name=short_id(user_id),
                 public_key=pubkey_hex, salt="",
             )
             db.commit()

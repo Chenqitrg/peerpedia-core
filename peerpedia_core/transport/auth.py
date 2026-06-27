@@ -24,7 +24,7 @@ Format
 ------
 The ``Authorization`` header value has 5 colon-separated fields::
 
-    Peerpedia <user_id>:<pubkey_hex>:<unix_timestamp>:<body_sha256_hex>:<signature_hex>
+    Peerpedia <user_id>:<pubkey_hex>:<unix_timestamp>:<bodysha256_hex>:<signature_hex>
 
 The signature covers ``<method>:<path>:<user_id>:<ts>:<body_hash>``.
 Timestamp must be within ±30s of server time (replay window).
@@ -33,21 +33,30 @@ Body hash is SHA-256 hex, or "" for GET/empty requests.
 
 from __future__ import annotations
 
-import hashlib
 import time
 from dataclasses import dataclass
 
-from peerpedia_core.crypto import sign_detached, verify_signature
+from peerpedia_core.crypto import sha256_hex, sign_detached, validate_pubkey_hex, validate_sig_hex, verify_signature
+from peerpedia_core.time import validate_timestamp
 
 
 @dataclass
 class AuthResult:
-    """Result of ``verify_auth_header``.  ``ok=True`` on success; on failure
-    ``ok=False`` and ``reason`` explains why."""
+    """Result of ``verify_auth_header`` — check ``.ok``, read ``.reason`` on failure."""
     ok: bool
     user_id: str = ""
     pubkey_hex: str = ""
     reason: str = ""
+
+
+@dataclass
+class _ParsedHeader:
+    """5 colon-separated fields extracted from the Authorization header."""
+    user_id: str
+    pubkey_hex: str
+    ts: str
+    body_hash: str
+    sig_hex: str
 
 
 def sign_auth_header(
@@ -67,77 +76,61 @@ def sign_auth_header(
     Format: ``Peerpedia <uid>:<pubkey>:<ts>:<body_hash>:<sig>``
     """
     ts = str(int(time.time()))
-    body_hash = _sha256_hex(body)
+    body_hash = sha256_hex(body)
     message = f"{method}:{path}:{user_id}:{ts}:{body_hash}".encode("utf-8")
     sig = sign_detached(private_key_bytes, message)
     return f"Peerpedia {user_id}:{pubkey_hex}:{ts}:{body_hash}:{sig.hex()}"
 
 
 def verify_auth_header(
-    header_value: str,
-    method: str,
-    path: str,
-    *,
-    body: bytes = b"",
+    header_value: str, method: str, path: str, *, body: bytes = b"",
 ) -> AuthResult:
-    """Verify a ``Peerpedia`` auth header.  Self-contained — pubkey is in the header.
+    """Verify a ``Peerpedia`` auth header — pubkey is embedded, no DB needed."""
+    parsed = _parse_auth_header(header_value)
+    if isinstance(parsed, AuthResult):
+        return parsed
 
-    Returns ``AuthResult`` — check ``.ok``, read ``.reason`` on failure.
-    """
+    # ── Validate pubkey ──────────────────────────────────────────────────────
+    try:
+        pubkey_bytes = validate_pubkey_hex(parsed.pubkey_hex)
+    except ValueError as e:
+        return AuthResult(ok=False, reason=str(e))
+
+    ts = validate_timestamp(parsed.ts)
+    if isinstance(ts, str):
+        return AuthResult(ok=False, reason=ts)
+
+    try:
+        sig_bytes = validate_sig_hex(parsed.sig_hex)
+    except ValueError as e:
+        return AuthResult(ok=False, reason=str(e))
+
+    # ── Body hash ────────────────────────────────────────────────────────────
+    actual_hash = sha256_hex(body)
+    if parsed.body_hash != actual_hash:
+        return AuthResult(ok=False,
+            reason=f"Body hash mismatch (expected {actual_hash[:16]}..., "
+                   f"got {parsed.body_hash[:16]}...)")
+
+    # ── Verify signature ─────────────────────────────────────────────────────
+    message = f"{method}:{path}:{parsed.user_id}:{parsed.ts}:{parsed.body_hash}".encode("utf-8")
+    if not verify_signature(pubkey_bytes, message, sig_bytes):
+        return AuthResult(ok=False, reason="Signature verification failed")
+
+    return AuthResult(ok=True, user_id=parsed.user_id, pubkey_hex=parsed.pubkey_hex)
+
+
+def _parse_auth_header(header_value: str) -> _ParsedHeader | AuthResult:
+    """Extract the 5 colon-separated fields, or return an AuthResult failure."""
     try:
         scheme, payload = header_value.split(" ", 1)
         if scheme != "Peerpedia":
             return AuthResult(ok=False, reason="Authorization scheme must be 'Peerpedia'")
         parts = payload.split(":")
-        if len(parts) == 5:
-            user_id, pubkey_hex, ts_str, body_hash, sig_hex = parts
-        elif len(parts) == 4:
-            return AuthResult(ok=False,
-                reason="Old auth format (no public key) — update your client")
-        else:
+        if len(parts) != 5:
             return AuthResult(ok=False,
                 reason=f"Expected 5 colon-separated fields, got {len(parts)}")
+        return _ParsedHeader(user_id=parts[0], pubkey_hex=parts[1],
+                              ts=parts[2], body_hash=parts[3], sig_hex=parts[4])
     except ValueError as e:
         return AuthResult(ok=False, reason=f"Malformed header: {e}")
-
-    # Validate pubkey format
-    if len(pubkey_hex) != 64:
-        return AuthResult(ok=False,
-            reason=f"Public key must be 64 hex chars, got {len(pubkey_hex)}")
-    try:
-        pubkey_bytes = bytes.fromhex(pubkey_hex)
-    except ValueError:
-        return AuthResult(ok=False, reason="Public key is not valid hex")
-
-    # Replay window
-    try:
-        ts = int(ts_str)
-        now = int(time.time())
-        if abs(now - ts) > 30:
-            return AuthResult(ok=False,
-                reason=f"Timestamp {ts} is outside ±30s window (server time: {now})")
-    except ValueError:
-        return AuthResult(ok=False, reason=f"Timestamp '{ts_str}' is not an integer")
-
-    try:
-        sig_bytes = bytes.fromhex(sig_hex)
-    except ValueError:
-        return AuthResult(ok=False, reason="Signature is not valid hex")
-
-    actual_hash = _sha256_hex(body)
-    if body_hash != actual_hash:
-        return AuthResult(ok=False,
-            reason=f"Body hash mismatch (expected {actual_hash[:16]}..., "
-                   f"got {body_hash[:16]}...)")
-
-    message = f"{method}:{path}:{user_id}:{ts_str}:{body_hash}".encode("utf-8")
-    if not verify_signature(pubkey_bytes, message, sig_bytes):
-        return AuthResult(ok=False, reason="Signature verification failed")
-
-    return AuthResult(ok=True, user_id=user_id, pubkey_hex=pubkey_hex)
-
-
-def _sha256_hex(data: bytes) -> str:
-    if not data:
-        return ""
-    return hashlib.sha256(data).hexdigest()

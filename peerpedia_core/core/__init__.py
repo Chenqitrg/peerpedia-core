@@ -110,6 +110,13 @@ from peerpedia_core.core.views import (
     get_user_view, list_article_views, list_user_article_views,
 )
 
+# ── Discovery (P2P) ──────────────────────────────────────────────────────────
+
+from peerpedia_core.core.discover import (
+    discover_articles, discover_followers, discover_following,
+    discover_network, discover_notifications, discover_shares,
+)
+
 # ── Ingest (P2P) ─────────────────────────────────────────────────────────────
 
 from peerpedia_core.storage.db.ingest import (

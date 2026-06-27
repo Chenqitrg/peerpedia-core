@@ -15,9 +15,8 @@ from peerpedia_core.storage.db.crud_article import get_articles_by_author, get_a
 from peerpedia_core.storage.db.crud_review import get_reviews_for_article
 from peerpedia_core.storage.db.crud_user import get_users_by_ids
 from peerpedia_core.storage.db.guards import require_user
-from peerpedia_core.compute.state import (
-    ArticleSnapshot, ReputationState, ReviewSnapshot, UserSnapshot,
-)
+from peerpedia_core.compute.state import ReputationState
+from peerpedia_core.types.entities import ArticleMetaExchange, ReviewExchange, UserExchange
 
 
 def extract_reputation_state(db: Session, user_id: str) -> ReputationState:
@@ -40,20 +39,21 @@ def extract_reputation_state(db: Session, user_id: str) -> ReputationState:
 
 def _build_article_review_maps(
     db: Session, articles, author_map: dict,
-) -> tuple[dict[str, ArticleSnapshot], dict[str, tuple[ReviewSnapshot, ...]]]:
-    """Iterate articles, building frozen ArticleSnapshot and ReviewSnapshot maps."""
-    article_map: dict[str, ArticleSnapshot] = {}
-    reviews_map: dict[str, tuple[ReviewSnapshot, ...]] = {}
+) -> tuple[dict[str, ArticleMetaExchange], dict[str, tuple[ReviewExchange, ...]]]:
+    """Iterate articles, building frozen ArticleMetaExchange and ReviewExchange maps."""
+    article_map: dict[str, ArticleMetaExchange] = {}
+    reviews_map: dict[str, tuple[ReviewExchange, ...]] = {}
 
     for a in articles:
         authors = author_map.get(a.id, [])
         all_reviews = get_reviews_for_article(db, a.id)
-        article_map[a.id] = ArticleSnapshot(
-            id=a.id, score=a.score, status=a.status,
-            author_ids=tuple(authors), review_count=len(all_reviews),
+        article_map[a.id] = ArticleMetaExchange(
+            id=a.id, title=a.title, status=a.status,
+            authors=tuple(authors), score=a.score,
+            publish_consents=tuple(a.publish_consents) if a.publish_consents else None,
         )
         reviews_map[a.id] = tuple(
-            ReviewSnapshot(
+            ReviewExchange(
                 reviewer_id=r.reviewer_id, scores=r.scores,
                 is_self=r.reviewer_id in authors, scope=r.scope, status=r.status,
             )
@@ -65,8 +65,8 @@ def _build_article_review_maps(
 
 def _build_user_snapshot_map(
     db: Session, user_id: str, reviews_map: dict,
-) -> dict[str, UserSnapshot]:
-    """Collect all reviewer IDs from reviews, fetch users, return UserSnapshot map."""
+) -> dict[str, UserExchange]:
+    """Collect all reviewer IDs from reviews, fetch users, return UserExchange map."""
     reviewer_ids: set[str] = set()
     for revs in reviews_map.values():
         for r in revs:
@@ -75,6 +75,7 @@ def _build_user_snapshot_map(
     all_user_ids = {user_id} | reviewer_ids
     user_rows = get_users_by_ids(db, all_user_ids)
     return {
-        u.id: UserSnapshot(id=u.id, reputation=u.reputation if u.reputation else None)
+        u.id: UserExchange(id=u.id, name=u.name, address=u.address or "",
+                           reputation=u.reputation if u.reputation else None)
         for u in user_rows
     }

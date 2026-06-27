@@ -61,6 +61,7 @@ from peerpedia_core.storage.git import (
 )
 
 from peerpedia_core.config.paths import ARTICLES_DIR as DEFAULT_ARTICLES_DIR
+from peerpedia_core.time import validate_clock_skew
 from peerpedia_core.transport import (
     ancestor_probe,
     fetch_article_repo,
@@ -115,11 +116,10 @@ def sync_article(db: Session, server: str, article_id: str) -> dict:
     # far from the server, commit timestamps are untrustworthy for priority
     # claims.  Refuse to sync until the user fixes their system clock.
     skew = check_clock_skew(server)
-    _MAX_CLOCK_SKEW_SECONDS = 30
-    if skew is not None and abs(skew) > _MAX_CLOCK_SKEW_SECONDS:
-        direction = "behind" if skew > 0 else "ahead"
+    err = validate_clock_skew(skew)
+    if err:
         raise ProtocolError(
-            f"Clock skew with {server}: {abs(skew)}s {direction}. "
+            f"{err} with {server}. "
             "Fix your system clock before syncing — "
             "commit timestamps would be unreliable for priority claims."
         )

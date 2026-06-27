@@ -1,220 +1,137 @@
-# Code Aesthetics — Patterns from the 2026-06 Refactor
+# Code Aesthetics — Design Philosophy
 
-## 1. CRUD idempotency: commands layer is pure orchestration
+## Architecture
 
-Commands functions should NOT check "does this already exist?" before calling CRUD.
-Push idempotency into the CRUD layer, then commands becomes:
-
-```
-validate input → call idempotent CRUD → return count
-```
-
-**Before** (discover.py, 25 lines):
-```python
-def ingest_bookmarks(db, user_id, entries):
-    _require_keys(entries, "article_id", label="bookmarks")
-    added = 0
-    for e in entries:
-        if is_bookmarked(db, user_id, e["article_id"]):  # ← CRUD already does this
-            logger.warning("...")                         # ← noise
-            continue
-        add_bookmark(db, user_id, e["article_id"])
-        added += 1
-    db.flush()
-    return added
-```
-
-**After** (4 lines):
-```python
-def ingest_bookmarks(db, user_id, entries):
-    _require_keys(entries, "article_id", label="bookmarks")
-    for e in entries:
-        add_bookmark(db, user_id, e["article_id"])
-    return len(entries)
-```
-
-New CRUD functions added for this pattern:
-- `ensure_user` — idempotent user creation with address conflict check
-- `ensure_article_stub` — idempotent article stub from peer data
-- `ensure_notification` — dedup by 5-field key
-- `set_user_pubkey_tofu` — TOFU pubkey with return status
-- `create_user_stub` — made idempotent (was "caller must ensure not exists")
-
-## 2. `require_*` — fail fast on missing resources
-
-Replace `get_X + if None: raise` with single-purpose guard functions:
-
-```python
-# Before
-article = get_article(db, article_id)
-if article is None:
-    raise FileNotFoundError(f"Article not found: {article_id}")
-
-# After
-article = require_article(db, article_id)
-```
-
-Added:
-- `require_article_repo(article_id)` — returns Path or raises NotFoundError
-- `require_review_scores(rp, dir_name, article_id)` — returns dict or raises
-- `authorize_article_action(db, article_id, user_id)` — returns (user, article, mids), checks fold
-
-When the resource is legitimately optional, catch the exception:
-```python
-try:
-    rp = require_article_repo(article_id)
-    require_article(db, article_id)
-except NotFoundError:
-    return  # silent no-op for integrity guard
-```
-
-## 3. One canonical function per concept
-
-When the same logic appears in 3+ places, extract it once.
-
-| Function | Location | Replaces |
-|---|---|---|
-| `article_repo_path(id)` | `config/paths.py` | 28× `DEFAULT_ARTICLES_DIR / article_id` |
-| `is_platform_commit(email)` | `types/status.py` | 5× `email == PLATFORM_EMAIL` |
-| `read_status_from_git(rp)` | `git_backend.py` | 2× inline git traversal |
-| `require_commit_pubkey_signature(...)` | `git_backend.py` | 3× "extract pubkey → check → verify" |
-| `resolve_article_format(rp)` | `git_backend.py` | 4× `.md`/`.typ` detection |
-| `article_format_to_ext(fmt)` | `config/params.py` | 5× `".typ" if fmt == "typst" else ".md"` |
-| `article_filename(ext)` | `config/params.py` | 5× `f"article{ext}"` |
-| `extract_user_id_from_email(email)` | `config/params.py` | 4× `email.split("@")[0]` |
-| `rebuild_db_from_git(db, id)` | `integrity.py` | sync + repair paths unified |
-
-## 4. No direction strings in CRUD
-
-A `direction: str` parameter with `if direction == "following"` branching means the function
-doesn't know what it does. Split into separate functions with explicit signatures:
+**Layers are directional, each depends only downward:**
 
 ```
-                   forward (I→them)     backward (they→me)
-insert (batch)     follow_users         add_followers
-replace (batch)    set_following        set_followers
+server/                    Application (HTTP routes, middleware)
+cli/ repl/                  User entry points
+  ↓
+core/                       Domain orchestration (coordinates transport + storage + compute)
+  ↓       ↓
+transport/  storage/        Infrastructure (swappable, zero upward deps)
+               ↓
+         compute/ rules/ types/ crypto/   Pure logic (zero IO)
 ```
 
-Commands layer maps the concept to the right CRUD call:
-```python
-def sync_following(db, follower_id, entries):
-    ids = _validate_follow_entries(entries, follower_id, "following")
-    added = follow_users(db, follower_id, ids)
-    set_following(db, follower_id, ids)
-    return added
+**Names must carry information.** Every word must answer "why this, not another":
+
+```
+Before                    After                     Why
+commands/                 core/                     Domain orchestration, not "CLI commands"
+workflow/                 compute/                  Pure algorithms, not "process flows"
+policies/                 rules/                    Authorization rules, not "policy documents"
+commands/discover.py      storage/db/ingest.py      Pure DB operations, sinks to storage
+core/trailers.py          storage/git/trailers.py   Git filesystem operations
+social/exchange.py        core/discover.py          Orchestration glue, not "social exchange"
+bundle/monotonic.py       compute/monotonic.py      Pure algorithm, belongs in compute
 ```
 
-## 5. Phase labels > inline comments
+**A function belongs to a natural set — find its siblings:**
 
-Long functions get named phases with `# ──` separators. Each phase is 2-7 lines
-delegating to helpers:
+```
+crypto.py:
+  pubkey_hex_to_ssh_line         hex → SSH line
+  write_key_to_tempfile          private key → temp file
+  write_allowed_signers_file     email + pubkey → allowed_signers file
+  ↑ SSH signing triad — three functions, one domain
+
+compute/
+  bfs.py         graph traversal     } 纯算法
+  monotonic.py   binary search       } 零 IO
+  reputation.py  scoring             }
+```
+
+**One entity, three projections.** Don't force one type to serve all callers:
+
+```
+ArticleMetaExchange   — P2P transfer (minimal fields)
+ArticleMetaStorage    — DB persistence (ORM projection)
+ArticleSnapshot       — Algorithm input (immutable)
+```
+
+Naming convention:
+- `*Storage` / `*MetaStorage` — ORM model. `Meta` when SOT is in git (article content, review files).
+- `*Exchange` — P2P payload. `Meta` only for Article (content ≠ metadata).
+- `*Snapshot` — frozen dataclass, algorithm input.
+
+**Package structure reflects domain, not technology:**
+
+```
+core/articles/    create update publish sink fork rollback delete diff
+core/reviews/     submit invite thread
+core/reconcile/   mirror score
+```
+
+Each file = one lifecycle transition, ~50-80 lines.
+
+## Style
+
+**Pure core, imperative shell.** `compute/` + `rules/` are pure functions (Set-morphisms). `core/` + `storage/` live in the Kleisli category `Kl(Session →)` — they do IO but compose cleanly.
+
+**Git-first, DB-second.** All mutations: write git commit first, then update DB cache. DB is a projection of git.
+
+**Guard architecture — three layers, each with its own dependencies:**
+
+```
+rules/                  Pure logic: takes data, returns or raises. Zero IO.
+storage/db/guards       DB-aware: needs Session.
+storage/git/guards      Git-aware: needs Repo.
+core/guards             Composite: coordinates db + git + rules.
+```
+
+**Thin orchestration.** Top-level functions ≤ 20 lines. Each helper does exactly one thing. Phase labels show the flow:
 
 ```python
-def publish_article(...):
-    # ── Authorization ──
-    user, a, mids = authorize_article_action(db, article_id, user_id)
-    assert_can_publish_article(a, mids, user)
-
-    # ── Validation ──
-    validate_self_review_scores(self_review)
-    _check_sedimentation_limit(db, user_id)
-
-    # ── Write + commit ──
-    write_review_to_git(...)
-    commit_hash = commit_status_marker(rp, "sedimentation")
-
-    # ── Update DB ──
-    update_article_status(db, article_id, "sedimentation")
+def _process_sink_article(db, article):
+    # ── Sink timer check ──
+    if article.sink_start is None: return None
     ...
-
-    # ── Notify ──
-    batch = _build_publish_notifications(...)
+    # ── Count approvals ──
+    approval_count = _count_approving_reviews(db, article.id, authors)
+    # ── Decide disposition ──
+    decision = _decide_sink_disposition(article, approval_count)
+    # ── Git: write status marker ──
+    if decision != "extended" and has_repo:
+        commit_status_marker(rp, decision)
+    # ── DB: update status + score ──
+    update_article_status(db, article.id, decision)
 ```
 
-Extract helpers serve exactly one phase and return immediately after.
+**No bare types.** Never `dict`, always `dict[str, float]`. Never `list`, always `list[UserStorage]`. Never `Any` except at serialization boundaries (`to_dict()`). Never `str | set[str]` on parameters — pick one type, convert at the facade.
 
-## 6. Eliminate circular imports
+**No `Callable[..., X]`.** Always specify the full signature of the callback.
 
-Lazy imports (`from X import Y` inside function body) signal a circular dependency.
-Fix by importing from a lower-level module that doesn't participate in the cycle:
+**No union parameters.** `str | set[str] | None` on a parameter means the function doesn't know what it accepts. Pick one type (`set[str]`) and let the facade convert `str` → `{str}`.
+
+**Orchestrators collect, workers do.** `_collect_*` functions delegate to individual checkers. They don't do the work inline.
+
+**Translations live on the type.** `from_exchange` / `to_exchange` live on the Storage model, not scattered across callers:
 
 ```python
-# Before — circular: integrity → commands.articles → integrity
-from peerpedia_core.commands.articles import rebuild_article_authors  # lazy
+class UserStorage(Base):
+    @classmethod
+    def from_exchange(cls, e: UserExchange) -> dict[str, object]:
+        return {"id": e.id, "name": e.name, "address": e.address}
 
-# After — _helpers doesn't import integrity
-from peerpedia_core.commands.articles._helpers import rebuild_article_authors  # top-level
+    def to_exchange(self) -> UserExchange:
+        return UserExchange(id=self.id, name=self.name, address=self.address or "")
 ```
 
-Same fix for `bundle.py ↔ integrity.py`: move shared functions (`sync_reviews_from_worktree`,
-`sync_status_from_git`) into `integrity.py`, break the cycle entirely.
-
-## 7. `ingest_*` vs `sync_*` — behavior in the function name
-
-- `ingest_*` — insert only, never delete (peer discovery)
-- `sync_*` — insert + soft-delete stale entries (home-server authoritative)
-
-No `authoritative: bool` parameter. The caller chooses the right function:
+**JSON converts at the boundary.** `from_json` classmethods on Exchange types:
 
 ```python
-# exchange.py
-if home_server is not None and server == home_server:
-    return sync_following(db, user_id, data)
-return ingest_following(db, user_id, data)
+class UserExchange:
+    @classmethod
+    def from_json(cls, d: dict) -> UserExchange:
+        return cls(id=d["id"], name=d.get("name", d["id"]), address=d.get("address", ""))
 ```
 
-## 8. `_validate_*` — shared validation, separate actions
+**No private-underscore imports across packages.** If module `_internal.py` is needed by another package, its content belongs on the public facade.
 
-When multiple functions share validation but differ in actions, extract just the validation:
+**Guards check + raise. Actions transform. Never mix them.** `_normalize_score_keys` is not a guard — it mutates, doesn't check. Moved from `guards.py` to `types/scores.py`.
 
-```python
-def _validate_follow_entries(entries, source_id, label) -> set[str]:
-    _require_keys(entries, "id", label=label)
-    remote_ids = {e["id"] for e in entries}
-    if source_id in remote_ids:
-        raise ValueError(f"{label}: self-follow detected")
-    return remote_ids
-```
+**Reconcile pattern:** extract snapshot from DB → compute pure → write back. The compute step is testable with no DB.
 
-Each public function then calls the right actions explicitly — no internal branching.
-
-## 9. Thin orchestration: main function as a story
-
-The main function should read like a story with named steps. No nested try/except,
-no inline model construction, no raw DB queries:
-
-```python
-def apply_sync_bundle(db, article_id, *, ff_only=True):
-    rp = require_article_repo(article_id)
-    old_head = get_head_or_none(rp)
-    new_head = merge_fetch_head(rp, ff_only=ff_only)
-
-    try:
-        if old_head:
-            _verify_new_commits(db, rp, since_hash=old_head)
-        rebuild_db_from_git(db, article_id)
-    except Exception:
-        _try_rollback(rp, old_head, new_head)
-        raise
-
-    return new_head
-```
-
-## 10. What we deleted
-
-- **Redundant guards**: `is_bookmarked` + `add_bookmark` (CRUD already idempotent)
-- **Redundant maintainer checks**: sync won't create articles without maintainers
-- **Dead code**: `old_status == "draft"` branch when draft is already asserted
-- **Warnings for normal cases**: "already bookmarked — skipping" (idempotency is normal)
-- **Lazy imports**: all eliminated from integrity.py, bundle.py, discover.py
-- **`DEFAULT_ARTICLES_DIR / article_id`**: 4 occurrences replaced with `article_repo_path` or `require_article_repo`
-- **Inline format detection**: `".typ" if fmt == "typst" else ".md"` → `article_format_to_ext`
-- **`nullcontext` for signing**: 5 occurrences of `if signing_key: with... else: commit_article(...)` collapsed
-
-## Summary
-
-Every function should do exactly one thing. If you see `if/else` branching on a
-parameter value, split the function. If you see `get_X + check None + raise`,
-use `require_X`. If you see the same pattern in 3+ places, extract a canonical
-function. CRUD functions should be idempotent. Commands functions should be thin
-orchestration. No lazy imports.
+**`require_*` fails fast.** Returns the resource or raises. Callers never check for None.

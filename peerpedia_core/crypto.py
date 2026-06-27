@@ -63,17 +63,45 @@ def derive_pubkey_hex(password: str, salt_hex: str) -> str:
     return pubkey.hex()
 
 
+def validate_pubkey_hex(pubkey_hex: str) -> bytes:
+    """Return raw 32-byte public key, or raise ValueError.
+
+    Checks that *pubkey_hex* is 64 hex chars decoding to exactly 32 bytes.
+    """
+    if len(pubkey_hex) != 64:
+        raise ValueError(f"Ed25519 public key must be 64 hex chars, got {len(pubkey_hex)}")
+    raw = bytes.fromhex(pubkey_hex)
+    if len(raw) != 32:
+        raise ValueError(f"Ed25519 public key must be 32 bytes, got {len(raw)}")
+    return raw
+
+
+def validate_sig_hex(sig_hex: str) -> bytes:
+    """Return raw 64-byte signature, or raise ValueError.
+
+    Checks that *sig_hex* is 128 hex chars decoding to exactly 64 bytes.
+    """
+    if len(sig_hex) != 128:
+        raise ValueError(f"Ed25519 signature must be 128 hex chars, got {len(sig_hex)}")
+    return bytes.fromhex(sig_hex)
+
+
+def sha256_hex(data: bytes) -> str:
+    """SHA-256 hash of *data*, hex-encoded.  Empty bytes → empty string."""
+    if not data:
+        return ""
+    return hashlib.sha256(data).hexdigest()
+
+
 def pubkey_hex_to_ssh_line(pubkey_hex: str) -> str:
     """Convert a raw Ed25519 public key hex to an SSH allowed_signers line.
 
     Returns ``"ssh-ed25519 <base64>"`` suitable for writing to an
     allowed_signers file for ``git verify-commit``.
 
-    Raises ValueError if the key is not 32 bytes.
+    Raises ValueError if the key is not valid.
     """
-    raw = bytes.fromhex(pubkey_hex)
-    if len(raw) != 32:
-        raise ValueError(f"Ed25519 public key must be 32 bytes, got {len(raw)}")
+    raw = validate_pubkey_hex(pubkey_hex)
     # SSH wire format: string "ssh-ed25519" + string <key>
     wire = struct.pack(">I", 11) + b"ssh-ed25519" + struct.pack(">I", 32) + raw
     return "ssh-ed25519 " + base64.b64encode(wire).decode("ascii")

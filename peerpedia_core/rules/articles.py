@@ -3,7 +3,7 @@
 
 r"""Pure article authorization rules — zero IO, zero DB/git dependencies.
 
-Every function takes pre-fetched data (ArticleMetaStorage, UserStorage, maintainer_ids, ...)
+Every function takes pre-fetched data (ArticleMetaExchange, UserExchange, maintainer_ids, ...)
 and either returns the article or raises a semantic exception.
 
 Importable from anywhere — ``storage/db/``, ``core/``, ``cli/`` — without
@@ -15,7 +15,7 @@ from __future__ import annotations
 from typing import Optional
 
 from peerpedia_core.exceptions import BadRequestError, ConflictError, NotAuthorizedError
-from peerpedia_core.storage.db.models import ArticleMetaStorage, UserStorage
+from peerpedia_core.types.entities import ArticleMetaExchange, UserExchange
 from peerpedia_core.types.scores import FiveDimScores
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -30,7 +30,7 @@ _WRITABLE_STATUSES = {"draft", "sedimentation", "published"}
 _SYNCABLE_STATUSES = {"draft", "sedimentation", "published", "rejected"}
 
 
-def visible_statuses_for_user(current_user: UserStorage | None) -> set[str]:
+def visible_statuses_for_user(current_user: UserExchange | None) -> set[str]:
     """Return the set of statuses visible to *current_user*."""
     if current_user is not None:
         return {"draft", "sedimentation", "published", "rejected"}
@@ -42,20 +42,20 @@ def visible_statuses_for_user(current_user: UserStorage | None) -> set[str]:
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-def _is_author(author_ids: list[str], user: UserStorage | None) -> bool:
+def _is_author(author_ids: list[str], user: UserExchange | None) -> bool:
     if user is None:
         return False
     return user.id in author_ids
 
 
-def _is_maintainer(maintainer_ids: list[str], user: UserStorage) -> bool:
+def _is_maintainer(maintainer_ids: list[str], user: UserExchange) -> bool:
     return user.id in maintainer_ids
 
 
 def _assert_maintainer(
-    article: ArticleMetaStorage,
+    article: ArticleMetaExchange,
     maintainer_ids: list[str],
-    user: UserStorage,
+    user: UserExchange,
     action: str,
     allowed_statuses: set[str] | None = None,
 ) -> None:
@@ -70,7 +70,7 @@ def _assert_maintainer(
         )
 
 
-def _assert_all_maintainers_consented(article: ArticleMetaStorage, maintainer_ids: list[str]) -> None:
+def _assert_all_maintainers_consented(article: ArticleMetaExchange, maintainer_ids: list[str]) -> None:
     if len(maintainer_ids) <= 1:
         return
     consented = set(article.publish_consents or [])
@@ -109,10 +109,10 @@ def assert_not_folded(article, *, threshold: float = 1.0) -> None:
 
 
 def assert_can_read_article(
-    article: ArticleMetaStorage,
+    article: ArticleMetaExchange,
     author_ids: list[str],
-    user: UserStorage | None,
-) -> ArticleMetaStorage:
+    user: UserExchange | None,
+) -> ArticleMetaExchange:
     if article.status in PUBLIC_READABLE_STATUSES:
         return article
     if _is_author(author_ids, user):
@@ -121,10 +121,10 @@ def assert_can_read_article(
 
 
 def assert_can_access_content(
-    article: ArticleMetaStorage,
+    article: ArticleMetaExchange,
     author_ids: list[str],
-    user: UserStorage | None,
-) -> ArticleMetaStorage:
+    user: UserExchange | None,
+) -> ArticleMetaExchange:
     if article.status in PUBLIC_DOWNLOADABLE_STATUSES:
         return article
     if _is_author(author_ids, user):
@@ -137,42 +137,42 @@ def assert_can_access_content(
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-def assert_can_edit_article(article: ArticleMetaStorage, maintainer_ids: list[str], user: UserStorage) -> ArticleMetaStorage:
+def assert_can_edit_article(article: ArticleMetaExchange, maintainer_ids: list[str], user: UserExchange) -> ArticleMetaExchange:
     _assert_maintainer(article, maintainer_ids, user, "edit")
     return article
 
 
-def assert_can_delete_article(article: ArticleMetaStorage, maintainer_ids: list[str], user: UserStorage) -> ArticleMetaStorage:
+def assert_can_delete_article(article: ArticleMetaExchange, maintainer_ids: list[str], user: UserExchange) -> ArticleMetaExchange:
     _assert_maintainer(article, maintainer_ids, user, "delete", allowed_statuses={"draft"})
     _assert_all_maintainers_consented(article, maintainer_ids)
     return article
 
 
-def assert_can_rollback_article(article: ArticleMetaStorage, maintainer_ids: list[str], user: UserStorage) -> ArticleMetaStorage:
+def assert_can_rollback_article(article: ArticleMetaExchange, maintainer_ids: list[str], user: UserExchange) -> ArticleMetaExchange:
     _assert_maintainer(article, maintainer_ids, user, "rollback")
     return article
 
 
-def assert_can_publish_article(article: ArticleMetaStorage, maintainer_ids: list[str], user: UserStorage) -> ArticleMetaStorage:
+def assert_can_publish_article(article: ArticleMetaExchange, maintainer_ids: list[str], user: UserExchange) -> ArticleMetaExchange:
     _assert_maintainer(article, maintainer_ids, user, "publish")
     _assert_all_maintainers_consented(article, maintainer_ids)
     return article
 
 
-def assert_can_accept_merge(article: ArticleMetaStorage, maintainer_ids: list[str], user: UserStorage) -> ArticleMetaStorage:
+def assert_can_accept_merge(article: ArticleMetaExchange, maintainer_ids: list[str], user: UserExchange) -> ArticleMetaExchange:
     _assert_maintainer(article, maintainer_ids, user, "accept merge")
     _assert_all_maintainers_consented(article, maintainer_ids)
     return article
 
 
-def assert_can_submit_review(article: Article) -> ArticleMetaStorage:
+def assert_can_submit_review(article: ArticleMetaExchange) -> ArticleMetaExchange:
     if article.status in ("sedimentation", "published"):
         return article
     raise NotAuthorizedError("Cannot review a draft article")
 
 
-def assert_can_reply_to_review(article: ArticleMetaStorage, maintainer_ids: list[str], user: UserStorage, *,
-                               fold_threshold: float = 1.0) -> ArticleMetaStorage:
+def assert_can_reply_to_review(article: ArticleMetaExchange, maintainer_ids: list[str], user: UserExchange, *,
+                               fold_threshold: float = 1.0) -> ArticleMetaExchange:
     assert_not_folded(article, threshold=fold_threshold)
     if article.status not in ("sedimentation", "published"):
         raise NotAuthorizedError("Cannot reply to reviews on a draft article")
@@ -181,12 +181,12 @@ def assert_can_reply_to_review(article: ArticleMetaStorage, maintainer_ids: list
     return article
 
 
-def assert_can_extend_sink(article: ArticleMetaStorage, maintainer_ids: list[str], user: UserStorage) -> ArticleMetaStorage:
+def assert_can_extend_sink(article: ArticleMetaExchange, maintainer_ids: list[str], user: UserExchange) -> ArticleMetaExchange:
     _assert_maintainer(article, maintainer_ids, user, "extend sink", allowed_statuses={"sedimentation"})
     return article
 
 
-def assert_can_sync_article(article: ArticleMetaStorage, maintainer_ids: list[str], user: UserStorage) -> ArticleMetaStorage:
+def assert_can_sync_article(article: ArticleMetaExchange, maintainer_ids: list[str], user: UserExchange) -> ArticleMetaExchange:
     _assert_maintainer(article, maintainer_ids, user, "sync", allowed_statuses=_SYNCABLE_STATUSES)
     return article
 
@@ -197,11 +197,11 @@ def assert_can_sync_article(article: ArticleMetaStorage, maintainer_ids: list[st
 
 
 def assert_can_fork_article(
-    article: ArticleMetaStorage,
-    existing_fork: ArticleMetaStorage | None,
-    user: UserStorage | None = None,
+    article: ArticleMetaExchange,
+    existing_fork: ArticleMetaExchange | None,
+    user: UserExchange | None = None,
     maintainer_ids: list[str] | None = None,
-) -> ArticleMetaStorage:
+) -> ArticleMetaExchange:
     if article.status == "draft":
         if not maintainer_ids or user is None or not _is_maintainer(maintainer_ids, user):
             raise NotAuthorizedError(

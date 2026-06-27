@@ -71,74 +71,7 @@ from __future__ import annotations
 from dataclasses import dataclass, fields
 from typing import Any
 
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# Snapshot types
-# ═══════════════════════════════════════════════════════════════════════════════
-
-
-@dataclass(frozen=True)
-class ArticleSnapshot:
-    """A single article at the moment of extraction."""
-
-    id: str
-    score: dict | None  # FiveDimScores as dict, or None
-    status: str
-    author_ids: tuple[str, ...]
-    review_count: int = 0
-
-
-@dataclass(frozen=True)
-class ReviewSnapshot:
-    """A single review at the moment of extraction."""
-
-    reviewer_id: str
-    scores: dict  # FiveDimScores as dict
-    is_self: bool
-    scope: str  # "sedimentation" | "published"
-    status: str  # "invited" | "accepted" | "declined" | "submitted"
-
-
-@dataclass(frozen=True)
-class UserSnapshot:
-    """A user at the moment of extraction."""
-
-    id: str
-    reputation: dict | None  # ReputationScores as dict, or None
-
-
-# ── Future snapshot types (used when signals come online) ──────────────────
-
-
-@dataclass(frozen=True)
-class FollowSnapshot:
-    """A single follow edge at extraction time."""
-
-    follower_id: str
-    followed_id: str
-
-
-@dataclass(frozen=True)
-class ShareSnapshot:
-    """A single share at extraction time."""
-
-    id: str
-    sharer_id: str
-    article_id: str
-    recipient_id: str | None
-    comment: str | None
-    created_at: str  # ISO-8601
-
-
-@dataclass(frozen=True)
-class MergeProposalSnapshot:
-    """A single merge proposal at extraction time."""
-
-    id: str
-    fork_article_id: str
-    target_article_id: str
-    proposer_id: str
-    status: str  # open | accepted | rejected | withdrawn
+from peerpedia_core.types.entities import ArticleMetaExchange, ReviewExchange, UserExchange
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -150,18 +83,13 @@ class MergeProposalSnapshot:
 class ReputationState:
     """Complete input snapshot for reputation / prediction.
 
-    Immutable.  Populated by ``extract_state()`` in commands/workflow.py.
-    Add fields here as new signals come online.
+    Immutable.  Populated by ``extract_state()`` in storage/db/state.py.
+    Construct directly in tests — no DB needed.
     """
 
-    articles: dict[str, ArticleSnapshot]
-    reviews: dict[str, tuple[ReviewSnapshot, ...]]
-    users: dict[str, UserSnapshot]
-
-    # Future: populate as data pipelines come online
-    follows: tuple[FollowSnapshot, ...] = ()
-    shares: tuple[ShareSnapshot, ...] = ()
-    merge_proposals: tuple[MergeProposalSnapshot, ...] = ()
+    articles: dict[str, ArticleMetaExchange]
+    reviews: dict[str, tuple[ReviewExchange, ...]]
+    users: dict[str, UserExchange]
 
     # ═══════════════════════════════════════════════════════════════════════
     # Serialization — dump as JSON for ML training data / debugging

@@ -24,7 +24,7 @@ def _cmd_server_start(args):
     """
     import uvicorn
 
-    from peerpedia_core.transport.http_server import create_app
+    from peerpedia_core.server.app import create_app
 
     # Background peer discovery: merge seed peers and announce this server.
     public_url = getattr(args, "public_url", None) or None

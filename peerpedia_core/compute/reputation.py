@@ -189,7 +189,7 @@ def compute_reputation(state: ReputationState, user_id: str) -> ReputationScores
     total_weight = 0.0
 
     for article in state.articles.values():
-        if user_id not in article.author_ids:
+        if user_id not in article.authors:
             continue
         score = article.score
         if not score:

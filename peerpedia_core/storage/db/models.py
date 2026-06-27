@@ -18,7 +18,7 @@ from sqlalchemy import CheckConstraint, Column, DateTime, Float, ForeignKey, Int
 
 from peerpedia_core.storage.db.engine import Base, JSONDict, JSONList
 from peerpedia_core.types.entities import (
-    ArticleMetaExchange, NotificationExchange, ShareExchange, UserExchange,
+    ArticleMetaExchange, NotificationExchange, ReviewExchange, ShareExchange, UserExchange,
 )
 
 
@@ -80,10 +80,19 @@ class ArticleMetaStorage(Base):
 
     @classmethod
     def from_exchange(cls, e: ArticleMetaExchange) -> dict[str, object]:
-        return {"id": e.id, "title": e.title, "status": e.status}
+        result: dict[str, object] = {"id": e.id, "title": e.title, "status": e.status}
+        if e.score is not None:
+            result["score"] = e.score
+        if e.publish_consents is not None:
+            result["publish_consents"] = list(e.publish_consents)
+        return result
 
     def to_exchange(self) -> ArticleMetaExchange:
-        return ArticleMetaExchange(id=self.id, title=self.title, status=self.status)
+        return ArticleMetaExchange(
+            id=self.id, title=self.title, status=self.status,
+            score=self.score,
+            publish_consents=tuple(self.publish_consents) if self.publish_consents else None,
+        )
 
 
 # ── ReviewMetaStorage ───────────────────────────────────────────────────────────────
@@ -109,6 +118,19 @@ class ReviewMetaStorage(Base):
     helpfulness_score: int | None = Column(Integer, nullable=True)
     created_at: datetime = Column(DateTime, nullable=False, default=_utcnow)
     updated_at: datetime = Column(DateTime, nullable=False, default=_utcnow, onupdate=_utcnow)
+
+    @classmethod
+    def from_exchange(cls, e: ReviewExchange) -> dict[str, object]:
+        return {
+            "reviewer_id": e.reviewer_id, "scores": e.scores,
+            "scope": e.scope, "status": e.status,
+        }
+
+    def to_exchange(self) -> ReviewExchange:
+        return ReviewExchange(
+            reviewer_id=self.reviewer_id, scores=self.scores,
+            is_self=False, scope=self.scope, status=self.status,
+        )
 
 
 # ── ArticleAuthorStorage (join table) ────────────────────────────────────────────
@@ -174,10 +196,16 @@ class UserStorage(Base):
 
     @classmethod
     def from_exchange(cls, e: UserExchange) -> dict[str, object]:
-        return {"id": e.id, "name": e.name, "address": e.address}
+        result: dict[str, object] = {"id": e.id, "name": e.name, "address": e.address}
+        if e.reputation is not None:
+            result["reputation"] = e.reputation
+        return result
 
     def to_exchange(self) -> UserExchange:
-        return UserExchange(id=self.id, name=self.name, address=self.address or "")
+        return UserExchange(
+            id=self.id, name=self.name, address=self.address or "",
+            reputation=self.reputation if self.reputation else None,
+        )
 
 
 # ── FollowStorage ───────────────────────────────────────────────────────────────

@@ -3,7 +3,7 @@
 
 """Starlette middleware for the PeerPedia HTTP server."""
 
-from peerpedia_core.transport.middleware.auth import AuthMiddleware
-from peerpedia_core.transport.middleware.db import DbRoute, DBSessionMiddleware
+from peerpedia_core.server.middleware.auth import AuthMiddleware
+from peerpedia_core.server.middleware.db import DbRoute, DBSessionMiddleware
 
 __all__ = ["AuthMiddleware", "DbRoute", "DBSessionMiddleware"]

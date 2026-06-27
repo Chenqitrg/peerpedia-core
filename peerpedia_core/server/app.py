@@ -102,10 +102,10 @@ from peerpedia_core.exceptions import (
     SignatureVerificationError,
     TransportError,
 )
-from peerpedia_core.transport.middleware import AuthMiddleware, DBSessionMiddleware
-from peerpedia_core.transport.middleware.logging import AuditLogMiddleware
-from peerpedia_core.transport.middleware.ratelimit import RateLimitMiddleware
-from peerpedia_core.transport.routes import ALL_ROUTES
+from peerpedia_core.server.middleware import AuthMiddleware, DBSessionMiddleware
+from peerpedia_core.server.middleware.logging import AuditLogMiddleware
+from peerpedia_core.server.middleware.ratelimit import RateLimitMiddleware
+from peerpedia_core.server.routes import ALL_ROUTES
 
 logger = logging.getLogger(__name__)
 DEBUG = bool(os.environ.get("PEERPEDIA_DEBUG"))

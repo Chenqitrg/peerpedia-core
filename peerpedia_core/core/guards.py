@@ -28,7 +28,7 @@ from peerpedia_core.storage.git.guards import (
     require_article_repo, require_commit_pubkey_signature,
 )
 from peerpedia_core.types.status import is_platform_commit
-from peerpedia_core.core.trailers import parse_closes_trailer, validate_closes_target
+from peerpedia_core.storage.git.trailers import parse_closes_trailer, validate_closes_target
 
 # ── Re-exports ───────────────────────────────────────────────────────────────
 

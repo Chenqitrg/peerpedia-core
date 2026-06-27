@@ -50,6 +50,12 @@ from peerpedia_core.storage.git.archive import (
     pack_article_repo,
 )
 
+from peerpedia_core.storage.git.trailers import (
+    list_review_threads,
+    parse_closes_trailer,
+    validate_closes_target,
+)
+
 from peerpedia_core.storage.git.guards import (
     assert_repo_on_main,
     extract_pubkey_from_message,

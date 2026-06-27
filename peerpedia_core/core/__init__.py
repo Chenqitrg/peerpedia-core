@@ -127,7 +127,7 @@ from peerpedia_core.core.views import (
     list_article_views,
     list_user_article_views,
 )
-from peerpedia_core.core.discover import (
+from peerpedia_core.storage.db.ingest import (
     ingest_articles,
     ingest_bookmarks,
     ingest_followers,

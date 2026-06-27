@@ -7,15 +7,16 @@ from __future__ import annotations
 
 from peerpedia_core.storage.db import Session
 from peerpedia_core.config.params import make_peerpedia_email, params
-from peerpedia_core.exceptions import BadRequestError, NotAuthorizedError
-from peerpedia_core.policies.articles import (
+from peerpedia_core.commands.guards import (
     assert_article_has_score,
     assert_can_publish_article,
+    authorize_article_action,
+    guard_sedimentation_limit,
+    require_draft_status,
     validate_self_review_scores,
 )
 from peerpedia_core.storage.db.crud_article import (
     clear_publish_consents,
-    count_articles,
     set_sink_start,
     update_article_status,
 )
@@ -27,19 +28,6 @@ from peerpedia_core.commands.integrity import assert_article_integrity
 from peerpedia_core.commands.reviews import write_review_to_git
 from peerpedia_core.commands.notifications import create_notifications_batch
 from peerpedia_core.commands.workflow import recompute_article_score
-from peerpedia_core.commands.articles._helpers import authorize_article_action
-
-
-def _check_sedimentation_limit(db: Session, user_id: str) -> None:
-    """Raise BadRequestError if *user_id* has too many articles in sedimentation."""
-    in_pool = count_articles(db, status="sedimentation", author_id=user_id)
-    if in_pool >= params.sink.max_sedimentation_per_author:
-        raise BadRequestError(
-            f"Author already has {in_pool} article(s) in sedimentation "
-            f"(max {params.sink.max_sedimentation_per_author})"
-        )
-
-
 def _build_publish_notifications(db: Session, article_id: str, a, user) -> list[dict]:
     """Build notification batch for article publication."""
     batch: list[dict] = []
@@ -80,12 +68,11 @@ def publish_article(
     assert_can_publish_article(a, mids, user)
     assert_article_integrity(db, article_id, level="full")
 
-    if a.status != "draft":
-        raise NotAuthorizedError("Only draft articles can be published")
+    require_draft_status(a)
 
     # ── Validation ─────────────────────────────────────────────────────────
     validate_self_review_scores(self_review)
-    _check_sedimentation_limit(db, user_id)
+    guard_sedimentation_limit(db, user_id)
 
     # ── Write review + status commit ───────────────────────────────────────
     write_review_to_git(

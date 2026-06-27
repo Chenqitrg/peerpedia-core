@@ -40,8 +40,9 @@ bundle.py
     git worktree into the DB cache.
 
 workflow.py
-    Scoring and reputation orchestration.  ``recompute_article_score`` and
-    ``recompute_author_reputation`` gather data, call pure workflow/ functions,
+    Scoring and reputation orchestration.  ``recompute_article_score``,
+    ``recompute_author_reputation``, and ``recompute_article_and_author_scores``
+    gather data, call pure workflow/ functions,
     and write results back.
 
 integrity.py
@@ -89,7 +90,8 @@ from peerpedia_core.commands.reviews import accept_invitation, decline_invitatio
 from peerpedia_core.commands.shares import (
     add_share, get_feed_shares, get_shares_for_user, remove_share,
 )
-from peerpedia_core.commands.bundle import apply_sync_bundle, assert_article_integrity, sync_reviews_from_worktree
+from peerpedia_core.commands.bundle import apply_sync_bundle
+from peerpedia_core.commands.integrity import assert_article_integrity, sync_reviews_from_worktree
 from peerpedia_core.commands.users import (
     create_user,
     create_user_stub,
@@ -113,6 +115,7 @@ from peerpedia_core.commands.users import (
 from peerpedia_core.commands.workflow import (
     publish_ready_articles,
     recompute_all_reputations,
+    recompute_article_and_author_scores,
     recompute_article_score,
     recompute_author_reputation,
 )
@@ -274,6 +277,7 @@ __all__ = [
     "resolve_username_or_alias",
     "find_users",
     "recompute_all_reputations",
+    "recompute_article_and_author_scores",
     "recompute_article_score",
     "recompute_author_reputation",
     "remove_alias",

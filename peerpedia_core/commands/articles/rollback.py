@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from peerpedia_core.storage.db import Session
 from peerpedia_core.config.params import make_peerpedia_email, params
-from peerpedia_core.policies.articles import assert_can_rollback_article
+from peerpedia_core.commands.guards import assert_can_rollback_article
 from peerpedia_core.commands.integrity import assert_article_integrity
 from peerpedia_core.storage.db.crud_article import clear_publish_consents
 from peerpedia_core.storage.git_backend import (
@@ -15,17 +15,13 @@ from peerpedia_core.storage.git_backend import (
 )
 from peerpedia_core.crypto import temp_signing_key
 from peerpedia_core.commands.articles._helpers import (
-    authorize_article_action, reset_sink, rebuild_article_authors,
-    require_article_repo,
+    reset_sink, rebuild_article_authors,
+)
+from peerpedia_core.commands.guards import (
+    authorize_article_action, require_article_repo, require_signing_key,
 )
 from peerpedia_core.types import short_id
 from peerpedia_core.commands.workflow import recompute_article_score
-
-
-def _require_signing_key(key_bytes, pubkey_hex, action: str) -> None:
-    """Raise ValueError if signing key material is missing."""
-    if key_bytes is None or not pubkey_hex:
-        raise ValueError(f"signing_key_bytes and pubkey_hex are required for {action}")
 
 
 def rollback_article(
@@ -58,7 +54,7 @@ def rollback_article(
         }
 
     # ── Commit ─────────────────────────────────────────────────────────────
-    _require_signing_key(signing_key_bytes, pubkey_hex, "rollback")
+    require_signing_key(signing_key_bytes, pubkey_hex, "rollback")
     with temp_signing_key(signing_key_bytes) as key_path:
         new_hash = commit_article(
             rp, f"Rollback to {short_id(target_hash)}",

@@ -26,14 +26,17 @@ from __future__ import annotations
 
 from peerpedia_core.storage.db import Session
 
-from peerpedia_core.exceptions import ConflictError, NotAuthorizedError, NotFoundError
+from peerpedia_core.exceptions import NotFoundError
+from peerpedia_core.commands.guards import (
+    assert_caller_is_maintainer, guard_not_already_maintainer,
+    guard_not_last_maintainer,
+    require_article, require_user,
+)
 from peerpedia_core.storage.db.crud_article import (
-    add_publish_consent, clear_publish_consents, get_article, remove_publish_consent,
+    add_publish_consent, clear_publish_consents, remove_publish_consent,
 )
 from peerpedia_core.storage.db.models import Article
 from peerpedia_core.storage.db import crud_maintainer
-from peerpedia_core.commands.articles._helpers import _assert_caller_is_maintainer
-from peerpedia_core.storage.db.crud_user import get_user
 
 
 def add_maintainer_to_article(
@@ -49,14 +52,10 @@ def add_maintainer_to_article(
     Raises NotFoundError if the user to add is not found.
     Raises ConflictError if the user is already a maintainer.
     """
-    _assert_caller_is_maintainer(db, article_id, caller_id)
+    assert_caller_is_maintainer(db, article_id, caller_id)
+    require_user(db, user_id)
 
-    if get_user(db, user_id) is None:
-        raise NotFoundError("User not found")
-
-    if crud_maintainer.is_maintainer(db, article_id, user_id):
-        raise ConflictError("User is already a maintainer of this script")
-
+    guard_not_already_maintainer(db, article_id, user_id)
     crud_maintainer.add_maintainer(db, article_id, user_id)
     return {"article_id": article_id, "user_id": user_id, "action": "added"}
 
@@ -76,15 +75,8 @@ def remove_maintainer_from_article(
     Raises NotAuthorizedError if caller tries to self-remove as the last maintainer.
     Raises NotFoundError if the target user is not a maintainer.
     """
-    _assert_caller_is_maintainer(db, article_id, caller_id)
-
-    if caller_id == user_id:
-        mids = crud_maintainer.get_maintainer_ids(db, article_id)
-        if len(mids) <= 1:
-            raise NotAuthorizedError(
-                "Cannot remove yourself as the last maintainer. "
-                "Add another maintainer first, then remove yourself."
-            )
+    assert_caller_is_maintainer(db, article_id, caller_id)
+    guard_not_last_maintainer(db, article_id, caller_id, user_id)
 
     deleted = crud_maintainer.remove_maintainer(db, article_id, user_id)
     if not deleted:
@@ -98,15 +90,13 @@ def list_maintainers(db: Session, article_id: str) -> list[str]:
 
     Raises NotFoundError if the article is not found.
     """
-    article = get_article(db, article_id)
-    if article is None:
-        raise NotFoundError("Article not found")
+    article = require_article(db, article_id)
     return crud_maintainer.get_maintainer_ids(db, article_id)
 
 
 def consent_to_publish(db: Session, article_id: str, user_id: str) -> dict:
     """Record a maintainer's consent to publish/merge the article."""
-    _assert_caller_is_maintainer(db, article_id, user_id)
+    assert_caller_is_maintainer(db, article_id, user_id)
     add_publish_consent(db, article_id, user_id)
     return {"article_id": article_id, "user_id": user_id, "action": "consented"}
 
@@ -116,6 +106,6 @@ def revoke_publish_consent(db: Session, article_id: str, user_id: str) -> dict:
 
     Raises NotFoundError if the article is not found.
     """
-    _assert_caller_is_maintainer(db, article_id, user_id)
+    assert_caller_is_maintainer(db, article_id, user_id)
     remove_publish_consent(db, article_id, user_id)
     return {"article_id": article_id, "user_id": user_id, "action": "revoked"}

@@ -5,6 +5,7 @@
 
 from sqlalchemy.orm import Session
 
+from peerpedia_core.storage.db._validators import require_not_same
 from peerpedia_core.storage.db.models import Citation
 
 
@@ -15,12 +16,8 @@ def create_or_update_citation(
     forward: float = 0.0,
     backward: float = 0.0,
 ) -> Citation:
-    """Create or update a citation edge between two articles.
-
-    Raises ValueError if *from_id* and *to_id* are the same article.
-    """
-    if from_id == to_id:
-        raise ValueError("An article cannot cite itself")
+    """Create or update a citation edge between two articles."""
+    require_not_same(from_id, to_id, label="cite")
     c = session.query(Citation).filter(Citation.from_article_id == from_id, Citation.to_article_id == to_id).first()
     if c:
         c.forward_prob = forward

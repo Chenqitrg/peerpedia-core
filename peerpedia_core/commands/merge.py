@@ -46,131 +46,96 @@ from __future__ import annotations
 from peerpedia_core.storage.db import Session
 
 from peerpedia_core.config.params import params
-from peerpedia_core.exceptions import BadRequestError, NotAuthorizedError, NotFoundError
-from peerpedia_core.policies.articles import assert_can_accept_merge, assert_not_folded
-from peerpedia_core.storage.db.crud_maintainer import get_maintainer_ids
+from peerpedia_core.exceptions import BadRequestError, NotFoundError
+from peerpedia_core.commands.guards import assert_can_accept_merge, guard_proposal_owner
 from peerpedia_core.storage.db.crud_merge import (
     accept_merge_proposal, get_merge_proposal, withdraw_merge_proposal as _withdraw,
 )
 from peerpedia_core.storage.db.crud_merge import create_merge_proposal as _create
-from peerpedia_core.commands.articles._helpers import (
-    reset_sink,
-    require_article,
-    require_article_repo,
-    require_user,
-)
+from peerpedia_core.commands.articles._helpers import reset_sink
+from peerpedia_core.commands.guards import require_article_repo, require_open_proposal
 from peerpedia_core.commands.notifications import create_notification
 from peerpedia_core.storage.git_backend import (
-    MergeConflictError,
-    get_head_hash, merge_git_repos,
+    MergeConflictError, get_head_hash, merge_git_repos,
 )
-
 from peerpedia_core.commands.articles import rebuild_article_authors
 
 
-def accept_merge(db: Session, article_id: str, proposal_id: str, user_id: str) -> dict:
-    """Accept a merge proposal: git merge fork into target, rebuild authors.
-
-    Raises NotFoundError if the user, proposal, article, or repo is not found.
-    Raises BadRequestError if the proposal does not belong to this article or is not open.
-    """
-    user = require_user(db, user_id)
-
-    mp = get_merge_proposal(db, proposal_id)
-    if mp is None:
-        raise NotFoundError("Merge proposal not found")
-    if mp.target_article_id != article_id:
-        raise BadRequestError("Proposal does not belong to this article")
-    article = require_article(db, article_id)
-    mids = get_maintainer_ids(db, article_id)
-    assert_can_accept_merge(article, mids, user)
-    assert_not_folded(article, threshold=params.reputation.fold_score_threshold)
-
-    was_published = article.status == "published"
-
-    target_repo = require_article_repo(article_id)
-    fork_repo = require_article_repo(mp.fork_article_id)
-
-    # Validate proposal is still open BEFORE the git merge.  The
-    # _resolve() inside accept_merge_proposal checks again for defense-in-depth,
-    # so the crash window between git merge and DB update is minimised.
-    if mp.status != "open":
-        raise BadRequestError(
-            f"Merge proposal {proposal_id} is already {mp.status}"
-        )
-
-    try:
-        merge_git_repos(target_repo, fork_repo, user.name)
-    except MergeConflictError:
-        return {
-            "status": "conflict",
-            "message": "Merge conflicts detected.",
-        }
-
-    mp = accept_merge_proposal(db, proposal_id)
-
-    rebuild_article_authors(db, article_id)
-
-    if was_published:
-        # Record status transition in git so it survives P2P sync.
-        # The merge itself is already committed — this is an empty commit
-        # that marks the re-sedimentation triggered by the merge.
-        reset_sink(db, article_id, target_repo, params.sink.edit_article_default_days)
-
-    head_hash = get_head_hash(target_repo)
-
-    # Notify the proposer that their merge was accepted.
-    create_notification(
-        db, user_id=mp.proposer_id, event="merge_accepted",
-        message=f"{user.name} accepted your merge proposal",
-        article_id=article_id, actor_id=user_id,
-    )
-
-    return {"id": article.id, "title": article.title, "status": article.status,
-            "commit_hash": head_hash}
-
-
-# ── Write wrapper ────────────────────────────────────────────────────────
-
-
-def create_merge_proposal(db: Session, fork_id: str, target_id: str, proposer_id: str):
-    """Create a merge proposal and notify target article maintainers."""
-    proposer = require_user(db, proposer_id)
-    proposer_name = proposer.name
-
-    mp = _create(db, fork_id, target_id, proposer_id)
-
-    mids = get_maintainer_ids(db, target_id)
-    for mid in mids:
+def _notify_maintainers_except(db, target_id, proposer_id, proposer_name):
+    """Notify all maintainers of *target_id* except the proposer."""
+    from peerpedia_core.storage.db.crud_maintainer import get_maintainer_ids
+    for mid in get_maintainer_ids(db, target_id):
         if mid != proposer_id:
             create_notification(
                 db, user_id=mid, event="merge_proposed",
                 message=f"{proposer_name} proposed merging a fork into your article",
                 article_id=target_id, actor_id=proposer_id,
             )
+
+
+# ── Accept ─────────────────────────────────────────────────────────────────
+
+
+def accept_merge(db: Session, article_id: str, proposal_id: str, user_id: str) -> dict:
+    """Accept a merge proposal: git merge fork into target, rebuild authors."""
+    # ── Authorization ──────────────────────────────────────────────────────
+    user, article, mids = authorize_article_action(db, article_id, user_id)
+    assert_can_accept_merge(article, mids, user)
+
+    mp = require_open_proposal(db, proposal_id, article_id)
+    was_published = article.status == "published"
+
+    # ── Git merge ──────────────────────────────────────────────────────────
+    target_repo = require_article_repo(article_id)
+    fork_repo = require_article_repo(mp.fork_article_id)
+    try:
+        merge_git_repos(target_repo, fork_repo, user.name)
+    except MergeConflictError:
+        return {"status": "conflict", "message": "Merge conflicts detected."}
+
+    # ── DB reconciliation ─────────────────────────────────────────────────
+    accept_merge_proposal(db, proposal_id)
+    rebuild_article_authors(db, article_id)
+
+    if was_published:
+        reset_sink(db, article_id, target_repo, params.sink.edit_article_default_days)
+
+    # ── Notify ─────────────────────────────────────────────────────────────
+    create_notification(
+        db, user_id=mp.proposer_id, event="merge_accepted",
+        message=f"{user.name} accepted your merge proposal",
+        article_id=article_id, actor_id=user_id,
+    )
+
+    return {
+        "id": article.id, "title": article.title, "status": article.status,
+        "commit_hash": get_head_hash(target_repo),
+    }
+
+
+# ── Propose / Withdraw ────────────────────────────────────────────────────
+
+
+def create_merge_proposal(db: Session, fork_id: str, target_id: str, proposer_id: str):
+    """Create a merge proposal and notify target article maintainers."""
+    from peerpedia_core.commands.guards import require_user
+    proposer = require_user(db, proposer_id)
+    mp = _create(db, fork_id, target_id, proposer_id)
+    _notify_maintainers_except(db, target_id, proposer_id, proposer.name)
     return mp
 
 
 def withdraw_merge_proposal(db: Session, proposal_id: str, user_id: str) -> dict:
-    """Withdraw a merge proposal — proposer only.
-
-    Raises ``NotAuthorizedError`` if *user_id* is not the proposer.
-    """
+    """Withdraw a merge proposal — proposer only."""
     mp = get_merge_proposal(db, proposal_id)
     if mp is None:
         raise NotFoundError("Merge proposal not found")
-    if mp.proposer_id != user_id:
-        raise NotAuthorizedError(
-            f"Only the proposal creator can withdraw this proposal"
-        )
-
+    guard_proposal_owner(mp, user_id)
     try:
         _withdraw(db, proposal_id)
     except ValueError as e:
         raise BadRequestError(str(e)) from e
     return {
-        "id": mp.id,
-        "status": "withdrawn",
-        "fork_article_id": mp.fork_article_id,
-        "target_article_id": mp.target_article_id,
+        "id": mp.id, "status": "withdrawn",
+        "fork_article_id": mp.fork_article_id, "target_article_id": mp.target_article_id,
     }

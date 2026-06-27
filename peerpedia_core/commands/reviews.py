@@ -16,9 +16,9 @@ Call graph::
       ├► write_review_to_git                  (git-first: scores.json + threads/*.md)
       │     ├► git_backend.commit_article      (returns commit_hash)
       │     └► storage.locks.get_article_lock  (serialize concurrent git writes)
-      ├► crud_review.upsert_review             (DB cache, uses commit_hash from git)
-      ├► commands.workflow.recompute_article_score
-      └► commands.workflow.recompute_author_reputation  (for each author)
+      ├► _persist_review                       (routes to invitation update or upsert)
+      ├► commands.workflow.recompute_article_and_author_scores
+      └► _notify_review_authors
 
     _derive_anonymous_id
       └► sha256(article_id:reviewer_id)[:12]   (deterministic, stable per article)
@@ -49,17 +49,18 @@ Reviewer's checklist
 
 from __future__ import annotations
 
-import hashlib
 import json
+from contextlib import nullcontext
 from datetime import datetime, timezone
-from pathlib import Path
 
 from peerpedia_core.storage.db import Session
 
 from peerpedia_core.config.params import make_peerpedia_email, params
-from peerpedia_core.exceptions import BadRequestError, ConflictError, NotFoundError, NotAuthorizedError
-from peerpedia_core.policies.articles import (
+from peerpedia_core.exceptions import BadRequestError, ConflictError, NotFoundError
+from peerpedia_core.commands.guards import (
     assert_can_reply_to_review, assert_can_submit_review, assert_not_folded,
+    guard_invitation_not_accepted, guard_invitation_not_declined,
+    require_signing_key_not_none,
 )
 from peerpedia_core.storage.db.crud_article import get_author_ids
 from peerpedia_core.storage.db.crud_maintainer import get_maintainer_ids
@@ -73,13 +74,20 @@ from peerpedia_core.storage.db.crud_review import (
 )
 from peerpedia_core.names import derive_anonymous_name
 from peerpedia_core.crypto import temp_signing_key
-from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, commit_article
+from peerpedia_core.storage.git_backend import commit_article
 from peerpedia_core.storage.locks import get_article_lock
-from peerpedia_core.commands.workflow import recompute_article_score, recompute_author_reputation
-from peerpedia_core.commands.articles._helpers import (
+from peerpedia_core.commands.workflow import recompute_article_and_author_scores
+from peerpedia_core.commands.guards import (
     require_article,
-    require_article_repo,
     require_user,
+    guard_invitation_conflicts,
+    require_article_repo,
+    require_helpfulness_score_range,
+    require_invitation,
+    require_maintainer,
+    require_not_same,
+    require_review,
+    require_sedimentation,
 )
 from peerpedia_core.commands.notifications import create_notification
 from peerpedia_core.types.scores import SCORE_DIMENSIONS
@@ -107,66 +115,65 @@ def submit_review(
 
     Raises NotFoundError if the reviewer or article is not found.
     """
+    # ── Authorization + Validation ──
     assert_valid_review(scores, comment)
-
     user = require_user(db, reviewer_id)
     article = require_article(db, article_id)
     assert_not_folded(article, threshold=params.reputation.fold_score_threshold)
     assert_can_submit_review(article)
-
-    author_ids = get_author_ids(db, article_id)
-
     if article.status == "sedimentation":
-        # Sedimentation reviews REQUIRE an accepted invitation.
-        accepted_inv = get_accepted_invitation(db, article_id, reviewer_id)
-        if accepted_inv is None:
-            raise NotAuthorizedError(
-                "You have not been invited to review this article. "
-                "During sedimentation, only invited reviewers may submit reviews. "
-                "Ask the author to invite you: "
-                f"peerpedia review invite {article_id} --user @you"
-            )
-        anon_id = _derive_anonymous_id(article_id, signing_key=signing_key_bytes)
-        display_name = derive_anonymous_name(anon_id)
-        email = make_peerpedia_email(f"anon-{anon_id}")
-        commit_hash = write_review_to_git(
-            article_id, anon_id, scores, comment, display_name, email,
-            signing_key_bytes=signing_key_bytes, pubkey_hex=pubkey_hex,
-        )
-        # Update the accepted row in-place — state transition, not cache upsert.
+        require_invitation(db, article_id, reviewer_id)
+
+    # ── Identity ──
+    dir_id, display_name, email = _resolve_review_identity(
+        article, user, reviewer_id, signing_key_bytes=signing_key_bytes,
+    )
+
+    # ── Write to git ──
+    commit_hash = write_review_to_git(
+        article_id, dir_id, scores, comment, display_name, email,
+        signing_key_bytes=signing_key_bytes, pubkey_hex=pubkey_hex,
+    )
+
+    # ── Update DB ──
+    r = _persist_review(db, article_id, reviewer_id, scores, commit_hash)
+
+    # ── Recompute scores ──
+    recompute_article_and_author_scores(db, article_id)
+
+    # ── Notify ──
+    author_ids = get_author_ids(db, article_id)
+    _notify_review_authors(db, article_id, reviewer_id, user.name, author_ids)
+
+    return {"review_id": r.id, "scores": r.scores, "commit_hash": commit_hash}
+
+
+
+
+def _persist_review(db, article_id, reviewer_id, scores, commit_hash):
+    """Persist review to DB — routes through invitation update or direct upsert."""
+    accepted_inv = get_accepted_invitation(db, article_id, reviewer_id)
+    if accepted_inv is not None:
         update_review_status(db, accepted_inv, "submitted")
         accepted_inv.scores = scores
         accepted_inv.commit_hash = commit_hash
         db.flush()
-        r = accepted_inv
-    else:
-        # Published articles: open reviews, no invitation needed.
-        display_name = user.name
-        email = make_peerpedia_email(reviewer_id)
-        commit_hash = write_review_to_git(
-            article_id, reviewer_id, scores, comment, display_name, email,
-            signing_key_bytes=signing_key_bytes, pubkey_hex=pubkey_hex,
-        )
-        r = upsert_review(
-            db, article_id=article_id, commit_hash=commit_hash,
-            reviewer_id=reviewer_id, scores=scores,
-        )
+        return accepted_inv
+    return upsert_review(
+        db, article_id=article_id, commit_hash=commit_hash,
+        reviewer_id=reviewer_id, scores=scores,
+    )
 
-    recompute_article_score(db, article_id)
 
-    for aid in author_ids:
-        recompute_author_reputation(db, aid)
-
-    # Notify article authors about the new review (exclude self-review).
+def _notify_review_authors(db, article_id, reviewer_id, reviewer_name, author_ids):
+    """Notify article authors (except the reviewer) of a new review."""
     for aid in author_ids:
         if aid != reviewer_id:
             create_notification(
                 db, user_id=aid, event="review_submitted",
-                message=f"{user.name} submitted a review on your article",
+                message=f"{reviewer_name} submitted a review on your article",
                 article_id=article_id, actor_id=reviewer_id,
             )
-
-    return {"review_id": r.id, "scores": r.scores, "commit_hash": commit_hash}
 
 
 def invite_reviewer(
@@ -186,39 +193,31 @@ def invite_reviewer(
     Raises ConflictError if the user has a pending/accepted invitation, or
         has already submitted a review and the author has not yet replied.
     """
+    # ── Authorization ──
     article = require_article(db, article_id)
-    if article.status != "sedimentation":
-        raise BadRequestError("Can only invite reviewers to articles in sedimentation")
+    require_sedimentation(article)
+    require_not_same(inviter_id, invited_id, label="invite")
+    require_maintainer(db, article_id, inviter_id)
+    require_user(db, invited_id)
 
-    # Self-invite: authors review their own articles via publish, not invite.
-    if inviter_id == invited_id:
-        raise BadRequestError("Cannot invite yourself to review")
+    # ── Guards ──
+    guard_invitation_conflicts(db, article_id, invited_id)
 
-    mids = get_maintainer_ids(db, article_id)
-    if inviter_id not in mids:
-        raise NotAuthorizedError("Only article maintainers can invite reviewers")
+    # ── Create ──
+    inv = _create_invitation(db, article_id, inviter_id, invited_id)
 
-    invited_user = require_user(db, invited_id)
+    # ── Notify ──
+    create_notification(
+        db, user_id=invited_id, event="review_invitation",
+        message=f"{inviter_id} invited you to review an article",
+        article_id=article_id, actor_id=inviter_id,
+    )
 
-    # Guard: no pending or accepted invitation may already exist.
-    pending = get_pending_invitation(db, article_id, invited_id)
-    if pending is not None:
-        raise ConflictError("User already has a pending invitation for this article")
-    accepted = get_accepted_invitation(db, article_id, invited_id)
-    if accepted is not None:
-        raise ConflictError("User has already accepted an invitation for this article")
+    return {"invitation_id": inv.id, "article_id": article_id, "reviewer_id": invited_id}
 
-    # Guard: if the reviewer already submitted a review, require author reply
-    # before re-invitation.
-    for r in _get(db, article_id):
-        if r.reviewer_id == invited_id and r.status == "submitted":
-            if not _author_has_replied(article_id):
-                raise ConflictError(
-                    "Reviewer has already submitted a review. "
-                    "Author must reply to the review before re-inviting."
-                )
 
-    # Create a pending invitation row.
+def _create_invitation(db, article_id: str, inviter_id: str, invited_id: str) -> Review:
+    """Insert a pending invitation Review row and flush.  Returns the new row."""
     inv = Review(
         article_id=article_id,
         commit_hash="pending",
@@ -231,35 +230,7 @@ def invite_reviewer(
     )
     db.add(inv)
     db.flush()
-
-    create_notification(
-        db, user_id=invited_id, event="review_invitation",
-        message=f"{inviter_id} invited you to review an article",
-        article_id=article_id, actor_id=inviter_id,
-    )
-
-    return {"invitation_id": inv.id, "article_id": article_id, "reviewer_id": invited_id}
-
-
-def _author_has_replied(article_id: str) -> bool:
-    """Check if any review directory for *article_id* has author replies.
-
-    A reply exists when a review thread has more than one message file
-    (the first is the review, subsequent ones are replies).
-    """
-    rp = require_article_repo(article_id)
-    reviews_dir = rp / "reviews"
-    if not reviews_dir.is_dir():
-        return False
-    for reviewer_dir in reviews_dir.iterdir():
-        if not reviewer_dir.is_dir():
-            continue
-        threads_dir = reviewer_dir / "threads"
-        if threads_dir.is_dir():
-            md_files = sorted(threads_dir.glob("*.md"))
-            if len(md_files) > 1:
-                return True
-    return False
+    return inv
 
 
 def accept_invitation(
@@ -276,17 +247,7 @@ def accept_invitation(
     """
     inv = get_pending_invitation(db, article_id, reviewer_id)
     if inv is None:
-        declined = (
-            db.query(Review)
-            .filter(
-                Review.article_id == article_id,
-                Review.reviewer_id == reviewer_id,
-                Review.status == "declined",
-            )
-            .first()
-        )
-        if declined is not None:
-            raise BadRequestError("Cannot accept a declined invitation")
+        guard_invitation_not_declined(db, article_id, reviewer_id)
         raise NotFoundError(
             "No pending invitation found for this article. "
             "Ask the article author to invite you with: "
@@ -313,9 +274,7 @@ def decline_invitation(
     """
     inv = get_pending_invitation(db, article_id, reviewer_id)
     if inv is None:
-        acc = get_accepted_invitation(db, article_id, reviewer_id)
-        if acc is not None:
-            raise BadRequestError("Cannot decline an already accepted invitation")
+        guard_invitation_not_accepted(db, article_id, reviewer_id)
         raise NotFoundError(
             "No pending invitation to decline for this article — "
             "it may have already been accepted, declined, or expired."
@@ -351,24 +310,16 @@ def submit_reply(
     user = require_user(db, user_id)
     article = require_article(db, article_id)
     reviewer = require_user(db, reviewer_ref)
-
     mids = get_maintainer_ids(db, article_id)
     assert_can_reply_to_review(
-        article, mids, user,
-        fold_threshold=params.reputation.fold_score_threshold,
+        article, mids, user, fold_threshold=params.reputation.fold_score_threshold,
     )
 
-    if article.status == "sedimentation":
-        directory_id = _derive_anonymous_id(article_id, signing_key=signing_key_bytes)
-        display_name = derive_anonymous_name(directory_id)
-        email = make_peerpedia_email(f"anon-{directory_id}")
-    else:
-        directory_id = reviewer_ref
-        display_name = user.name
-        email = make_peerpedia_email(user_id)
-
+    dir_id, display_name, email = _resolve_review_identity(
+        article, user, reviewer_ref, signing_key_bytes=signing_key_bytes,
+    )
     commit_hash = _write_thread_message(
-        article_id, directory_id, content, display_name, email,
+        article_id, dir_id, content, display_name, email,
         commit_marker="[reply]",
         signing_key_bytes=signing_key_bytes, pubkey_hex=pubkey_hex,
     )
@@ -379,7 +330,7 @@ def submit_reply(
         article_id=article_id, actor_id=user_id,
     )
 
-    return {"article_id": article_id, "directory_id": directory_id,
+    return {"article_id": article_id, "directory_id": dir_id,
             "commit_hash": commit_hash}
 
 
@@ -394,8 +345,7 @@ def _derive_anonymous_id(article_id: str, *, signing_key: bytes) -> str:
     Raises ValueError if *signing_key* is None — fail fast, no fallback.
     """
     import hmac
-    if signing_key is None:
-        raise ValueError("signing_key is required for anonymous review ID derivation")
+    require_signing_key_not_none(signing_key)
     return hmac.new(signing_key, article_id.encode(), "sha256").hexdigest()[:12]
 
 
@@ -450,52 +400,40 @@ def assert_valid_review(scores: dict, comment: str | None = None, *, check_comme
             scores[full] = scores.pop(abbr)
 
 
-def _write_thread_message(
-    article_id: str,
-    directory_id: str,
-    content: str,
-    display_name: str,
-    email: str,
-    commit_marker: str,
-    *,
-    signing_key_bytes: bytes | None = None,
-    pubkey_hex: str | None = None,
-) -> str:
-    """Append a message to the review thread.  Returns the new HEAD commit hash.
+def _resolve_review_identity(article, user, reviewer_ref, *, signing_key_bytes):
+    """Return (directory_id, display_name, email) for a review write."""
+    if article.status == "sedimentation":
+        anon_id = _derive_anonymous_id(article.id, signing_key=signing_key_bytes)
+        return anon_id, derive_anonymous_name(anon_id), make_peerpedia_email(f"anon-{anon_id}")
+    return reviewer_ref, user.name, make_peerpedia_email(user.id)
 
-    *commit_marker* is ``"[review]"`` for reviewer messages or ``"[reply]"``
-    for author replies.
-    """
+
+def _write_thread_message(
+    article_id: str, directory_id: str, content: str,
+    display_name: str, email: str, commit_marker: str, *,
+    signing_key_bytes: bytes | None = None, pubkey_hex: str | None = None,
+) -> str:
+    """Append a message to the review thread.  Returns HEAD hash."""
     rp = require_article_repo(article_id)
     threads_dir = rp / "reviews" / directory_id / "threads"
     threads_dir.mkdir(parents=True, exist_ok=True)
 
     lock = get_article_lock(article_id)
-    acquired = lock.acquire(timeout=10)
-    if not acquired:
+    if not lock.acquire(timeout=10):
         raise ConflictError("Article busy — retry later")
-
     try:
         existing = sorted(threads_dir.glob("*.md"))
-        next_num = len(existing) + 1
         ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        thread_path = threads_dir / f"{next_num:03d}.md"
+        thread_path = threads_dir / f"{len(existing) + 1:03d}.md"
         thread_path.write_text(f"### {display_name} ({ts})\n\n{content}\n")
 
-        if signing_key_bytes:
-            with temp_signing_key(signing_key_bytes) as key_path:
-                h = commit_article(
-                    rp, f"{commit_marker} {display_name}", display_name, email,
-                    signing_key=key_path, pubkey_hex=pubkey_hex,
-                )
-        else:
-            h = commit_article(
+        with (temp_signing_key(signing_key_bytes) if signing_key_bytes else nullcontext()) as key_path:
+            return commit_article(
                 rp, f"{commit_marker} {display_name}", display_name, email,
-                signing_key=None, pubkey_hex=pubkey_hex,
+                signing_key=key_path, pubkey_hex=pubkey_hex,
             )
     finally:
         lock.release()
-    return h
 
 
 def write_review_to_git(
@@ -508,16 +446,10 @@ def write_review_to_git(
     signing_key_bytes: bytes | None = None,
     pubkey_hex: str | None = None,
 ) -> str:
-    """Write review to git: scores.json + thread message.  Returns HEAD hash.
-
-    Raises NotFoundError if the article repo does not exist.
-    """
-    rp = DEFAULT_ARTICLES_DIR / article_id
+    """Write review to git: scores.json + thread message.  Returns HEAD hash."""
+    rp = require_article_repo(article_id)
     review_dir = rp / "reviews" / directory_id
     review_dir.mkdir(parents=True, exist_ok=True)
-
-    # Write scores.json first, then delegate to _write_thread_message
-    # which acquires the lock and commits both files in one git operation.
     (review_dir / "scores.json").write_text(json.dumps(scores, indent=2))
 
     return _write_thread_message(
@@ -551,23 +483,11 @@ def rate_review_helpfulness(
     Raises BadRequestError if the score is outside 1-5 range.
     """
     article = require_article(db, article_id)
-    mids = get_maintainer_ids(db, article_id)
-    if rater_id not in mids:
-        raise NotAuthorizedError("Only article maintainers can rate reviews")
-
-    if score < 1 or score > 5:
-        raise BadRequestError("Helpfulness score must be between 1 and 5")
+    require_maintainer(db, article_id, rater_id)
+    require_helpfulness_score_range(score)
 
     # Find the review and update it
-    all_reviews = _get(db, article_id)
-    target = None
-    for r in all_reviews:
-        if r.reviewer_id == reviewer_id:
-            target = r
-            break
-    if target is None:
-        raise NotFoundError(f"No review found for reviewer {reviewer_id}")
-
+    target = require_review(db, article_id, reviewer_id)
     target.helpfulness_score = score
     db.flush()
 

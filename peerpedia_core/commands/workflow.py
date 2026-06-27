@@ -11,7 +11,7 @@ that is the caller's responsibility.
 Call graph::
 
     publish_ready_articles
-      ├► prereq: caller calls commands.sync_reviews_from_worktree()
+      ├► prereq: caller calls commands.integrity.sync_reviews_from_worktree()
       ├► DB: query Article.status == "sedimentation"
       ├► for each ready article:
       │     ├► recompute_article_score
@@ -54,7 +54,8 @@ from peerpedia_core.storage.db import Session
 
 from peerpedia_core.config.params import params
 from peerpedia_core.exceptions import NotFoundError
-from peerpedia_core.storage.db.crud_article import get_article, get_articles_by_author, get_author_ids, get_author_ids_batch, list_articles, update_article_score, update_article_status
+from peerpedia_core.commands.guards import require_article
+from peerpedia_core.storage.db.crud_article import get_articles_by_author, get_author_ids, get_author_ids_batch, list_articles, update_article_score, update_article_status
 from peerpedia_core.storage.db.crud_review import get_reviews_for_article, upsert_review
 from peerpedia_core.storage.db.crud_user import get_user, get_users_by_ids, list_users, update_user_reputation
 from peerpedia_core.storage.git_backend import DEFAULT_ARTICLES_DIR, commit_article, commit_status_marker
@@ -160,9 +161,7 @@ def recompute_article_score(db: Session, article_id: str) -> dict | None:
     Returns the computed score dict, or None if no reviews exist.
     Raises NotFoundError if the article does not exist.
     """
-    article = get_article(db, article_id)
-    if article is None:
-        raise NotFoundError("Article not found", resource_type="article", resource_id=article_id)
+    article = require_article(db, article_id)
 
     all_reviews = get_reviews_for_article(db, article_id)
     if not all_reviews:
@@ -199,6 +198,17 @@ def recompute_article_score(db: Session, article_id: str) -> dict | None:
     if score is not None:
         update_article_score(db, article.id, score)
     return score
+
+
+def recompute_article_and_author_scores(db: Session, article_id: str) -> None:
+    """Recompute article score and all author reputations — canonical post-review hook.
+
+    Wraps the two calls every review mutation must make: recalculate the
+    article's aggregate score, then update every author's reputation.
+    """
+    recompute_article_score(db, article_id)
+    for aid in get_author_ids(db, article_id):
+        recompute_author_reputation(db, aid)
 
 
 def extract_state(db: Session, user_id: str) -> ReputationState:

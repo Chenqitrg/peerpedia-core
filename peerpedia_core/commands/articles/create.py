@@ -9,7 +9,6 @@ import uuid
 from contextlib import nullcontext
 
 from peerpedia_core.storage.db import Session
-from peerpedia_core.exceptions import BadRequestError
 from peerpedia_core.config.params import (
     article_filename, article_format_to_ext, make_peerpedia_email,
 )
@@ -19,13 +18,7 @@ from peerpedia_core.storage.db.crud_article import create_article
 from peerpedia_core.storage.db.crud_maintainer import add_maintainer
 from peerpedia_core.storage.git_backend import commit_article, init_article_repo
 from peerpedia_core.crypto import temp_signing_key
-from peerpedia_core.commands.articles._helpers import require_user
-
-
-def _require_authors_exist(db: Session, author_ids: list[str]) -> None:
-    """Raise NotFoundError if any author in *author_ids* does not exist."""
-    for aid in author_ids:
-        require_user(db, aid)
+from peerpedia_core.commands.guards import require_authors_exist, require_title_nonempty, require_user
 
 
 def _write_initial_article(rp, *, title, content, abstract, keywords, categories, format) -> str:
@@ -54,9 +47,8 @@ def create_article_with_content(
     Raises NotFoundError if any author is not found.
     """
     # ── Validate ────────────────────────────────────────────────────────────
-    if not title.strip():
-        raise BadRequestError("Title is required")
-    _require_authors_exist(db, author_ids)
+    require_title_nonempty(title)
+    require_authors_exist(db, author_ids)
 
     # ── Create git repo ─────────────────────────────────────────────────────
     article_id = str(uuid.uuid4())

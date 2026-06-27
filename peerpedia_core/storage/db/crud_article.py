@@ -41,6 +41,8 @@ Reviewer's checklist
 - Does ``delete_article`` cascade properly?  (Check the model relations.)
 """
 
+from datetime import datetime
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -49,6 +51,7 @@ from peerpedia_core.storage.db.models import (
     Article, ArticleAuthor, Bookmark, Citation, Follow, MergeProposal,
     Review, ScriptMaintainer,
 )
+from peerpedia_core.storage.db.crud_user import create_user_stub
 
 # ── Author helpers (join table) ───────────────────────────────────────────
 
@@ -143,6 +146,30 @@ def create_article_from_orm(
     add_article_authors(session, article.id, author_ids)
     session.flush()
     return article
+
+
+def ensure_article_stub(
+    session: Session, data: dict, *, author_ids: list[str],
+) -> Article | None:
+    """Create an article stub from peer data, or return None if it already exists.
+
+    Converts ISO datetime strings in *data* to Python datetime objects.
+    Creates User stubs for any *author_ids* not yet in the local DB.
+    """
+    if get_article(session, data["id"]) is not None:
+        return None
+
+    _dt_fields = {"sink_start", "created_at", "witnessed_at", "updated_at"}
+    for field in _dt_fields:
+        val = data.get(field)
+        if isinstance(val, str):
+            data[field] = datetime.fromisoformat(val)
+
+    for aid in author_ids:
+        create_user_stub(session, user_id=aid, name=aid, public_key="", salt="")
+
+    article = Article(**{k: v for k, v in data.items() if k != "authors"})
+    return create_article_from_orm(session, article, author_ids)
 
 
 def get_article(session: Session, article_id: str) -> Article | None:

@@ -7,90 +7,17 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from peerpedia_core.storage.db import Session, crud_maintainer
-from peerpedia_core.config.params import params
-from peerpedia_core.exceptions import NotFoundError, NotAuthorizedError
-from peerpedia_core.policies.articles import assert_not_folded
+from peerpedia_core.storage.db import Session
 from peerpedia_core.storage.db.crud_article import (
     add_article_authors,
-    get_article as _get_article,
     get_author_ids as _get_author_ids,
     set_sink_start,
 )
-from peerpedia_core.storage.db.crud_user import get_user as _get_user
 from peerpedia_core.config.paths import article_repo_path
 from peerpedia_core.storage.git_backend import (
     commit_status_marker, get_commit_authors, get_head_hash,
-    read_review_scores,
 )
-from peerpedia_core.storage.db.models import Article, User
-
-
-def require_user(db: Session, user_id: str) -> User:
-    """Return the user or raise NotFoundError.
-
-    Eliminates the repeated ``user = get_user(db, uid); if user is None: raise``
-    pattern that appears in 11+ command functions.
-    """
-    user = _get_user(db, user_id)
-    if user is None:
-        raise NotFoundError("User not found", resource_type="user", resource_id=user_id)
-    return user
-
-
-def require_article(db: Session, article_id: str) -> Article:
-    """Return the article or raise NotFoundError.
-
-    Eliminates the repeated ``article = get_article(db, aid); if article is None: raise``
-    pattern that appears in 10+ command functions.
-    """
-    article = _get_article(db, article_id)
-    if article is None:
-        raise NotFoundError("Article not found", resource_type="article", resource_id=article_id)
-    return article
-
-
-def require_article_repo(article_id: str) -> Path:
-    """Return the article repo path or raise NotFoundError.
-
-    Eliminates the repeated ``rp = article_repo_path(aid); if not (rp / ".git").is_dir(): raise``
-    pattern that appears in 9+ locations.
-    """
-    rp = article_repo_path(article_id)
-    if not (rp / ".git").is_dir():
-        raise NotFoundError("Article repo not found", resource_type="article", resource_id=article_id)
-    return rp
-
-
-def authorize_article_action(
-    db: Session, article_id: str, user_id: str,
-) -> tuple[User, Article, list[str]]:
-    """Resolve user, article, and maintainer_ids; block if article is folded.
-
-    Eliminates the repeated 4-line authorization preamble that appears in
-    update/rollback/publish/fork (but not delete, which skips fold check).
-    """
-    user = require_user(db, user_id)
-    article = require_article(db, article_id)
-    mids = crud_maintainer.get_maintainer_ids(db, article_id)
-    assert_not_folded(article, threshold=params.reputation.fold_score_threshold)
-    return user, article, mids
-
-
-def require_review_scores(repo_path: Path, reviewer_dir: str, article_id: str) -> dict:
-    """Return parsed review scores or raise NotFoundError.
-
-    Eliminates the repeated ``scores = read_review_scores(rp, d); if scores is None: raise``
-    pattern.  Fail fast: missing or malformed scores.json raises immediately.
-    """
-    scores = read_review_scores(repo_path, reviewer_dir)
-    if scores is None:
-        raise NotFoundError(
-            f"scores.json not found in reviews/{reviewer_dir}/ for article {article_id}",
-            resource_type="review_scores",
-            resource_id=f"{article_id}/reviews/{reviewer_dir}",
-        )
-    return scores
+from peerpedia_core.commands.guards import require_article
 
 
 def reset_sink(db: Session, article_id: str, rp: Path, extra_days: int) -> None:
@@ -115,9 +42,7 @@ def rebuild_article_authors(db: Session, article_id: str, since_hash: str | None
 
     Raises NotFoundError if the article does not exist.
     """
-    article = _get_article(db, article_id)
-    if article is None:
-        raise NotFoundError(f"Article not found: {article_id}")
+    article = require_article(db, article_id)
 
     rp = article_repo_path(article_id)
     head_hash = get_head_hash(rp)
@@ -129,17 +54,3 @@ def rebuild_article_authors(db: Session, article_id: str, since_hash: str | None
         add_article_authors(db, article_id, new_only)
 
     article.last_author_rebuild_hash = head_hash
-
-
-def _assert_caller_is_maintainer(db: Session, article_id: str, caller_id: str) -> None:
-    """Raise if *caller_id* is not a maintainer of *article_id*."""
-    caller = _get_user(db, caller_id)
-    if caller is None:
-        raise NotFoundError("Caller not found")
-    article = _get_article(db, article_id)
-    if article is None:
-        raise NotFoundError("Article not found")
-    if not crud_maintainer.is_maintainer(db, article_id, caller_id):
-        raise NotAuthorizedError(
-            f"User {caller_id} is not a maintainer of script {article_id}"
-        )

@@ -17,18 +17,25 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from peerpedia_core.crypto import pubkey_hex_to_ssh_line
-from peerpedia_core.exceptions import NotFoundError, SignatureVerificationError
+import logging
+
+from peerpedia_core.exceptions import BadRequestError, NotFoundError
 from peerpedia_core.storage.db import Session
-from peerpedia_core.commands.articles._helpers import require_article, require_article_repo
-from peerpedia_core.commands.workflow import recompute_article_score
-from peerpedia_core.storage.db.crud_article import get_author_ids, update_article_status
-from peerpedia_core.storage.git_backend import (
-    extract_pubkey_from_message, get_commit_authors,
-    get_commit_history, read_status_from_git, verify_commit_signature,
+from peerpedia_core.commands.articles._helpers import rebuild_article_authors
+from peerpedia_core.commands.guards import (
+    require_article, require_article_repo, require_integrity_level, require_review_scores,
 )
-from peerpedia_core.types import short_id
+from peerpedia_core.commands.reviews import assert_valid_review
+from peerpedia_core.commands.workflow import publish_ready_articles, recompute_article_score
+from peerpedia_core.storage.db.crud_article import get_author_ids, update_article_status, update_witnessed_at
+from peerpedia_core.storage.db.crud_review import upsert_review
+from peerpedia_core.storage.git_backend import (
+    get_commit_authors, get_commit_history, get_head_hash,
+    list_review_dirs, read_status_from_git, require_commit_pubkey_signature,
+)
 from peerpedia_core.types.status import is_platform_commit
+
+logger = logging.getLogger(__name__)
 
 
 def assert_article_integrity(db: Session, article_id: str, *, level: str = "light") -> None:
@@ -49,13 +56,12 @@ def assert_article_integrity(db: Session, article_id: str, *, level: str = "ligh
     except NotFoundError:
         return
 
+    require_integrity_level(level)
     if level == "light":
         _verify_light(rp)
-    elif level == "full":
+    else:
         _verify_light(rp)
         _verify_full(db, article_id, rp)
-    else:
-        raise ValueError(f"Unknown integrity level: {level}")
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -70,16 +76,9 @@ def _verify_light(repo_path: Path) -> None:
     if is_platform_commit(commit["author_email"]):
         return
 
-    pubkey_hex = extract_pubkey_from_message(commit["message"])
-    if not pubkey_hex:
-        raise SignatureVerificationError(
-            f"Local integrity failure: commit {short_id(commit['hash'])} "
-            f"by {commit['author_email']} has no Pubkey trailer — "
-            "the git repo may have been tampered with. "
-            "Run 'peerpedia sync pull <article_id>' to repair from a trusted peer."
-        )
-    ssh_line = pubkey_hex_to_ssh_line(pubkey_hex)
-    verify_commit_signature(repo_path, commit["hash"], ssh_line, commit["author_email"])
+    require_commit_pubkey_signature(
+        repo_path, commit["hash"], commit["message"], commit["author_email"],
+    )
 
 
 def _verify_full(db: Session, article_id: str, repo_path: Path) -> None:
@@ -88,28 +87,65 @@ def _verify_full(db: Session, article_id: str, repo_path: Path) -> None:
 
     expected_status = read_status_from_git(repo_path)
     if expected_status is not None and article.status != expected_status:
-        _repair_from_git(db, article_id, repo_path)
+        _repair_from_git(db, article_id)
         return
 
     # Check author list consistency.
     db_authors = set(get_author_ids(db, article_id))
     git_authors = get_commit_authors(repo_path)
     if db_authors != git_authors:
-        from peerpedia_core.commands.articles import rebuild_article_authors  # noqa: PLC0415
         rebuild_article_authors(db, article_id)
 
 
-def _repair_from_git(db: Session, article_id: str, repo_path: Path) -> None:
-    """Rebuild DB cache for *article_id* from git SOT."""
-    from peerpedia_core.commands.articles import rebuild_article_authors  # noqa: PLC0415
-    from peerpedia_core.commands.bundle import sync_reviews_from_worktree  # noqa: PLC0415
+def sync_status_from_git(db: Session, article_id: str) -> None:
+    """Read status transitions from commit messages and update DB.
 
-    rebuild_article_authors(db, article_id)
-    # Sync status from git platform commits into DB.
-    status = read_status_from_git(repo_path)
+    Delegates to ``git_backend.read_status_from_git`` for the git traversal.
+    Raises NotFoundError if the article or its git repo is not found.
+    """
+    require_article(db, article_id)
+    rp = require_article_repo(article_id)
+    status = read_status_from_git(rp)
     if status is not None:
         update_article_status(db, article_id, status)
-    # G9: sync reviews from git worktree before recomputing scores so
-    # reviews that exist in git but not in DB are not silently dropped.
+
+
+def sync_reviews_from_worktree(db: Session, article_id: str) -> None:
+    """Sync review scores from git worktree into the DB Review cache."""
+    rp = require_article_repo(article_id)
+    head_hash = get_head_hash(rp)
+
+    for dir_name in list_review_dirs(rp):
+        scores = require_review_scores(rp, dir_name, article_id)
+        try:
+            assert_valid_review(scores, comment=None, check_comment=False)
+        except BadRequestError as e:
+            logger.warning(
+                "Sync: skipping invalid review in %s/reviews/%s: %s",
+                article_id, dir_name, e.detail,
+            )
+            continue
+        upsert_review(
+            db, article_id=article_id, commit_hash=head_hash,
+            reviewer_id=dir_name, scores=scores,
+        )
+
+
+def rebuild_db_from_git(db: Session, article_id: str) -> None:
+    """Rebuild DB caches (authors, reviews, status, score) from git SOT.
+
+    Called after git state changes (sync merge, integrity repair) to bring
+    the DB back in sync with git — the source of truth for article content.
+    """
+    update_witnessed_at(db, article_id)
+    rebuild_article_authors(db, article_id)
     sync_reviews_from_worktree(db, article_id)
+    sync_status_from_git(db, article_id)
+    assert_article_integrity(db, article_id, level="full")
     recompute_article_score(db, article_id)
+    publish_ready_articles(db)
+
+
+def _repair_from_git(db: Session, article_id: str) -> None:
+    """Rebuild DB cache for *article_id* from git SOT (integrity-triggered)."""
+    rebuild_db_from_git(db, article_id)

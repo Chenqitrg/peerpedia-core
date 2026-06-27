@@ -11,45 +11,19 @@ from peerpedia_core.storage.db import Session
 from peerpedia_core.config.params import (
     article_filename, article_format_to_ext, make_peerpedia_email, params,
 )
-from peerpedia_core.exceptions import BadRequestError
 from peerpedia_core.frontmatter import make_article_frontmatter, strip_frontmatter
-from peerpedia_core.policies.articles import assert_can_edit_article
+from peerpedia_core.commands.guards import assert_can_edit_article, guard_closes_trailer
 from peerpedia_core.commands.integrity import assert_article_integrity
-from peerpedia_core.commands.trailers import parse_closes_trailer, validate_closes_target
 from peerpedia_core.storage.db.crud_article import (
     clear_publish_consents,
 )
 from peerpedia_core.storage.git_backend import commit_article, resolve_article_format
 from peerpedia_core.crypto import temp_signing_key
 from peerpedia_core.commands.articles._helpers import (
-    authorize_article_action,
     reset_sink,
     rebuild_article_authors,
-    require_article_repo,
 )
-
-def _require_closes_trailer(message: str, article_id: str) -> None:
-    """Raise BadRequestError if *message* lacks a valid Closes: trailer.
-
-    Only called during sedimentation — edits must reference a review thread.
-    """
-    if not message:
-        raise BadRequestError(
-            "Sedimentation edits require a Closes: review/{dir}/thread-{n} "
-            "trailer in the commit message"
-        )
-    parsed = parse_closes_trailer(message)
-    if parsed is None:
-        raise BadRequestError(
-            "Sedimentation edits must reference a review thread via "
-            "Closes: review/{reviewer-dir}/thread-{n} in the commit message"
-        )
-    reviewer_dir, thread_num = parsed
-    if not validate_closes_target(article_id, reviewer_dir, thread_num):
-        raise BadRequestError(
-            f"Closes target not found: review/{reviewer_dir}/thread-{thread_num:03d}"
-        )
-
+from peerpedia_core.commands.guards import authorize_article_action, require_article_repo
 
 def _rewrite_article_file(
     rp: Path, a, *, title, abstract, keywords, categories, content,
@@ -91,7 +65,7 @@ def update_article_content(
 
     # ── Validation ─────────────────────────────────────────────────────────
     if old_status == "sedimentation":
-        _require_closes_trailer(message, article_id)
+        guard_closes_trailer(message, article_id)
 
     # ── Write file ─────────────────────────────────────────────────────────
     rp = require_article_repo(article_id)

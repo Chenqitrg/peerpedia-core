@@ -21,7 +21,8 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
-from peerpedia_core.exceptions import BadRequestError, NotFoundError
+from peerpedia_core.exceptions import NotFoundError
+from peerpedia_core.storage.db._validators import require_not_same
 from peerpedia_core.storage.db.models import Follow, User
 
 
@@ -67,6 +68,29 @@ def create_user_stub(
         public_key=public_key,
         salt=salt,
     )
+    session.add(u)
+    session.flush()
+    return u
+
+
+def ensure_user(
+    session: Session, user_id: str, name: str, *, address: str = "",
+) -> User:
+    """Return the user, creating it if it doesn't exist.
+
+    If *user_id* already exists and both the local and incoming *address*
+    are non-empty but differ, raises ``ValueError`` — two peers disagree
+    on where this user's server lives.
+    """
+    existing = session.get(User, user_id)
+    if existing is not None:
+        if existing.address and address and existing.address != address:
+            raise ValueError(
+                f"Address conflict for {user_id}: "
+                f"local={existing.address!r}, peer={address!r}"
+            )
+        return existing
+    u = User(id=user_id, name=name, address=address)
     session.add(u)
     session.flush()
     return u
@@ -129,6 +153,29 @@ def update_user_public_key(session: Session, user_id: str, pubkey_hex: str) -> N
     if rows == 0:
         raise NotFoundError(f"User {user_id} not found", resource_type="user", resource_id=user_id)
     session.expire_all()
+
+
+def set_user_pubkey_tofu(session: Session, user_id: str, pubkey_hex: str, *,
+                         user: User | None = None) -> str:
+    """Set public key with TOFU (Trust On First Use) semantics.
+
+    Returns ``"stored"`` (first key), ``"rotated"`` (key changed),
+    ``"unchanged"`` (same key), or ``"unknown_user"`` (no such user).
+
+    Pass *user* to avoid a redundant query when the caller already has
+    the User object loaded.
+    """
+    if user is None:
+        user = session.get(User, user_id)
+    if user is None:
+        return "unknown_user"
+    if user.public_key is None:
+        update_user_public_key(session, user_id, pubkey_hex)
+        return "stored"
+    if user.public_key != pubkey_hex:
+        update_user_public_key(session, user_id, pubkey_hex)
+        return "rotated"
+    return "unchanged"
 
 
 def update_user_salt(session: Session, user_id: str, salt_hex: str) -> None:
@@ -221,8 +268,7 @@ def follow_user(session: Session, follower_id: str, followed_id: str) -> Follow:
     If a soft-deleted row exists, restores it (``deleted_at=None``).
     Otherwise inserts a new row.
     """
-    if follower_id == followed_id:
-        raise BadRequestError("A user cannot follow themselves")
+    require_not_same(follower_id, followed_id, label="follow")
     f = session.query(Follow).filter(
         Follow.follower_id == follower_id,
         Follow.followed_id == followed_id,

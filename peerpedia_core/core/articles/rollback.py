@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from peerpedia_core.storage.db import Session
 from peerpedia_core.config.params import make_peerpedia_email, params
-from peerpedia_core.core.guards import assert_can_rollback_article
+from peerpedia_core.rules.articles import assert_can_rollback_article
 from peerpedia_core.core.reconcile import reconcile_integrity
 from peerpedia_core.storage.db.crud_article import clear_publish_consents
 from peerpedia_core.storage.git import (
@@ -16,9 +16,8 @@ from peerpedia_core.storage.git import (
 from peerpedia_core.crypto import temp_signing_key
 from peerpedia_core.core.articles._helpers import reset_sink
 from peerpedia_core.core.reconcile import reconcile_authors, reconcile_score
-from peerpedia_core.core.guards import (
-    authorize_article_action, require_article_repo, require_signing_key,
-)
+from peerpedia_core.storage.db.guards import authorize_article_action, require_signing_key
+from peerpedia_core.storage.git.guards import require_article_repo
 from peerpedia_core.types import short_id
 
 

@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock, patch
 
-from peerpedia_core.transport.health import clear_health_cache, is_online
+from peerpedia_core.server.http.health import clear_health_cache, is_online
 from peerpedia_core.bundle.pending import add, clear, count, list_all, remove
 
 
@@ -19,7 +19,7 @@ def test_is_online_returns_true_for_200():
     clear_health_cache()
     mock_client = MagicMock()
     mock_client.get.return_value.status_code = 200
-    with patch("peerpedia_core.transport.health._get_client", return_value=mock_client):
+    with patch("peerpedia_core.server.http.health._get_client", return_value=mock_client):
         assert is_online("http://example.com") is True
 
 
@@ -27,7 +27,7 @@ def test_is_online_returns_false_for_500():
     clear_health_cache()
     mock_client = MagicMock()
     mock_client.get.return_value.status_code = 500
-    with patch("peerpedia_core.transport.health._get_client", return_value=mock_client):
+    with patch("peerpedia_core.server.http.health._get_client", return_value=mock_client):
         assert is_online("http://example.com") is False
 
 
@@ -36,7 +36,7 @@ def test_is_online_returns_false_for_network_error():
     import httpx
     mock_client = MagicMock()
     mock_client.get.side_effect = httpx.ConnectError("Connection refused")
-    with patch("peerpedia_core.transport.health._get_client", return_value=mock_client):
+    with patch("peerpedia_core.server.http.health._get_client", return_value=mock_client):
         assert is_online("http://example.com") is False
 
 

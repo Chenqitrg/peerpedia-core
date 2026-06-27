@@ -47,13 +47,15 @@ from peerpedia_core.storage.db import Session
 
 from peerpedia_core.config.params import params
 from peerpedia_core.exceptions import BadRequestError, NotFoundError
-from peerpedia_core.core.guards import assert_can_accept_merge, authorize_article_action, guard_proposal_owner
+from peerpedia_core.rules.articles import assert_can_accept_merge
+from peerpedia_core.rules.reviews import guard_proposal_owner
+from peerpedia_core.storage.db.guards import authorize_article_action, require_open_proposal, require_user
 from peerpedia_core.storage.db.crud_merge import (
     accept_merge_proposal, get_merge_proposal, withdraw_merge_proposal as _withdraw,
 )
 from peerpedia_core.storage.db.crud_merge import create_merge_proposal as _create
 from peerpedia_core.core.articles._helpers import reset_sink
-from peerpedia_core.core.guards import require_article_repo, require_open_proposal, require_user
+from peerpedia_core.storage.git.guards import require_article_repo
 from peerpedia_core.storage.db.crud_maintainer import get_maintainer_ids
 from peerpedia_core.core.notifications import create_notification
 from peerpedia_core.storage.git import (

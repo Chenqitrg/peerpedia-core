@@ -9,9 +9,9 @@ from datetime import datetime, timezone
 
 from peerpedia_core.storage.db import Session
 from peerpedia_core.exceptions import ConflictError, NotFoundError
-from peerpedia_core.core.guards import (
-    guard_invitation_conflicts, guard_invitation_not_accepted,
-    guard_invitation_not_declined,
+from peerpedia_core.core.guards import guard_invitation_conflicts
+from peerpedia_core.storage.db.guards import (
+    guard_invitation_not_accepted, guard_invitation_not_declined,
     require_article, require_maintainer, require_not_same,
     require_sedimentation, require_user,
 )

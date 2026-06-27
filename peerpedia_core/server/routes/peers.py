@@ -16,7 +16,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
-from peerpedia_core.social.discovery import add_peer, get_known_peers
+from peerpedia_core.transport.peers import add_peer, get_known_peers
 
 
 async def _peers_endpoint(request: Request) -> JSONResponse:

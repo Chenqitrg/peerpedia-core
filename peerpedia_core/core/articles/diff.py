@@ -5,7 +5,7 @@
 
 from pathlib import Path
 
-from peerpedia_core.core.guards import require_article_repo
+from peerpedia_core.storage.git.guards import require_article_repo
 from peerpedia_core.storage.git import (
     get_commit_history, get_diff_between, get_head_hash,
 )

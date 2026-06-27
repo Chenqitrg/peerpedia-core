@@ -8,15 +8,14 @@ from __future__ import annotations
 from peerpedia_core.storage.db import Session
 from peerpedia_core.config.params import make_peerpedia_email, params
 from peerpedia_core.config.paths import article_repo_path
-from peerpedia_core.core.guards import (
-    assert_article_has_score,
-    reconcile_integrity,
-    assert_can_publish_article,
-    assert_valid_review,
-    authorize_article_action,
-    guard_sedimentation_limit,
-    require_draft_status,
+from peerpedia_core.rules.articles import (
+    assert_article_has_score, assert_can_publish_article,
 )
+from peerpedia_core.rules.reviews import assert_valid_review
+from peerpedia_core.storage.db.guards import (
+    authorize_article_action, guard_sedimentation_limit, require_draft_status,
+)
+from peerpedia_core.core.reconcile import reconcile_integrity, reconcile_score
 from peerpedia_core.storage.db.crud_article import (
     clear_publish_consents, set_sink_start, update_article_status,
 )
@@ -25,7 +24,6 @@ from peerpedia_core.storage.db.crud_user import get_followers
 from peerpedia_core.storage.git import commit_status_marker
 from peerpedia_core.core.reviews import write_review_to_git
 from peerpedia_core.core.notifications import create_notifications_batch
-from peerpedia_core.core.reconcile import reconcile_score
 
 
 def _build_publish_notifications(db: Session, article_id: str, a, user) -> list[dict]:

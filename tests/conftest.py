@@ -121,12 +121,12 @@ def _isolate_health_cache(monkeypatch, tmp_path):
     deleting or corrupting the user's production health cache.
     """
     monkeypatch.setattr(
-        "peerpedia_core.transport.health._CACHE_FILE",
+        "peerpedia_core.server.http.health._CACHE_FILE",
         tmp_path / "server_health.json",
     )
     monkeypatch.setattr(
-        "peerpedia_core.transport.health._DATA_ROOT",
+        "peerpedia_core.server.http.health._DATA_ROOT",
         tmp_path,
     )
-    from peerpedia_core.transport.health import clear_health_cache
+    from peerpedia_core.server.http.health import clear_health_cache
     clear_health_cache()

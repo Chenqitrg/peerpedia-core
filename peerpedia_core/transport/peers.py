@@ -3,11 +3,7 @@
 
 """P2P peer discovery — client-side logic for finding and tracking peers.
 
-Uses the transport facade so switching from HTTP to P2P only requires
-changing ``transport/__init__.py``.
-
 This module is the single source of truth for ``~/.peerpedia/peers.json``.
-``transport/routes/peers.py`` imports from here for the HTTP endpoint.
 """
 
 from __future__ import annotations
@@ -15,10 +11,13 @@ from __future__ import annotations
 import json
 import time
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from peerpedia_core.config.params import params
 from peerpedia_core.config.paths import DATA_ROOT
-from peerpedia_core.transport import fetch_peers
+
+if TYPE_CHECKING:
+    from peerpedia_core.transport import Transport
 
 _PEERS_FILE = DATA_ROOT / "peers.json"
 
@@ -161,13 +160,13 @@ def add_peer(url: str) -> None:
         _save_peers_raw(raw)
 
 
-def merge_peers(server_url: str) -> int:
-    """Fetch peers from *server_url* and merge into local list.
+def merge_peers(transport: Transport, server_url: str) -> int:
+    """Fetch peers via *transport* and merge into the local peer list.
 
     Returns count of new peers discovered.
     """
     try:
-        remote = fetch_peers(server_url)
+        remote = transport.fetch_peers(server_url)
     except Exception:
         import logging
         logging.getLogger(__name__).warning(

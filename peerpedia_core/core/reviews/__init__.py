@@ -36,7 +36,7 @@ from peerpedia_core.core.reviews.invite import (
 from peerpedia_core.core.reviews.thread import submit_reply, write_review_to_git
 
 from peerpedia_core.storage.db.crud_review import get_reviews_for_article as _get
-from peerpedia_core.core.guards import (
+from peerpedia_core.storage.db.guards import (
     require_article, require_helpfulness_score_range,
     require_maintainer, require_review,
 )

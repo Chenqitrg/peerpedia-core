@@ -12,10 +12,10 @@ from datetime import datetime, timezone
 from peerpedia_core.storage.db import Session
 from peerpedia_core.config.params import make_peerpedia_email, params
 from peerpedia_core.exceptions import ConflictError
-from peerpedia_core.core.guards import (
-    assert_can_reply_to_review, require_article, require_article_repo,
-    require_signing_key_not_none, require_user,
-)
+from peerpedia_core.rules.articles import assert_can_reply_to_review
+from peerpedia_core.rules.reviews import require_signing_key_not_none
+from peerpedia_core.storage.db.guards import require_article, require_user
+from peerpedia_core.storage.git.guards import require_article_repo
 from peerpedia_core.storage.db.crud_maintainer import get_maintainer_ids
 from peerpedia_core.names import derive_anonymous_name
 from peerpedia_core.crypto import temp_signing_key

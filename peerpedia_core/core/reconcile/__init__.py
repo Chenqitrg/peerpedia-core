@@ -16,7 +16,8 @@ from peerpedia_core.storage.db.crud_article import update_witnessed_at
 from peerpedia_core.storage.git import (
     get_head_or_none, merge_fetch_head, rollback_to,
 )
-from peerpedia_core.core.guards import require_article_repo, verify_new_commits
+from peerpedia_core.core.guards import verify_new_commits
+from peerpedia_core.storage.git.guards import require_article_repo
 from peerpedia_core.core.reconcile.mirror import (
     reconcile_integrity, reconcile_authors, reconcile_reviews, reconcile_status,
 )

@@ -19,7 +19,7 @@ from peerpedia_core.exceptions import (
 )
 import os
 
-from peerpedia_core.transport.http_server import create_app
+from peerpedia_core.server.app import create_app
 
 os.environ["PEERPEDIA_SKIP_AUTH"] = "1"
 
@@ -162,7 +162,7 @@ def test_auth_required_without_token():
     list — unlike ``/following``, ``/articles``, ``/head``, etc. which are
     intentionally public for peer-to-peer discovery.
     """
-    from peerpedia_core.transport.http_server import create_app as _create
+    from peerpedia_core.server.app import create_app as _create
     from starlette.testclient import TestClient as TC
 
     # Ensure skip-auth is NOT set for this test

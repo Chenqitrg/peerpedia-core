@@ -24,22 +24,15 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from peerpedia_core.bundle.server import (
-    apply_sync,
-    check_article_ancestor,
-    get_article_bundle,
-    get_article_commit_history,
-    get_article_head,
-    ingest_first_article,
-    pack_article_repo_bundle,
-    read_article_source_content,
-)
-from peerpedia_core.core import (
-    get_article_view,
-    list_article_views,
-)
+from peerpedia_core.config.paths import ARTICLES_DIR
+from peerpedia_core.core import get_article_view, list_article_views
+from peerpedia_core.core.bundle import apply_sync
 from peerpedia_core.exceptions import BadRequestError, NotFoundError
 from peerpedia_core.server.shared import _parse_pagination, _require_field, _validate_id
+from peerpedia_core.storage.git import (
+    create_bundle, get_commit_history, get_head_or_none, ingest_article,
+    is_ancestor, pack_article_repo, read_article_source,
+)
 
 MAX_BUNDLE_BYTES = 100 * 1024 * 1024  # 100 MB
 
@@ -50,7 +43,7 @@ MAX_BUNDLE_BYTES = 100 * 1024 * 1024  # 100 MB
 async def _head(request: Request) -> JSONResponse:
     article_id = request.path_params["article_id"]
     _validate_id(article_id, "article_id")
-    result = get_article_head(article_id)
+    result = get_head_or_none(ARTICLES_DIR / article_id)
     if result is None:
         raise NotFoundError(f"Article '{article_id}' not found")
     return JSONResponse({"hash": result})
@@ -60,7 +53,7 @@ async def _bundle(request: Request) -> Response:
     article_id = request.path_params["article_id"]
     _validate_id(article_id, "article_id")
     since_hash = request.query_params.get("since")
-    result = get_article_bundle(article_id, since_hash)
+    result = create_bundle(ARTICLES_DIR / article_id, since_hash)
     if result is None:
         raise NotFoundError(f"Bundle not available for '{article_id}'")
     return Response(content=result, media_type="application/octet-stream")
@@ -86,7 +79,7 @@ async def _ancestor(request: Request) -> JSONResponse:
     article_id = request.path_params["article_id"]
     _validate_id(article_id, "article_id")
     h = request.path_params["hash"]
-    result = check_article_ancestor(article_id, h)
+    result = is_ancestor(ARTICLES_DIR / article_id, h)
     return JSONResponse({"ancestor": result})
 
 
@@ -98,7 +91,7 @@ async def _push_article_repo(request: Request) -> JSONResponse:
         raise BadRequestError("Missing required field: 'repo_bundle'")
     if not payload["repo_bundle"]:
         raise BadRequestError("Field 'repo_bundle' must not be empty")
-    new_head = ingest_first_article(article_id, payload)
+    new_head = ingest_article(ARTICLES_DIR / article_id, payload)
     return JSONResponse({"head": new_head}, status_code=201)
 
 
@@ -123,7 +116,8 @@ async def _history(request: Request) -> JSONResponse:
     limit, _ = _parse_pagination(request, default_limit=50, max_limit=200)
     since = request.query_params.get("since")
     try:
-        commits = get_article_commit_history(article_id, max_count=limit, since_hash=since)
+        commits = list(get_commit_history(
+            ARTICLES_DIR / article_id, max_count=limit, since_hash=since))
     except ValueError:
         commits = []
     return JSONResponse(commits)
@@ -144,7 +138,7 @@ async def _source(request: Request) -> JSONResponse:
     """GET /api/v1/articles/{id}/source → article markdown/typst content."""
     article_id = request.path_params["article_id"]
     _validate_id(article_id, "article_id")
-    result = read_article_source_content(article_id)
+    result = read_article_source(ARTICLES_DIR / article_id)
     if result is None:
         raise NotFoundError(f"Article source not found for '{article_id}'")
     content, fmt = result
@@ -155,7 +149,7 @@ async def _repo(request: Request) -> JSONResponse:
     """GET /api/v1/articles/{id}/repo → base64 tar.gz of full git repo."""
     article_id = request.path_params["article_id"]
     _validate_id(article_id, "article_id")
-    return JSONResponse({"repo_bundle": pack_article_repo_bundle(article_id)})
+    return JSONResponse({"repo_bundle": pack_article_repo(ARTICLES_DIR / article_id)})
 
 
 # ── Route table ──────────────────────────────────────────────────────────

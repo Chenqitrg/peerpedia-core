@@ -19,10 +19,9 @@ from peerpedia_core.storage.git import (
     get_commit_authors, get_head_hash,
     list_review_dirs, read_status_from_git,
 )
-from peerpedia_core.core.guards import (
-    assert_valid_review,
-    require_article, require_article_repo, require_review_scores,
-)
+from peerpedia_core.rules.reviews import assert_valid_review
+from peerpedia_core.storage.db.guards import require_article
+from peerpedia_core.storage.git.guards import require_article_repo, require_review_scores
 from peerpedia_core.rules.reviews import require_integrity_level
 from peerpedia_core.storage.git import get_head_commit
 from peerpedia_core.storage.git.guards import require_commit_pubkey_signature

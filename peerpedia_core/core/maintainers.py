@@ -27,7 +27,7 @@ from __future__ import annotations
 from peerpedia_core.storage.db import Session
 
 from peerpedia_core.exceptions import NotFoundError
-from peerpedia_core.core.guards import (
+from peerpedia_core.storage.db.guards import (
     assert_caller_is_maintainer, guard_not_already_maintainer,
     guard_not_last_maintainer,
     require_article, require_user,

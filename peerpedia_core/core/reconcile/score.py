@@ -19,7 +19,7 @@ from peerpedia_core.compute.reputation import (
     blend_reputation, compute_reputation, get_reviewer_weight,
 )
 from peerpedia_core.compute.scoring import aggregate_review_scores
-from peerpedia_core.core.guards import require_article
+from peerpedia_core.storage.db.guards import require_article
 from peerpedia_core.storage.db.state import extract_reputation_state
 
 

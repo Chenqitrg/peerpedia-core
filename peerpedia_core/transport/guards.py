@@ -1,15 +1,15 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""Transport-level guards — validate HTTP/P2P auth headers and responses."""
+"""Transport-level guards — pure validation, no IO, no fetch_fn calls."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable
 
-from peerpedia_core.crypto import validate_pubkey_hex, validate_sig_hex, verify_body_hash, verify_signature
-from peerpedia_core.exceptions import ProtocolError, TransportError
+from peerpedia_core.crypto import (
+    validate_pubkey_hex, validate_sig_hex, verify_body_hash, verify_signature,
+)
 from peerpedia_core.time import validate_timestamp
 from peerpedia_core.transport.auth import _FIELD_COUNT, _SCHEME, AuthResult
 
@@ -39,63 +39,6 @@ def _parse_auth_header(header_value: str) -> _ParsedHeader | AuthResult:
                               ts=parts[2], body_hash=parts[3], sig_hex=parts[4])
     except ValueError as e:
         return AuthResult(ok=False, reason=f"Malformed header: {e}")
-
-
-def require_private_key(private_key_bytes: bytes | None, label: str) -> bytes:
-    """Return *private_key_bytes*, or raise ValueError if None."""
-    if not private_key_bytes:
-        raise ValueError(f"private_key_bytes is required for {label}")
-    return private_key_bytes
-
-
-def require_fetch_response(
-    fetch_fn: Callable, server: str, user_id: str, label: str, **auth_kwargs,
-) -> list[dict]:
-    """Call *fetch_fn*, raise on failure or None response. Returns data."""
-    try:
-        data = fetch_fn(server, user_id, **auth_kwargs)
-    except TransportError as e:
-        raise ConnectionError(
-            f"Failed to fetch {label} from {server} for {user_id}: {e.detail}"
-        ) from e
-    if data is None:
-        raise ProtocolError(
-            f"fetch_{label}: server {server} returned None for user {user_id}"
-        )
-    return data
-
-
-def fetch_with_auth_fallback(
-    fetch_fn: Callable, server: str, user_id: str, **auth_kwargs,
-) -> list[dict] | None:
-    """Try unauth first; on 401/403, retry with Ed25519 signing."""
-    # ── First attempt ────────────────────────────────────────────────────────
-    data, retry = try_fetch(fetch_fn, server, user_id)
-    if data is not None:
-        return data
-    if not retry or not auth_kwargs:
-        return None
-
-    # ── Auth retry ──────────────────────────────────────────────────────────
-    return try_fetch(fetch_fn, server, user_id, **auth_kwargs)[0]
-
-
-def try_fetch(fetch_fn, server, user_id, **kwargs) -> tuple[list[dict] | None, bool]:
-    """Call *fetch_fn*, swallowing errors. Returns ``(data, should_retry)``.
-
-    ``should_retry`` is True on 401/403 — the caller should retry with auth.
-    """
-    try:
-        return fetch_fn(server, user_id, **kwargs), False
-    except TransportError:
-        return None, False
-    except ProtocolError as e:
-        return None, _is_auth_required(e)
-
-
-def _is_auth_required(error: ProtocolError) -> bool:
-    """Return True if *error* is an auth-related HTTP status (401/403)."""
-    return getattr(error, "status_code", None) in (401, 403)
 
 
 def verify_auth_header(

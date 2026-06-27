@@ -30,7 +30,7 @@ from pathlib import Path
 from peerpedia_core.config.paths import DATA_ROOT as _DATA_ROOT
 from peerpedia_core.exceptions import TransportError
 from peerpedia_core.time import HEALTH_CACHE_SECONDS, compute_clock_skew
-from peerpedia_core.transport.http._core import _api_path, _call
+from peerpedia_core.server.http._core import _api_path, _call
 
 logger = logging.getLogger(__name__)
 

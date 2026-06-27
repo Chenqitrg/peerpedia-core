@@ -9,7 +9,7 @@ import httpx
 import pytest
 
 from peerpedia_core.exceptions import TransportError
-from peerpedia_core.transport.http_client import (
+from peerpedia_core.transport import (
     fetch_user_articles,
     fetch_followers,
     fetch_following,

@@ -19,6 +19,7 @@ from peerpedia_core.storage.git.read import (
     get_commit_authors,
     get_commit_history,
     get_diff_between,
+    get_head_commit,
     get_head_hash,
     get_head_or_none,
     is_ancestor,
@@ -28,6 +29,8 @@ from peerpedia_core.storage.git.read import (
     read_status_from_git,
     resolve_article_format,
 )
+
+from peerpedia_core.storage.git.ancestor import find_common_ancestor
 
 from peerpedia_core.storage.git.merge import (
     checkout_files,

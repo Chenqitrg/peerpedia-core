@@ -9,7 +9,7 @@ import uuid
 
 from peerpedia_core.storage.db import Session
 from peerpedia_core.config.params import params
-from peerpedia_core.core.guards import assert_can_fork_article
+from peerpedia_core.rules.articles import assert_can_fork_article
 from peerpedia_core.core.reconcile import reconcile_integrity
 from peerpedia_core.storage.db.crud_article import (
     create_article,
@@ -20,7 +20,8 @@ from peerpedia_core.storage.db.crud_maintainer import add_maintainer
 from peerpedia_core.config.paths import article_repo_path
 from peerpedia_core.storage.git import clone_article_repo, get_commit_authors
 
-from peerpedia_core.core.guards import authorize_article_action, require_article_repo
+from peerpedia_core.storage.db.guards import authorize_article_action
+from peerpedia_core.storage.git.guards import require_article_repo
 
 
 def fork_article(db: Session, article_id: str, user_id: str) -> dict[str, object]:

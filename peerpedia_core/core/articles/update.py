@@ -12,7 +12,8 @@ from peerpedia_core.config.params import (
     article_filename, article_format_to_ext, make_peerpedia_email, params,
 )
 from peerpedia_core.frontmatter import make_article_frontmatter, strip_frontmatter
-from peerpedia_core.core.guards import assert_can_edit_article, guard_closes_trailer
+from peerpedia_core.core.guards import guard_closes_trailer
+from peerpedia_core.rules.articles import assert_can_edit_article
 from peerpedia_core.core.reconcile import reconcile_integrity
 from peerpedia_core.storage.db.crud_article import (
     clear_publish_consents,
@@ -21,7 +22,8 @@ from peerpedia_core.storage.git import commit_article, resolve_article_format
 from peerpedia_core.crypto import temp_signing_key
 from peerpedia_core.core.articles._helpers import reset_sink
 from peerpedia_core.core.reconcile import reconcile_authors
-from peerpedia_core.core.guards import authorize_article_action, require_article_repo
+from peerpedia_core.storage.db.guards import authorize_article_action
+from peerpedia_core.storage.git.guards import require_article_repo
 
 def _rewrite_article_file(
     rp: Path, a, *, title, abstract, keywords, categories, content,

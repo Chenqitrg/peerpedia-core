@@ -10,7 +10,7 @@ prevented.
 
 import pytest
 
-from peerpedia_core.transport.middleware.auth import AuthMiddleware
+from peerpedia_core.server.middleware.auth import AuthMiddleware
 
 
 def _is_public(path: str) -> bool:

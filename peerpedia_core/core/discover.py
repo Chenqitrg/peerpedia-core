@@ -25,8 +25,7 @@ from peerpedia_core.transport import (
     fetch_shares,
     fetch_user_articles,
 )
-from peerpedia_core.transport import require_fetch_response
-from peerpedia_core.transport._http_core import _fetch_with_auth_fallback
+from peerpedia_core.transport import fetch_with_auth_fallback, require_fetch_response
 from peerpedia_core.types.entities import (
     ArticleMetaExchange, FollowExchange, NotificationExchange, ShareExchange, UserExchange,
 )
@@ -122,7 +121,7 @@ def discover_network(
     auth_kwargs = {"private_key_bytes": signing_key_bytes, "pubkey_hex": pubkey_hex}
 
     def _fetch_following_with_fallback(server: str, user_id: str):
-        return _fetch_with_auth_fallback(
+        return fetch_with_auth_fallback(
             fetch_following, server, user_id, **auth_kwargs,
         )
 

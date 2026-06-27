@@ -71,7 +71,7 @@ from peerpedia_core.transport import (
     push_article_repo,
     push_bundle,
 )
-from peerpedia_core.transport.health import check_clock_skew
+from peerpedia_core.transport import check_clock_skew
 
 
 # ═══════════════════════════════════════════════════════════════════════════

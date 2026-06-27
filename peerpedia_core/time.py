@@ -24,6 +24,12 @@ same value.  It is intentionally not in ``config/params.py`` — changing
 it would break the protocol between peers.
 """
 
+HEALTH_CACHE_SECONDS: float = 30.0
+"""TTL for the server health-check cache (see ``transport/health.py``)."""
+
+SYNC_TIMEOUT_SECONDS: int = 60
+"""HTTP timeout for bundle upload/download — can be large (see ``transport/http_articles.py``)."""
+
 
 def validate_clock_skew(skew_seconds: int | None, *,
                         window: int = REPLAY_WINDOW_SECONDS) -> str | None:
@@ -56,3 +62,12 @@ def validate_timestamp(ts_str: str, *, now: int | None = None,
     if abs(now - ts) > window:
         return f"Timestamp {ts} is outside ±{window}s window (server time: {now})"
     return ts
+
+
+def compute_clock_skew(server_ts: int, local_ts: int) -> int:
+    """Return the clock skew in seconds (server - local).
+
+    Positive → local clock is behind the server.
+    Negative → local clock is ahead.
+    """
+    return server_ts - local_ts

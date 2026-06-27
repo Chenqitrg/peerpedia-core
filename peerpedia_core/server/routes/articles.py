@@ -39,7 +39,7 @@ from peerpedia_core.core import (
     list_article_views,
 )
 from peerpedia_core.exceptions import BadRequestError, NotFoundError
-from peerpedia_core.transport.shared import _parse_pagination, _require_field, _validate_id
+from peerpedia_core.server.shared import _parse_pagination, _require_field, _validate_id
 
 MAX_BUNDLE_BYTES = 100 * 1024 * 1024  # 100 MB
 

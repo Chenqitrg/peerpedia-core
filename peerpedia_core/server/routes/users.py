@@ -34,7 +34,7 @@ from peerpedia_core.core import (
 )
 from peerpedia_core.exceptions import BadRequestError, NotFoundError
 from peerpedia_core.rules.articles import PUBLIC_READABLE_STATUSES
-from peerpedia_core.transport.shared import _ok_response, _parse_pagination, _require_field, _validate_id
+from peerpedia_core.server.shared import _ok_response, _parse_pagination, _require_field, _validate_id
 
 
 # ── Handlers ─────────────────────────────────────────────────────────────

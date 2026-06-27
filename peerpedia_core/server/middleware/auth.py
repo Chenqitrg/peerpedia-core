@@ -30,7 +30,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from peerpedia_core.core import create_user_stub, get_user, update_user_public_key
-from peerpedia_core.transport.auth import verify_auth_header
+from peerpedia_core.transport.guards import verify_auth_header
 from peerpedia_core.types import short_id
 
 

@@ -27,18 +27,15 @@ import random
 import time
 from pathlib import Path
 
-import httpx
-
 from peerpedia_core.config.paths import DATA_ROOT as _DATA_ROOT
+from peerpedia_core.exceptions import TransportError
+from peerpedia_core.time import HEALTH_CACHE_SECONDS, compute_clock_skew
+from peerpedia_core.transport.http._core import _api_path, _call
 
 logger = logging.getLogger(__name__)
 
 # ── Connection result cache ──────────────────────────────────────────────
 # Two-tier: in-memory (fast, same-process) + file (survives across CLI runs).
-# Avoids repeated 1.5s timeouts when a dead server is checked by multiple
-# commands in quick succession (e.g. sync status then following).
-
-_CACHE_TTL = 30.0  # seconds
 
 # In-memory cache — same process, zero disk I/O.
 # Format: (timestamp, online, server_ts_or_none)
@@ -48,33 +45,14 @@ _cache: dict[str, tuple[float, bool, int | None]] = {}
 _CACHE_FILE = _DATA_ROOT / "server_health.json"
 _MAX_CACHE_ENTRIES = 10  # prevent unbounded growth
 
-# Persistent httpx client — avoids creating a new connection per probe.
-_client: httpx.Client | None = None
-
-
-def _get_client() -> httpx.Client:
-    """Return a shared httpx.Client for health checks."""
-    global _client
-    if _client is None:
-        _client = httpx.Client(timeout=httpx.Timeout(5.0))
-    return _client
-
-
 def _read_file_cache() -> dict[str, tuple[float, bool, int | None]]:
-    """Read health cache from disk.  Returns {} on any error.
-
-    Handles backward compat: old cache entries are ``[timestamp, bool]``
-    (2 elements); current format is ``[timestamp, bool, server_ts]``.
-    """
+    """Read health cache from disk.  Returns {} on any error."""
     try:
         raw = json.loads(_CACHE_FILE.read_text())
-        result: dict[str, tuple[float, bool, int | None]] = {}
-        for k, v in raw.items():
-            ts = float(v[0])
-            online = bool(v[1])
-            server_ts = int(v[2]) if len(v) > 2 and v[2] is not None else None
-            result[k] = (ts, online, server_ts)
-        return result
+        return {
+            k: (float(v[0]), bool(v[1]), int(v[2]) if v[2] is not None else None)
+            for k, v in raw.items()
+        }
     except (OSError, json.JSONDecodeError, ValueError, KeyError, IndexError):
         logger.debug("Health cache read error for %s", _CACHE_FILE, exc_info=True)
     return {}
@@ -84,9 +62,10 @@ def _write_file_cache(data: dict[str, tuple[float, bool, int | None]]) -> None:
     """Write health cache to disk atomically (best-effort, never raises)."""
     try:
         _DATA_ROOT.mkdir(parents=True, exist_ok=True)
-        serializable = {k: [v[0], v[1], v[2]] for k, v in data.items()}
+        serialized = json.dumps({k: [v[0], v[1], v[2]] for k, v in data.items()})
+        # Write to temp file first, then atomically replace — crash-safe.
         tmp = _DATA_ROOT / ".server_health.tmp"
-        tmp.write_text(json.dumps(serializable))
+        tmp.write_text(serialized)
         os.replace(tmp, _CACHE_FILE)
     except OSError:
         logger.debug("Health cache write error for %s", _CACHE_FILE, exc_info=True)
@@ -102,53 +81,76 @@ def clear_health_cache() -> None:
 
 
 def _probe(server_url: str, timeout: float = 1.5) -> tuple[bool, int | None]:
-    """Single HTTP GET to ``/health``.  Returns ``(online, server_timestamp)``.
-
-    Results are cached in memory AND on disk for 30 seconds (±1s jitter to
-    prevent cache stampede from concurrent CLI processes).  Callers that
-    only need one piece use the thin wrappers ``is_online`` and
-    ``check_clock_skew``.
-    """
+    """HTTP GET /health, cached in memory and on disk.  Returns ``(online, server_ts)``."""
     now = time.time()
-    # Per-call jitter so concurrent processes don't all expire the cache
-    # at exactly the same instant and stampede the server.
-    ttl = _CACHE_TTL + random.uniform(-1.0, 1.0)
+    ttl = HEALTH_CACHE_SECONDS + random.uniform(-1.0, 1.0)
 
-    # 1. In-memory cache (same process).
-    if server_url in _cache:
-        cached_time, cached_online, cached_ts = _cache[server_url]
-        if now - cached_time < ttl:
-            return cached_online, cached_ts
+    # ── Check caches ────────────────────────────────────────────────────────
+    cached = _check_health_cache(server_url, now, ttl)
+    if cached is not None:
+        return cached
 
-    # 2. File cache (cross-process).
-    file_cache = _read_file_cache()
-    if server_url in file_cache:
-        cached_time, cached_online, cached_ts = file_cache[server_url]
-        if now - cached_time < ttl:
-            _cache[server_url] = (cached_time, cached_online, cached_ts)
-            return cached_online, cached_ts
+    # ── Probe ───────────────────────────────────────────────────────────────
+    online, server_ts = _fetch_health(server_url, timeout)
 
-    # 3. Single HTTP probe (reuses persistent client for connection pooling).
-    try:
-        response = _get_client().get(f"{server_url}/health", timeout=timeout)
-        online = response.status_code == 200
-        server_ts_str = response.headers.get("Server-Time")
-        server_ts = int(server_ts_str) if server_ts_str else None
-    except httpx.HTTPError:
-        online = False
-        server_ts = None
-    except (ValueError, TypeError):
-        online = True
-        server_ts = None  # header present but not an int
-
-    # 4. Persist to both caches.
-    entry = (now, online, server_ts)
-    _cache[server_url] = entry
-    file_cache[server_url] = entry
-    _prune_cache(file_cache)
-    _write_file_cache(file_cache)
+    # ── Persist ─────────────────────────────────────────────────────────────
+    _write_health_cache(server_url, now, online, server_ts)
 
     return online, server_ts
+
+
+def _check_health_cache(
+    server_url: str, now: float, ttl: float,
+) -> tuple[bool, int | None] | None:
+    """Return ``(online, server_ts)`` if cached and fresh, else ``None``."""
+    result = _lookup_cache(_cache, server_url, now, ttl)
+    if result is not None:
+        return result
+    file_cache = _read_file_cache()
+    result = _lookup_cache(file_cache, server_url, now, ttl)
+    if result is not None:
+        _cache[server_url] = file_cache[server_url]
+        return result
+    return None
+
+
+def _lookup_cache(
+    store: dict[str, tuple[float, bool, int | None]],
+    server_url: str, now: float, ttl: float,
+) -> tuple[bool, int | None] | None:
+    """Return ``(online, server_ts)`` if *store* has a fresh entry, else ``None``."""
+    if server_url not in store:
+        return None
+    cached_time, cached_online, cached_ts = store[server_url]
+    if now - cached_time < ttl:
+        return cached_online, cached_ts
+    return None
+
+
+def _fetch_health(server_url: str, timeout: float) -> tuple[bool, int | None]:
+    """Single HTTP GET to /health.  Never raises — errors → offline."""
+    try:
+        resp = _call("GET", server_url, _api_path("health"), "", "health",
+                      timeout=timeout)
+        online = resp.status_code == 200
+        server_ts_str = resp.headers.get("Server-Time")
+        server_ts = int(server_ts_str) if server_ts_str else None
+        return online, server_ts
+    except TransportError:
+        return False, None
+    except (ValueError, TypeError):
+        return True, None  # server responded but header wasn't a valid int
+
+
+def _write_health_cache(
+    server_url: str, now: float, online: bool, server_ts: int | None,
+) -> None:
+    """Persist result to in-memory and file caches."""
+    file_cache = _read_file_cache()
+    _cache[server_url] = (now, online, server_ts)
+    file_cache[server_url] = (now, online, server_ts)
+    _prune_cache(file_cache)
+    _write_file_cache(file_cache)
 
 
 def is_online(server_url: str, timeout: float = 1.5) -> bool:
@@ -172,7 +174,7 @@ def check_clock_skew(server_url: str, timeout: float = 1.5) -> int | None:
     online, server_ts = _probe(server_url, timeout)
     if not online or server_ts is None:
         return None
-    return server_ts - int(time.time())
+    return compute_clock_skew(server_ts, int(time.time()))
 
 
 def _prune_cache(data: dict) -> None:

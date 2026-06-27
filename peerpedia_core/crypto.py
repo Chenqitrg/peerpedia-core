@@ -93,6 +93,16 @@ def sha256_hex(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def verify_body_hash(body: bytes, claimed_hash: str) -> None:
+    """Raise ValueError if SHA-256 of *body* doesn't match *claimed_hash*."""
+    actual = sha256_hex(body)
+    if claimed_hash != actual:
+        raise ValueError(
+            f"Body hash mismatch (expected {actual[:16]}..., "
+            f"got {claimed_hash[:16]}...)"
+        )
+
+
 def pubkey_hex_to_ssh_line(pubkey_hex: str) -> str:
     """Convert a raw Ed25519 public key hex to an SSH allowed_signers line.
 

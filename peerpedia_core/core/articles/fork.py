@@ -10,7 +10,7 @@ import uuid
 from peerpedia_core.storage.db import Session
 from peerpedia_core.config.params import params
 from peerpedia_core.core.guards import assert_can_fork_article
-from peerpedia_core.core.guards import assert_article_integrity
+from peerpedia_core.core.reconcile import reconcile_integrity
 from peerpedia_core.storage.db.crud_article import (
     create_article,
     get_article_by_fork_and_author,
@@ -34,7 +34,7 @@ def fork_article(db: Session, article_id: str, user_id: str) -> dict[str, object
         NotAuthorizedError: article not forkable (policy)
         ConflictError: user already forked this article
     """
-    assert_article_integrity(db, article_id, level="light")
+    reconcile_integrity(db, article_id, level="light")
 
     user, original, maintainer_ids = authorize_article_action(db, article_id, user_id)
     existing_fork = get_article_by_fork_and_author(db, forked_from=article_id, author_id=user.id)

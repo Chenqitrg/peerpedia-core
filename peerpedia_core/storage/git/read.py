@@ -197,24 +197,24 @@ def get_diff_between(repo_path: Path, hash1: str, hash2: str) -> dict[str, objec
 # ── HEAD ───────────────────────────────────────────────────────────────────
 
 
-def get_head_hash(repo_path: Path) -> str:
-    """Return the commit hash of HEAD.
+def get_head_commit(repo_path: Path) -> CommitInfo | None:
+    """Return the HEAD commit's metadata, or None if the repo has no commits."""
+    commits = get_commit_history(repo_path, max_count=1)
+    return commits[0] if commits else None
 
-    Raises ValueError if the repo has no commits.
-    """
-    repo = git.Repo(repo_path)
-    assert_on_main(repo)
-    if not repo.head.is_valid():
+
+def get_head_hash(repo_path: Path) -> str:
+    """Return HEAD hash.  Raises ValueError if no commits."""
+    head = get_head_commit(repo_path)
+    if head is None:
         raise ValueError(f"Repo has no commits: {repo_path}")
-    return repo.head.commit.hexsha
+    return head["hash"]
 
 
 def get_head_or_none(repo_path: Path) -> str | None:
     """Return HEAD hash, or None if the repo has no commits."""
-    try:
-        return get_head_hash(repo_path)
-    except ValueError:
-        return None
+    head = get_head_commit(repo_path)
+    return head["hash"] if head else None
 
 
 # ── ArticleMetaStorage source ─────────────────────────────────────────────────────────

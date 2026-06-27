@@ -90,7 +90,7 @@ from peerpedia_core.core.reconcile import (
 
 # ── Guards & Integrity ───────────────────────────────────────────────────────
 
-from peerpedia_core.core.guards import assert_article_integrity
+from peerpedia_core.core.reconcile import reconcile_integrity
 
 # ── Social — bookmarks, shares, notifications ────────────────────────────────
 

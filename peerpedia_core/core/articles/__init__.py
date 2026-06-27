@@ -23,7 +23,7 @@ from peerpedia_core.storage.db.crud_article import (
     get_author_ids as _get_author_ids,
     list_articles as _list,
 )
-from peerpedia_core.core.guards import assert_article_integrity
+from peerpedia_core.core.reconcile import reconcile_integrity
 
 
 def get_article(db: Session, article_id: str):
@@ -34,7 +34,7 @@ def get_article(db: Session, article_id: str):
     """
     article = _get_article(db, article_id)
     if article is not None:
-        assert_article_integrity(db, article_id, level="light")
+        reconcile_integrity(db, article_id, level="light")
     return article
 
 

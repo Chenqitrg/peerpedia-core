@@ -53,7 +53,8 @@ from peerpedia_core.storage.db.crud_merge import (
 )
 from peerpedia_core.storage.db.crud_merge import create_merge_proposal as _create
 from peerpedia_core.core.articles._helpers import reset_sink
-from peerpedia_core.core.guards import require_article_repo, require_open_proposal
+from peerpedia_core.core.guards import require_article_repo, require_open_proposal, require_user
+from peerpedia_core.storage.db.crud_maintainer import get_maintainer_ids
 from peerpedia_core.core.notifications import create_notification
 from peerpedia_core.storage.git import (
     MergeConflictError, get_head_hash, merge_git_repos,
@@ -63,7 +64,6 @@ from peerpedia_core.core.reconcile import reconcile_authors
 
 def _notify_maintainers_except(db, target_id, proposer_id, proposer_name):
     """Notify all maintainers of *target_id* except the proposer."""
-    from peerpedia_core.storage.db.crud_maintainer import get_maintainer_ids
     for mid in get_maintainer_ids(db, target_id):
         if mid != proposer_id:
             create_notification(
@@ -118,7 +118,6 @@ def accept_merge(db: Session, article_id: str, proposal_id: str, user_id: str) -
 
 def create_merge_proposal(db: Session, fork_id: str, target_id: str, proposer_id: str):
     """Create a merge proposal and notify target article maintainers."""
-    from peerpedia_core.core.guards import require_user
     proposer = require_user(db, proposer_id)
     mp = _create(db, fork_id, target_id, proposer_id)
     _notify_maintainers_except(db, target_id, proposer_id, proposer.name)

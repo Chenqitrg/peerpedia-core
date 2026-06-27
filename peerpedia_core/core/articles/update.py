@@ -13,7 +13,7 @@ from peerpedia_core.config.params import (
 )
 from peerpedia_core.frontmatter import make_article_frontmatter, strip_frontmatter
 from peerpedia_core.core.guards import assert_can_edit_article, guard_closes_trailer
-from peerpedia_core.core.guards import assert_article_integrity
+from peerpedia_core.core.reconcile import reconcile_integrity
 from peerpedia_core.storage.db.crud_article import (
     clear_publish_consents,
 )
@@ -56,7 +56,7 @@ def update_article_content(
     Raises BadRequestError if a required Closes: trailer is missing or invalid.
     """
     # ── Authorization ──────────────────────────────────────────────────────
-    assert_article_integrity(db, article_id, level="light")
+    reconcile_integrity(db, article_id, level="light")
     user, a, mids = authorize_article_action(db, article_id, user_id)
     assert_can_edit_article(a, mids, user)
     old_status = a.status

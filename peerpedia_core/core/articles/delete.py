@@ -15,7 +15,7 @@ from peerpedia_core.storage.db.crud_maintainer import get_maintainer_ids
 from peerpedia_core.config.paths import article_repo_path
 from peerpedia_core.storage.git import delete_article_repo
 from peerpedia_core.core.guards import require_article, require_user
-from peerpedia_core.core.guards import assert_article_integrity
+from peerpedia_core.core.reconcile import reconcile_integrity
 
 
 def delete_article(db: Session, article_id: str, *, user_id: str) -> None:
@@ -26,7 +26,7 @@ def delete_article(db: Session, article_id: str, *, user_id: str) -> None:
 
     Raises NotFoundError if the user or article is not found.
     """
-    assert_article_integrity(db, article_id, level="light")
+    reconcile_integrity(db, article_id, level="light")
 
     user = require_user(db, user_id)
     article = require_article(db, article_id)

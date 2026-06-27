@@ -14,15 +14,14 @@ import logging
 from pathlib import Path
 
 from peerpedia_core.config.params import extract_user_id_from_email
-from peerpedia_core.exceptions import BadRequestError, ConflictError, NotFoundError
-from peerpedia_core.storage.db.crud_article import get_author_ids
+from peerpedia_core.exceptions import BadRequestError, ConflictError
 from peerpedia_core.storage.db import Session
 from peerpedia_core.storage.db.crud_review import (
     get_accepted_invitation, get_pending_invitation, get_reviews_for_article,
 )
 from peerpedia_core.storage.db.crud_user import get_users_by_ids, set_user_pubkey_tofu
 from peerpedia_core.storage.git import (
-    get_commit_authors, get_commit_history, read_status_from_git,
+    get_commit_history,
 )
 from peerpedia_core.storage.git.guards import (
     require_article_repo, require_commit_pubkey_signature,
@@ -49,7 +48,6 @@ from peerpedia_core.rules.articles import (  # pure authorization rules
 from peerpedia_core.rules.reviews import (  # pure review validation
     assert_valid_review,
     guard_proposal_owner,
-    require_integrity_level,
     require_signing_key_not_none,
 )
 from peerpedia_core.storage.db.guards import (  # re-export DB guards
@@ -168,56 +166,3 @@ def verify_new_commits(db: Session, repo_path: Path, *, since_hash: str) -> None
     for c in commits:
         if not is_platform_commit(c["author_email"]):
             verify_commit_signature_and_tofu(db, repo_path, c, users_by_id)
-
-
-# ── ArticleMetaStorage integrity ────────────────────────────────────────────────────────
-
-
-def assert_article_integrity(db: Session, article_id: str, *, level: str = "light") -> None:
-    """Verify article integrity at the specified level.
-
-    ``level="light"`` — verify the latest human-authored commit's signature.
-    ``level="full"`` — light + DB cross-validation, auto-repair if inconsistent.
-    """
-    try:
-        rp = require_article_repo(article_id)
-        require_article(db, article_id)
-    except NotFoundError:
-        return
-
-    require_integrity_level(level)
-    if level == "light":
-        _verify_light(rp)
-    else:
-        _verify_light(rp)
-        _verify_full(db, article_id, rp)
-
-
-def _verify_light(repo_path: Path) -> None:
-    """Verify the latest human-authored commit's signature."""
-    commits = list(get_commit_history(repo_path, max_count=1))
-    if not commits:
-        return
-    commit = commits[0]
-    if is_platform_commit(commit["author_email"]):
-        return
-    require_commit_pubkey_signature(
-        repo_path, commit["hash"], commit["message"], commit["author_email"],
-    )
-
-
-def _verify_full(db: Session, article_id: str, repo_path: Path) -> None:
-    """DB cross-validation: rebuild DB cache from git SOT if inconsistent."""
-    from peerpedia_core.core.reconcile import reconcile_all, reconcile_authors
-
-    article = require_article(db, article_id)
-
-    expected_status = read_status_from_git(repo_path)
-    if expected_status is not None and article.status != expected_status:
-        reconcile_all(db, article_id)
-        return
-
-    db_authors = set(get_author_ids(db, article_id))
-    git_authors = get_commit_authors(repo_path)
-    if db_authors != git_authors:
-        reconcile_authors(db, article_id)

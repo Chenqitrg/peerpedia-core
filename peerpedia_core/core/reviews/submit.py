@@ -17,6 +17,7 @@ from peerpedia_core.storage.db.crud_review import (
 )
 from peerpedia_core.core.reviews.thread import write_review_to_git, _resolve_review_identity
 from peerpedia_core.core.notifications import create_notification
+from peerpedia_core.core.reconcile import reconcile_reputation, reconcile_score
 
 
 def submit_review(
@@ -65,7 +66,6 @@ def submit_review(
     r = _persist_review(db, article_id, reviewer_id, scores, commit_hash)
 
     # ── Recompute scores ──
-    from peerpedia_core.core.reconcile import reconcile_score, reconcile_reputation
     reconcile_score(db, article_id)
     for aid in get_author_ids(db, article_id):
         reconcile_reputation(db, aid)

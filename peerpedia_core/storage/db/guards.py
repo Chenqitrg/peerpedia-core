@@ -30,6 +30,7 @@ from peerpedia_core.config.params import params
 from peerpedia_core.rules.articles import assert_not_folded
 from peerpedia_core.storage.db.crud_article import count_articles, get_article
 from peerpedia_core.storage.db.crud_maintainer import get_maintainer_ids, is_maintainer
+from peerpedia_core.storage.db.crud_merge import get_merge_proposal
 from peerpedia_core.storage.db.crud_review import (
     get_accepted_invitation, get_pending_invitation, get_reviews_for_article,
 )
@@ -182,8 +183,6 @@ def guard_not_last_maintainer(db: Session, article_id: str, caller_id: str, user
 
 def require_open_proposal(db: Session, proposal_id: str, article_id: str) -> MergeProposalStorage:
     """Return the merge proposal, or raise if missing/wrong article/not open."""
-    from peerpedia_core.storage.db.crud_merge import get_merge_proposal
-
     mp = get_merge_proposal(db, proposal_id)
     if mp is None:
         raise NotFoundError("Merge proposal not found")

@@ -16,6 +16,7 @@ from peerpedia_core.storage.db.crud_review import get_reviews_for_article
 from peerpedia_core.storage.git import DEFAULT_ARTICLES_DIR, commit_status_marker
 from peerpedia_core.types.scores import FiveDimScores
 from peerpedia_core.compute.sedimentation import apply_no_review_penalty, is_ready_to_publish
+from peerpedia_core.core.reconcile import reconcile_reputation, reconcile_score
 
 
 def publish_ready_articles(db: Session) -> int:
@@ -36,7 +37,6 @@ def publish_ready_articles(db: Session) -> int:
         return 0
 
     # ── Recompute reputations for all affected authors ─────────────────────
-    from peerpedia_core.core.reconcile import reconcile_reputation
     for author_id in affected_authors:
         reconcile_reputation(db, author_id)
 
@@ -75,7 +75,6 @@ def _process_sink_article(db: Session, article) -> list[str] | None:
 
     # ── DB: update status + score ──────────────────────────────────────────
     if decision == "published":
-        from peerpedia_core.core.reconcile import reconcile_score
         score = reconcile_score(db, article.id)
         if score is None:
             score = apply_no_review_penalty(FiveDimScores().to_dict())

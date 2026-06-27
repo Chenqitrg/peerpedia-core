@@ -10,7 +10,7 @@ from peerpedia_core.config.params import make_peerpedia_email, params
 from peerpedia_core.config.paths import article_repo_path
 from peerpedia_core.core.guards import (
     assert_article_has_score,
-    assert_article_integrity,
+    reconcile_integrity,
     assert_can_publish_article,
     assert_valid_review,
     authorize_article_action,
@@ -25,6 +25,7 @@ from peerpedia_core.storage.db.crud_user import get_followers
 from peerpedia_core.storage.git import commit_status_marker
 from peerpedia_core.core.reviews import write_review_to_git
 from peerpedia_core.core.notifications import create_notifications_batch
+from peerpedia_core.core.reconcile import reconcile_score
 
 
 def _build_publish_notifications(db: Session, article_id: str, a, user) -> list[dict]:
@@ -65,7 +66,7 @@ def publish_article(
     # ── Authorization ──────────────────────────────────────────────────────
     user, a, mids = authorize_article_action(db, article_id, user_id)
     assert_can_publish_article(a, mids, user)
-    assert_article_integrity(db, article_id, level="full")
+    reconcile_integrity(db, article_id, level="full")
 
     require_draft_status(a)
 
@@ -88,7 +89,6 @@ def publish_article(
     )
     clear_publish_consents(db, article_id)
     set_sink_start(db, article_id, params.sink.new_article_default_days)
-    from peerpedia_core.core.reconcile import reconcile_score
     reconcile_score(db, article_id)
     assert_article_has_score(a)
 

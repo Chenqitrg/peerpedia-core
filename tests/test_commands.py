@@ -8,7 +8,7 @@ from __future__ import annotations
 import pytest
 from peerpedia_core.crypto import write_key_to_tempfile
 from peerpedia_core.exceptions import ConflictError, NotAuthorizedError, NotFoundError
-from peerpedia_core.commands import (
+from peerpedia_core.core import (
     create_article_with_content,
     fork_article,
     publish_article,
@@ -581,7 +581,7 @@ class TestMaintainerSelfRemoval:
         add_maintainer(db, "art-self", "bob")
         db.flush()
 
-        from peerpedia_core.commands import remove_maintainer_from_article
+        from peerpedia_core.core import remove_maintainer_from_article
         result = remove_maintainer_from_article(db, "art-self", "alice", "alice")
         assert result["action"] == "removed"
 
@@ -592,7 +592,7 @@ class TestMaintainerSelfRemoval:
         add_maintainer(db, "art-last", "alice")
         db.flush()
 
-        from peerpedia_core.commands import remove_maintainer_from_article
+        from peerpedia_core.core import remove_maintainer_from_article
         with pytest.raises(NotAuthorizedError, match="last maintainer"):
             remove_maintainer_from_article(db, "art-last", "alice", "alice")
 
@@ -641,7 +641,7 @@ class TestUnanimousConsent:
         add_maintainer(db, "art-ok", "bob")
         db.flush()
 
-        from peerpedia_core.commands import consent_to_publish
+        from peerpedia_core.core import consent_to_publish
         from peerpedia_core.policies.articles import assert_can_publish_article
         from peerpedia_core.storage.db.models import User, Article
 
@@ -663,7 +663,7 @@ class TestUnanimousConsent:
         add_maintainer(db, "art-revoke", "bob")
         db.flush()
 
-        from peerpedia_core.commands import consent_to_publish, revoke_publish_consent
+        from peerpedia_core.core import consent_to_publish, revoke_publish_consent
         from peerpedia_core.policies.articles import assert_can_publish_article
         from peerpedia_core.storage.db.models import User, Article
 
@@ -727,7 +727,7 @@ class TestPolicyErrorPaths:
 
     def test_assert_valid_review_normalizes_abbreviation_keys(self):
         """assert_valid_review should normalize abbreviation keys to full names."""
-        from peerpedia_core.commands.reviews import assert_valid_review
+        from peerpedia_core.core.reviews import assert_valid_review
         scores = {"orig": 4, "rigor": 3, "comp": 4, "ped": 3, "imp": 3}
         assert_valid_review(scores, comment="A" * 200)
         assert "originality" in scores
@@ -736,7 +736,7 @@ class TestPolicyErrorPaths:
 
     def test_assert_valid_review_normalize_idempotent(self):
         """Normalization should be idempotent — full-name keys pass through."""
-        from peerpedia_core.commands.reviews import assert_valid_review
+        from peerpedia_core.core.reviews import assert_valid_review
         scores = {"originality": 4, "rigor": 3, "completeness": 4, "pedagogy": 3, "impact": 3}
         assert_valid_review(scores, comment="A" * 200)
         assert scores["originality"] == 4

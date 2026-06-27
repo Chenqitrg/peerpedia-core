@@ -18,7 +18,7 @@ from peerpedia_core.storage.db.crud_article import create_article
 from peerpedia_core.storage.db.crud_maintainer import add_maintainer
 from peerpedia_core.storage.git import commit_article, init_article_repo
 from peerpedia_core.crypto import temp_signing_key
-from peerpedia_core.commands.guards import require_authors_exist, require_title_nonempty, require_user
+from peerpedia_core.core.guards import require_authors_exist, require_title_nonempty, require_user
 
 
 def _write_initial_article(rp, *, title, content, abstract, keywords, categories, format) -> str:

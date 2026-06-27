@@ -57,7 +57,7 @@ class TestListArticles:
 
     def test_filters_by_author_id(self, db_engine):
         """author_id filtering is now in commands layer, not CRUD."""
-        from peerpedia_core.commands.articles import list_articles as cmd_list
+        from peerpedia_core.core.articles import list_articles as cmd_list
         s = get_session(db_engine)
         u = _user(id="u-lm-auth")
         s.add(u)

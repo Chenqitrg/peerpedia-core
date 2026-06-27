@@ -36,7 +36,7 @@ def publish_ready_articles(db: Session) -> int:
         return 0
 
     # ── Recompute reputations for all affected authors ─────────────────────
-    from peerpedia_core.commands.reconcile import reconcile_reputation
+    from peerpedia_core.core.reconcile import reconcile_reputation
     for author_id in affected_authors:
         reconcile_reputation(db, author_id)
 
@@ -75,7 +75,7 @@ def _process_sink_article(db: Session, article) -> list[str] | None:
 
     # ── DB: update status + score ──────────────────────────────────────────
     if decision == "published":
-        from peerpedia_core.commands.reconcile import reconcile_score
+        from peerpedia_core.core.reconcile import reconcile_score
         score = reconcile_score(db, article.id)
         if score is None:
             score = apply_no_review_penalty(FiveDimScores().to_dict())

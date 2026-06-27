@@ -18,7 +18,7 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 
 from peerpedia_core.crypto import load_public_key
-from peerpedia_core.commands import (
+from peerpedia_core.core import (
     add_share,
     follow_user,
     get_follower_views,
@@ -33,7 +33,7 @@ from peerpedia_core.commands import (
     update_user_public_key,
 )
 from peerpedia_core.exceptions import BadRequestError, NotFoundError
-from peerpedia_core.policies.articles import PUBLIC_READABLE_STATUSES
+from peerpedia_core.rules.articles import PUBLIC_READABLE_STATUSES
 from peerpedia_core.transport.shared import _ok_response, _parse_pagination, _require_field, _validate_id
 
 

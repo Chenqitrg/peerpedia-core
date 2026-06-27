@@ -51,8 +51,8 @@ from pathlib import Path
 from peerpedia_core.exceptions import ConflictError
 from peerpedia_core.storage.db import Session
 
-from peerpedia_core.commands.reconcile import reconcile_after_sync
-from peerpedia_core.commands import get_commit_history, read_article_source
+from peerpedia_core.core.reconcile import reconcile_after_sync
+from peerpedia_core.core import get_commit_history, read_article_source
 from peerpedia_core.storage.git import (
     create_bundle,
     get_head as _git_get_head,

@@ -17,11 +17,10 @@ from peerpedia_core.config.git import ssh_verify_env
 from peerpedia_core.types import short_id
 from peerpedia_core.types.status import is_platform_commit, VALID_ARTICLE_STATUSES
 
-from peerpedia_core.crypto import pubkey_hex_to_ssh_line
-from peerpedia_core.exceptions import SignatureVerificationError
-from peerpedia_core.crypto import write_allowed_signers_file
-
-_EXPECTED_BRANCH = "refs/heads/main"
+from peerpedia_core.config.paths import article_repo_path
+from peerpedia_core.crypto import pubkey_hex_to_ssh_line, write_allowed_signers_file
+from peerpedia_core.exceptions import NotFoundError, SignatureVerificationError
+from peerpedia_core.storage.git.read import assert_on_main, read_review_scores
 
 # ── Article status ─────────────────────────────────────────────────────────
 
@@ -53,32 +52,6 @@ def require_signing_key_for_pubkey(
     """Raise ValueError if *pubkey_hex* is provided without *signing_key*."""
     if pubkey_hex and not signing_key:
         raise ValueError("signing_key is required when pubkey_hex is provided")
-
-
-def assert_on_main(repo: git.Repo) -> None:
-    """Raise RuntimeError if HEAD is not on refs/heads/main.
-
-    Article repos use a single-mainline model — all git operations
-    expect HEAD to point to ``refs/heads/main``.  This guard prevents
-    silent data corruption when a checkout or branch switch moves
-    HEAD to a different ref.
-
-    Returns early (no-op) for empty repos with no commits.
-    """
-    if not repo.head.is_valid():
-        return  # empty repo, no commits yet
-    if repo.head.is_detached:
-        raise RuntimeError(
-            "HEAD is detached — expected refs/heads/main; "
-            "article repos use a single-mainline model"
-        )
-    branch_path = repo.head.reference.path
-    if branch_path != _EXPECTED_BRANCH:
-        raise RuntimeError(
-            f"HEAD is on {branch_path}, expected {_EXPECTED_BRANCH} — "
-            "article repos use a single-mainline model"
-        )
-
 
 
 def extract_pubkey_from_message(message: str) -> str | None:
@@ -169,3 +142,26 @@ def guard_not_empty(repo, *, allow_empty: bool) -> None:
 
 
 
+
+
+# ── Resource existence ───────────────────────────────────────────────────────
+
+
+def require_article_repo(article_id: str) -> Path:
+    """Return the article repo path or raise NotFoundError."""
+    rp = article_repo_path(article_id)
+    if not (rp / ".git").is_dir():
+        raise NotFoundError("Article repo not found", resource_type="article", resource_id=article_id)
+    return rp
+
+
+def require_review_scores(repo_path: Path, reviewer_dir: str, article_id: str) -> dict:
+    """Return parsed review scores or raise NotFoundError."""
+    scores = read_review_scores(repo_path, reviewer_dir)
+    if scores is None:
+        raise NotFoundError(
+            f"scores.json not found in reviews/{reviewer_dir}/ for article {article_id}",
+            resource_type="review_scores",
+            resource_id=f"{article_id}/reviews/{reviewer_dir}",
+        )
+    return scores

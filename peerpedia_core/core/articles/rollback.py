@@ -7,16 +7,16 @@ from __future__ import annotations
 
 from peerpedia_core.storage.db import Session
 from peerpedia_core.config.params import make_peerpedia_email, params
-from peerpedia_core.commands.guards import assert_can_rollback_article
-from peerpedia_core.commands.integrity import assert_article_integrity
+from peerpedia_core.core.guards import assert_can_rollback_article
+from peerpedia_core.core.guards import assert_article_integrity
 from peerpedia_core.storage.db.crud_article import clear_publish_consents
 from peerpedia_core.storage.git import (
     checkout_files, commit_article, get_head_hash, is_repo_dirty,
 )
 from peerpedia_core.crypto import temp_signing_key
-from peerpedia_core.commands.articles._helpers import reset_sink
-from peerpedia_core.commands.reconcile import reconcile_authors
-from peerpedia_core.commands.guards import (
+from peerpedia_core.core.articles._helpers import reset_sink
+from peerpedia_core.core.reconcile import reconcile_authors
+from peerpedia_core.core.guards import (
     authorize_article_action, require_article_repo, require_signing_key,
 )
 from peerpedia_core.types import short_id
@@ -65,7 +65,7 @@ def rollback_article(
     if article.status == "published":
         reset_sink(db, article_id, rp, params.sink.edit_article_default_days)
     reconcile_authors(db, article_id)
-    from peerpedia_core.commands.reconcile import reconcile_score
+    from peerpedia_core.core.reconcile import reconcile_score
     reconcile_score(db, article_id)
 
     return {

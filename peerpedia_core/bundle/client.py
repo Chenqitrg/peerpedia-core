@@ -50,7 +50,7 @@ from pathlib import Path
 from peerpedia_core.exceptions import ProtocolError, TransportError
 from peerpedia_core.storage.db import Session
 
-from peerpedia_core.commands.reconcile import reconcile_after_sync
+from peerpedia_core.core.reconcile import reconcile_after_sync
 from peerpedia_core.bundle.ancestor import find_common_ancestor
 from peerpedia_core.storage.git import (
     create_bundle,

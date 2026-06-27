@@ -90,7 +90,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
-from peerpedia_core.commands import db_repl_setup, health_check
+from peerpedia_core.core import db_repl_setup, health_check
 from peerpedia_core.config.paths import DB_URL
 from peerpedia_core.exceptions import (
     BadRequestError,

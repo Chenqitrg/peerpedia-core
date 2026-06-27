@@ -5,7 +5,7 @@
 
 **This is the ONLY package that can import both ``storage/git_backend``
 and ``storage/db/``.**  CLI, REPL, sync — everything external — must go
-through this facade: ``from peerpedia_core.commands import ...``.
+through this facade: ``from peerpedia_core.core import ...``.
 
 Hard rules
 ----------
@@ -58,10 +58,10 @@ Design invariants
 - All crud functions in this package call ``session.flush()`` only.
   ``session.commit()`` is the caller's responsibility (CLI/REPL entry).
 - Public API is re-exported here; callers should import from
-  ``peerpedia_core.commands``, not from submodules directly.
+  ``peerpedia_core.core``, not from submodules directly.
 """
 
-from peerpedia_core.commands.articles import (
+from peerpedia_core.core.articles import (
     count_articles,
     create_article_with_content,
     delete_article,
@@ -76,25 +76,25 @@ from peerpedia_core.commands.articles import (
     rollback_article,
     update_article_content,
 )
-from peerpedia_core.commands.bookmarks import add_bookmark, get_bookmarks_for_user, remove_bookmark
+from peerpedia_core.core.bookmarks import add_bookmark, get_bookmarks_for_user, remove_bookmark
 from peerpedia_core.frontmatter import parse_frontmatter
-from peerpedia_core.commands.maintainers import (
+from peerpedia_core.core.maintainers import (
     add_maintainer_to_article,
     consent_to_publish,
     list_maintainers,
     remove_maintainer_from_article,
     revoke_publish_consent,
 )
-from peerpedia_core.commands.merge import accept_merge, create_merge_proposal, withdraw_merge_proposal
-from peerpedia_core.commands.reviews import accept_invitation, decline_invitation, get_reviews_for_article, invite_reviewer, rate_review_helpfulness, submit_reply, submit_review
-from peerpedia_core.commands.shares import (
+from peerpedia_core.core.merge import accept_merge, create_merge_proposal, withdraw_merge_proposal
+from peerpedia_core.core.reviews import accept_invitation, decline_invitation, get_reviews_for_article, invite_reviewer, rate_review_helpfulness, submit_reply, submit_review
+from peerpedia_core.core.shares import (
     add_share, get_feed_shares, get_shares_for_user, remove_share,
 )
-from peerpedia_core.commands.reconcile import (
+from peerpedia_core.core.reconcile import (
     reconcile_after_sync, reconcile_reviews,
 )
-from peerpedia_core.commands.integrity import assert_article_integrity
-from peerpedia_core.commands.users import (
+from peerpedia_core.core.guards import assert_article_integrity
+from peerpedia_core.core.users import (
     create_user,
     create_user_stub,
     find_users,
@@ -114,12 +114,12 @@ from peerpedia_core.commands.users import (
     update_user_public_key,
     update_user_salt,
 )
-from peerpedia_core.commands.reconcile import (
+from peerpedia_core.core.reconcile import (
     reconcile_all_reputations,
     reconcile_reputation,
     reconcile_score,
 )
-from peerpedia_core.commands.views import (
+from peerpedia_core.core.views import (
     get_article_view,
     get_follower_views,
     get_following_views,
@@ -127,7 +127,7 @@ from peerpedia_core.commands.views import (
     list_article_views,
     list_user_article_views,
 )
-from peerpedia_core.commands.discover import (
+from peerpedia_core.core.discover import (
     ingest_articles,
     ingest_bookmarks,
     ingest_followers,
@@ -139,7 +139,7 @@ from peerpedia_core.commands.discover import (
     sync_followers,
     sync_following,
 )
-from peerpedia_core.commands.notifications import (
+from peerpedia_core.core.notifications import (
     count_unread_notifications,
     create_notification,
     get_notifications,

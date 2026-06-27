@@ -47,18 +47,18 @@ from peerpedia_core.storage.db import Session
 
 from peerpedia_core.config.params import params
 from peerpedia_core.exceptions import BadRequestError, NotFoundError
-from peerpedia_core.commands.guards import assert_can_accept_merge, guard_proposal_owner
+from peerpedia_core.core.guards import assert_can_accept_merge, authorize_article_action, guard_proposal_owner
 from peerpedia_core.storage.db.crud_merge import (
     accept_merge_proposal, get_merge_proposal, withdraw_merge_proposal as _withdraw,
 )
 from peerpedia_core.storage.db.crud_merge import create_merge_proposal as _create
-from peerpedia_core.commands.articles._helpers import reset_sink
-from peerpedia_core.commands.guards import require_article_repo, require_open_proposal
-from peerpedia_core.commands.notifications import create_notification
+from peerpedia_core.core.articles._helpers import reset_sink
+from peerpedia_core.core.guards import require_article_repo, require_open_proposal
+from peerpedia_core.core.notifications import create_notification
 from peerpedia_core.storage.git import (
     MergeConflictError, get_head_hash, merge_git_repos,
 )
-from peerpedia_core.commands.reconcile import reconcile_authors
+from peerpedia_core.core.reconcile import reconcile_authors
 
 
 def _notify_maintainers_except(db, target_id, proposer_id, proposer_name):
@@ -118,7 +118,7 @@ def accept_merge(db: Session, article_id: str, proposal_id: str, user_id: str) -
 
 def create_merge_proposal(db: Session, fork_id: str, target_id: str, proposer_id: str):
     """Create a merge proposal and notify target article maintainers."""
-    from peerpedia_core.commands.guards import require_user
+    from peerpedia_core.core.guards import require_user
     proposer = require_user(db, proposer_id)
     mp = _create(db, fork_id, target_id, proposer_id)
     _notify_maintainers_except(db, target_id, proposer_id, proposer.name)

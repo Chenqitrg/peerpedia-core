@@ -34,7 +34,7 @@ from peerpedia_core.bundle.server import (
     pack_article_repo_bundle,
     read_article_source_content,
 )
-from peerpedia_core.commands import (
+from peerpedia_core.core import (
     get_article_view,
     list_article_views,
 )

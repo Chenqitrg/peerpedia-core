@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from peerpedia_core.storage.db import Session
 from peerpedia_core.config.params import make_peerpedia_email, params
 from peerpedia_core.exceptions import ConflictError
-from peerpedia_core.commands.guards import (
+from peerpedia_core.core.guards import (
     assert_can_reply_to_review, require_article, require_article_repo,
     require_signing_key_not_none, require_user,
 )
@@ -21,7 +21,7 @@ from peerpedia_core.names import derive_anonymous_name
 from peerpedia_core.crypto import temp_signing_key
 from peerpedia_core.storage.git import commit_article
 from peerpedia_core.storage.locks import get_article_lock
-from peerpedia_core.commands.notifications import create_notification
+from peerpedia_core.core.notifications import create_notification
 
 
 def submit_reply(

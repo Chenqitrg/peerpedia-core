@@ -4,14 +4,14 @@
 """Article lifecycle — create, fork, publish, rollback, update, delete, query."""
 
 from peerpedia_core.storage.git import DEFAULT_ARTICLES_DIR  # noqa: F401 — re-exported for test mocks
-from peerpedia_core.commands.articles.create import create_article_with_content
-from peerpedia_core.commands.articles.delete import delete_article
-from peerpedia_core.commands.articles.fork import fork_article
-from peerpedia_core.commands.articles.publish import publish_article
-from peerpedia_core.commands.articles.sink import publish_ready_articles
-from peerpedia_core.commands.articles.rollback import rollback_article
-from peerpedia_core.commands.articles.update import update_article_content
-from peerpedia_core.commands.articles.diff import diff_article
+from peerpedia_core.core.articles.create import create_article_with_content
+from peerpedia_core.core.articles.delete import delete_article
+from peerpedia_core.core.articles.fork import fork_article
+from peerpedia_core.core.articles.publish import publish_article
+from peerpedia_core.core.articles.sink import publish_ready_articles
+from peerpedia_core.core.articles.rollback import rollback_article
+from peerpedia_core.core.articles.update import update_article_content
+from peerpedia_core.core.articles.diff import diff_article
 
 # ── Read wrappers — thin pass-through to crud ────────────────────────────
 
@@ -23,7 +23,7 @@ from peerpedia_core.storage.db.crud_article import (
     get_author_ids as _get_author_ids,
     list_articles as _list,
 )
-from peerpedia_core.commands.integrity import assert_article_integrity
+from peerpedia_core.core.guards import assert_article_integrity
 
 
 def get_article(db: Session, article_id: str):

@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from peerpedia_core.storage.db import Session
-from peerpedia_core.commands.guards import assert_can_delete_article
+from peerpedia_core.core.guards import assert_can_delete_article
 from peerpedia_core.storage.db.crud_article import (
     decrement_fork_count,
     delete_article as _delete,
@@ -14,8 +14,8 @@ from peerpedia_core.storage.db.crud_article import (
 from peerpedia_core.storage.db.crud_maintainer import get_maintainer_ids
 from peerpedia_core.config.paths import article_repo_path
 from peerpedia_core.storage.git import delete_article_repo
-from peerpedia_core.commands.guards import require_article, require_user
-from peerpedia_core.commands.integrity import assert_article_integrity
+from peerpedia_core.core.guards import require_article, require_user
+from peerpedia_core.core.guards import assert_article_integrity
 
 
 def delete_article(db: Session, article_id: str, *, user_id: str) -> None:

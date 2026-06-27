@@ -16,13 +16,13 @@ from peerpedia_core.storage.db.crud_article import update_witnessed_at
 from peerpedia_core.storage.git import (
     get_head_or_none, merge_fetch_head, rollback_to,
 )
-from peerpedia_core.commands.guards import require_article_repo, verify_new_commits
-from peerpedia_core.commands.integrity import assert_article_integrity
-from peerpedia_core.commands.articles.sink import publish_ready_articles
-from peerpedia_core.commands.reconcile.mirror import (
+from peerpedia_core.core.guards import require_article_repo, verify_new_commits
+from peerpedia_core.core.guards import assert_article_integrity
+from peerpedia_core.core.articles.sink import publish_ready_articles
+from peerpedia_core.core.reconcile.mirror import (
     reconcile_authors, reconcile_reviews, reconcile_status,
 )
-from peerpedia_core.commands.reconcile.score import (
+from peerpedia_core.core.reconcile.score import (
     reconcile_all_reputations, reconcile_reputation, reconcile_score,
 )
 

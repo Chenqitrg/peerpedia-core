@@ -17,8 +17,8 @@ from unittest.mock import patch
 
 from sqlalchemy.orm import Session
 
-from peerpedia_core.commands.articles import create_article_with_content, fork_article
-from peerpedia_core.commands.merge import accept_merge
+from peerpedia_core.core.articles import create_article_with_content, fork_article
+from peerpedia_core.core.merge import accept_merge
 from peerpedia_core.storage.db.crud_maintainer import get_maintainer_ids, is_maintainer
 from peerpedia_core.storage.db.crud_merge import create_merge_proposal
 from peerpedia_core.storage.db.crud_user import get_user
@@ -86,7 +86,7 @@ class TestForkSeedsMaintainer:
             content="# Original",
             author_ids=["alice"], signing_key_bytes=test_signing_key_bytes, pubkey_hex=test_pubkey_hex)
 
-        from peerpedia_core.commands.articles import publish_article
+        from peerpedia_core.core.articles import publish_article
 
         publish_article(
             db,
@@ -119,7 +119,7 @@ class TestForkSeedsMaintainer:
             content="# Original",
             author_ids=["alice"], signing_key_bytes=test_signing_key_bytes, pubkey_hex=test_pubkey_hex)
 
-        from peerpedia_core.commands.articles import publish_article
+        from peerpedia_core.core.articles import publish_article
 
         publish_article(
             db,
@@ -156,7 +156,7 @@ class TestMergeAuthorNotMaintainer:
             content="# Original",
             author_ids=["alice"], signing_key_bytes=test_signing_key_bytes, pubkey_hex=test_pubkey_hex)
 
-        from peerpedia_core.commands.articles import publish_article
+        from peerpedia_core.core.articles import publish_article
 
         publish_article(
             db,
@@ -173,7 +173,7 @@ class TestMergeAuthorNotMaintainer:
         fork_result = fork_article(db, create_result["id"], "bob")
         db.commit()
 
-        from peerpedia_core.commands.articles import update_article_content
+        from peerpedia_core.core.articles import update_article_content
 
         update_article_content(
             db,

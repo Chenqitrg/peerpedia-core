@@ -13,7 +13,28 @@ from peerpedia_core.config.params import (
     extract_user_id_from_email,
 )
 from peerpedia_core.types.status import parse_status_tag
-from peerpedia_core.storage.git.guards import assert_on_main
+
+_EXPECTED_BRANCH = "refs/heads/main"
+
+
+def assert_on_main(repo: git.Repo) -> None:
+    """Raise RuntimeError if HEAD is not on refs/heads/main.
+
+    Article repos use a single-mainline model — all git operations
+    expect HEAD to point to ``refs/heads/main``.
+    """
+    if not repo.head.is_valid():
+        return
+    if repo.head.is_detached:
+        raise RuntimeError(
+            "HEAD is detached — expected refs/heads/main; "
+            "article repos use a single-mainline model"
+        )
+    if repo.head.reference.path != _EXPECTED_BRANCH:
+        raise RuntimeError(
+            f"HEAD is on {repo.head.reference.path}, expected {_EXPECTED_BRANCH} — "
+            "article repos use a single-mainline model"
+        )
 
 
 # Commit message prefixes for non-content commits — these commits are

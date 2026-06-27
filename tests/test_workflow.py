@@ -143,7 +143,7 @@ class TestPerCommitScoring:
             {"originality": 1, "rigor": 1, "completeness": 1, "pedagogy": 1, "impact": 1},
         )
 
-        from peerpedia_core.commands import recompute_article_score
+        from peerpedia_core.core import recompute_article_score
 
         score = recompute_article_score(session, article.id)
 
@@ -161,7 +161,7 @@ class TestPerCommitScoring:
         author = self._make_user(session, "pcs_none")
         article = self._make_article(session, [author.id])
 
-        from peerpedia_core.commands import recompute_article_score
+        from peerpedia_core.core import recompute_article_score
 
         result = recompute_article_score(session, article.id)
         assert result is None
@@ -170,7 +170,7 @@ class TestPerCommitScoring:
     def test_unknown_article_raises(self, engine):
         """recompute_article_score for non-existent article raises NotFoundError."""
         from peerpedia_core.storage.db.engine import get_session
-        from peerpedia_core.commands import recompute_article_score
+        from peerpedia_core.core import recompute_article_score
         from peerpedia_core.exceptions import NotFoundError
 
         session = get_session(engine)
@@ -203,7 +203,7 @@ class TestPerCommitScoring:
             {"originality": 3, "rigor": 3, "completeness": 3, "pedagogy": 3, "impact": 3},
         )
 
-        from peerpedia_core.commands import recompute_article_score
+        from peerpedia_core.core import recompute_article_score
 
         score = recompute_article_score(session, article.id)
 

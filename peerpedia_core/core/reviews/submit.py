@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from peerpedia_core.storage.db import Session
 from peerpedia_core.config.params import params
-from peerpedia_core.commands.guards import (
+from peerpedia_core.core.guards import (
     assert_can_submit_review, assert_not_folded, assert_valid_review,
     require_article, require_invitation, require_user,
 )
@@ -15,8 +15,8 @@ from peerpedia_core.storage.db.crud_article import get_author_ids
 from peerpedia_core.storage.db.crud_review import (
     get_accepted_invitation, update_review_status, upsert_review,
 )
-from peerpedia_core.commands.reviews.thread import write_review_to_git, _resolve_review_identity
-from peerpedia_core.commands.notifications import create_notification
+from peerpedia_core.core.reviews.thread import write_review_to_git, _resolve_review_identity
+from peerpedia_core.core.notifications import create_notification
 
 
 def submit_review(
@@ -65,7 +65,7 @@ def submit_review(
     r = _persist_review(db, article_id, reviewer_id, scores, commit_hash)
 
     # ── Recompute scores ──
-    from peerpedia_core.commands.reconcile import reconcile_score, reconcile_reputation
+    from peerpedia_core.core.reconcile import reconcile_score, reconcile_reputation
     reconcile_score(db, article_id)
     for aid in get_author_ids(db, article_id):
         reconcile_reputation(db, aid)

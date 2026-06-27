@@ -11,7 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from peerpedia_core.cli.handlers.account import _validate_bootstrap_json
-from peerpedia_core.commands import create_user_stub, get_user, get_user_by_name
+from peerpedia_core.core import create_user_stub, get_user, get_user_by_name
 from peerpedia_core.crypto import derive_key_pair, new_salt
 from peerpedia_core.storage.db.crud_user import create_user_stub as _crud_create_user_stub
 from peerpedia_core.storage.db.engine import get_session

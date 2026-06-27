@@ -24,7 +24,7 @@ Pure DB operations — no HTTP, no git.  Only imports from ``storage/db/``.
 from __future__ import annotations
 
 from peerpedia_core.storage.db import Session
-from peerpedia_core.commands.guards import require_keys, validate_follow_entries
+from peerpedia_core.core.guards import require_keys, validate_follow_entries
 from peerpedia_core.storage.db.crud_article import ensure_article_stub
 from peerpedia_core.storage.db.crud_bookmark import add_bookmark
 from peerpedia_core.storage.db.crud_maintainer import add_maintainer

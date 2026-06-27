@@ -18,7 +18,7 @@ from peerpedia_core.storage.git import (
     get_commit_authors, get_head_hash,
     list_review_dirs, read_status_from_git,
 )
-from peerpedia_core.commands.guards import (
+from peerpedia_core.core.guards import (
     assert_valid_review,
     require_article, require_article_repo, require_review_scores,
 )

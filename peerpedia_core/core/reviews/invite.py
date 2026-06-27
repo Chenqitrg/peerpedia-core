@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 
 from peerpedia_core.storage.db import Session
 from peerpedia_core.exceptions import ConflictError, NotFoundError
-from peerpedia_core.commands.guards import (
+from peerpedia_core.core.guards import (
     guard_invitation_conflicts, guard_invitation_not_accepted,
     guard_invitation_not_declined,
     require_article, require_maintainer, require_not_same,
@@ -19,7 +19,7 @@ from peerpedia_core.storage.db.models import Review
 from peerpedia_core.storage.db.crud_review import (
     get_pending_invitation, update_review_status,
 )
-from peerpedia_core.commands.notifications import create_notification
+from peerpedia_core.core.notifications import create_notification
 
 
 def invite_reviewer(

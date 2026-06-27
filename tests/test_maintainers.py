@@ -20,7 +20,7 @@ from peerpedia_core.storage.db.crud_maintainer import (
 )
 from peerpedia_core.storage.db.engine import get_session
 from peerpedia_core.storage.db.models import Article, User
-from peerpedia_core.commands.maintainers import (
+from peerpedia_core.core.maintainers import (
     add_maintainer_to_article,
     remove_maintainer_from_article,
     list_maintainers,

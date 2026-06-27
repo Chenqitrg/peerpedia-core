@@ -26,7 +26,9 @@ from peerpedia_core.storage.db._validators import (  # re-export pure validators
     require_title_nonempty,
     validate_follow_entries,
 )
-from peerpedia_core.storage.db.crud_article import get_article
+from peerpedia_core.config.params import params
+from peerpedia_core.rules.articles import assert_not_folded
+from peerpedia_core.storage.db.crud_article import count_articles, get_article
 from peerpedia_core.storage.db.crud_maintainer import get_maintainer_ids, is_maintainer
 from peerpedia_core.storage.db.crud_review import (
     get_accepted_invitation, get_pending_invitation, get_reviews_for_article,
@@ -102,3 +104,91 @@ def require_review(db: Session, article_id: str, reviewer_id: str):
         if r.reviewer_id == reviewer_id:
             return r
     raise NotFoundError(f"No review found for reviewer {reviewer_id}")
+
+
+# ── Authorization (DB + rules) ───────────────────────────────────────────────
+
+
+def authorize_article_action(
+    db: Session, article_id: str, user_id: str,
+):
+    """Resolve user, article, and maintainer_ids; block if article is folded."""
+    user = require_user(db, user_id)
+    article = require_article(db, article_id)
+    mids = get_maintainer_ids(db, article_id)
+    assert_not_folded(article, threshold=params.reputation.fold_score_threshold)
+    return user, article, mids
+
+
+# ── Sedimentation ────────────────────────────────────────────────────────────
+
+
+def guard_sedimentation_limit(db: Session, user_id: str) -> None:
+    """Raise BadRequestError if *user_id* has too many articles in sedimentation."""
+    in_pool = count_articles(db, status="sedimentation", author_id=user_id)
+    if in_pool >= params.sink.max_sedimentation_per_author:
+        raise BadRequestError(
+            f"Author already has {in_pool} article(s) in sedimentation "
+            f"(max {params.sink.max_sedimentation_per_author})"
+        )
+
+
+# ── Review invitations ───────────────────────────────────────────────────────
+
+
+def require_invitation(db: Session, article_id: str, reviewer_id: str) -> None:
+    """Raise NotAuthorizedError if the reviewer lacks an accepted invitation."""
+    if get_accepted_invitation(db, article_id, reviewer_id) is None:
+        raise NotAuthorizedError(
+            "You have not been invited to review this article. "
+            "During sedimentation, only invited reviewers may submit reviews."
+        )
+
+
+def guard_invitation_not_declined(db: Session, article_id: str, reviewer_id: str) -> None:
+    """Raise BadRequestError if invitation was already declined."""
+    declined = (
+        db.query(Review)
+        .filter(Review.article_id == article_id, Review.reviewer_id == reviewer_id,
+                Review.status == "declined")
+        .first()
+    )
+    if declined is not None:
+        raise BadRequestError("Cannot accept a declined invitation")
+
+
+def guard_invitation_not_accepted(db: Session, article_id: str, reviewer_id: str) -> None:
+    """Raise BadRequestError if invitation was already accepted."""
+    if get_accepted_invitation(db, article_id, reviewer_id) is not None:
+        raise BadRequestError("Cannot decline an already accepted invitation")
+
+
+# ── Maintainer ───────────────────────────────────────────────────────────────
+
+
+def guard_not_last_maintainer(db: Session, article_id: str, caller_id: str, user_id: str) -> None:
+    """Raise NotAuthorizedError if caller tries to self-remove as the last maintainer."""
+    if caller_id != user_id:
+        return
+    if len(get_maintainer_ids(db, article_id)) <= 1:
+        raise NotAuthorizedError(
+            "Cannot remove yourself as the last maintainer. "
+            "Add another maintainer first, then remove yourself."
+        )
+
+
+# ── Merge proposal ───────────────────────────────────────────────────────────
+
+
+def require_open_proposal(db: Session, proposal_id: str, article_id: str):
+    """Return the merge proposal, or raise if missing/wrong article/not open."""
+    from peerpedia_core.storage.db.crud_merge import get_merge_proposal
+
+    mp = get_merge_proposal(db, proposal_id)
+    if mp is None:
+        raise NotFoundError("Merge proposal not found")
+    if mp.target_article_id != article_id:
+        raise BadRequestError("Proposal does not belong to this article")
+    if mp.status != "open":
+        raise BadRequestError(f"Merge proposal {proposal_id} is already {mp.status}")
+    return mp

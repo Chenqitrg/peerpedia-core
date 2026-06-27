@@ -162,7 +162,7 @@ class TestCrudCountUnread:
 
 class TestCommandsFacade:
     def test_create_delegates(self, db):
-        from peerpedia_core.commands.notifications import create_notification
+        from peerpedia_core.core.notifications import create_notification
 
         _make_user(db, "user-1")
         n = create_notification(db, user_id="user-1", event="new_follower",
@@ -170,7 +170,7 @@ class TestCommandsFacade:
         assert n.id is not None
 
     def test_get_delegates(self, db):
-        from peerpedia_core.commands.notifications import (
+        from peerpedia_core.core.notifications import (
             create_notification, get_notifications,
         )
 
@@ -180,7 +180,7 @@ class TestCommandsFacade:
         assert len(get_notifications(db, "user-1", unread_only=True)) == 1
 
     def test_mark_read_delegates(self, db):
-        from peerpedia_core.commands.notifications import create_notification, mark_read
+        from peerpedia_core.core.notifications import create_notification, mark_read
 
         _make_user(db, "user-1")
         n = create_notification(db, user_id="user-1", event="new_follower",
@@ -189,7 +189,7 @@ class TestCommandsFacade:
         assert n.read == 1
 
     def test_count_unread_notifications_delegates(self, db):
-        from peerpedia_core.commands.notifications import count_unread_notifications, create_notification
+        from peerpedia_core.core.notifications import count_unread_notifications, create_notification
 
         _make_user(db, "user-1")
         create_notification(db, user_id="user-1", event="new_follower",
@@ -202,7 +202,7 @@ class TestCommandsFacade:
 
 class TestNewFollowerNotification:
     def test_creates_notification(self, db):
-        from peerpedia_core.commands.users import follow_user
+        from peerpedia_core.core.users import follow_user
         from peerpedia_core.storage.db.crud_notification import get_notifications
 
         _make_user(db, "follower-user", "Follower")
@@ -222,7 +222,7 @@ class TestMergeProposedNotification:
         from peerpedia_core.storage.db.crud_article import create_article
         from peerpedia_core.storage.db.crud_maintainer import add_maintainer
         from peerpedia_core.storage.db.crud_notification import get_notifications
-        from peerpedia_core.commands.merge import create_merge_proposal
+        from peerpedia_core.core.merge import create_merge_proposal
 
         _make_user(db, "alice", "Alice")
         _make_user(db, "bob", "Bob")

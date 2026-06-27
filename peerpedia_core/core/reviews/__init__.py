@@ -29,14 +29,14 @@ the git filesystem.  The DB stores the real ``reviewer_id`` from the caller.
 from __future__ import annotations
 
 from peerpedia_core.storage.db import Session
-from peerpedia_core.commands.reviews.submit import submit_review
-from peerpedia_core.commands.reviews.invite import (
+from peerpedia_core.core.reviews.submit import submit_review
+from peerpedia_core.core.reviews.invite import (
     accept_invitation, decline_invitation, invite_reviewer,
 )
-from peerpedia_core.commands.reviews.thread import submit_reply, write_review_to_git
+from peerpedia_core.core.reviews.thread import submit_reply, write_review_to_git
 
 from peerpedia_core.storage.db.crud_review import get_reviews_for_article as _get
-from peerpedia_core.commands.guards import (
+from peerpedia_core.core.guards import (
     require_article, require_helpfulness_score_range,
     require_maintainer, require_review,
 )

@@ -15,6 +15,7 @@ from peerpedia_core.storage.git.ops import (
 )
 
 from peerpedia_core.storage.git.read import (
+    assert_on_main,
     get_commit_authors,
     get_commit_history,
     get_diff_between,
@@ -52,8 +53,11 @@ from peerpedia_core.storage.git.archive import (
 from peerpedia_core.storage.git.guards import (
     assert_repo_on_main,
     extract_pubkey_from_message,
+    guard_not_empty,
+    require_article_repo,
     require_commit_pubkey_signature,
     require_commit_signing_key,
+    require_review_scores,
     require_signing_key_for_pubkey,
     require_valid_article_status,
     verify_commit_signature,

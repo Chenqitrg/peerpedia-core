@@ -10,7 +10,7 @@ CLI and routes never import storage/db directly.
 from __future__ import annotations
 
 from peerpedia_core.storage.db import Session
-from peerpedia_core.commands.notifications import create_notification
+from peerpedia_core.core.notifications import create_notification
 from peerpedia_core.storage.db.models import User
 from peerpedia_core.storage.db.crud_user import (
     create_user as _create,
@@ -22,7 +22,6 @@ from peerpedia_core.storage.db.crud_user import (
     get_followers as _get_followers,
     get_following as _get_following,
     get_top_users_by_followers as _get_top_users_by_followers,
-    get_user as _get,
     get_user_by_name as _get_by_name,
     reset_failed_login as _reset_failed,
     search_users as _search_users,

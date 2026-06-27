@@ -16,7 +16,7 @@ from __future__ import annotations
 from peerpedia_core.storage.db import Session
 from peerpedia_core.storage.db.crud_article import get_article, get_author_ids, get_author_ids_batch
 from peerpedia_core.storage.db.crud_user import get_followers, get_following, get_user
-from peerpedia_core.commands.articles import list_articles
+from peerpedia_core.core.articles import list_articles
 
 
 def get_article_view(db: Session, article_id: str) -> dict | None:

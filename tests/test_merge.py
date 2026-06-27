@@ -15,7 +15,7 @@ import pytest
 from sqlalchemy.orm import Session
 
 from peerpedia_core.exceptions import BadRequestError, NotAuthorizedError, NotFoundError
-from peerpedia_core.commands.merge import accept_merge, create_merge_proposal, withdraw_merge_proposal
+from peerpedia_core.core.merge import accept_merge, create_merge_proposal, withdraw_merge_proposal
 from peerpedia_core.storage.db.crud_article import create_article, get_article
 from peerpedia_core.storage.db.crud_merge import create_merge_proposal as _db_create_mp
 from peerpedia_core.storage.db.engine import get_session
@@ -53,16 +53,16 @@ def articles_dir():
     with tempfile.TemporaryDirectory() as tmp:
         # Patch every module that imports DEFAULT_ARTICLES_DIR
         _submodules = [
-            "peerpedia_core.commands.articles.create",
-            "peerpedia_core.commands.articles.delete",
-            "peerpedia_core.commands.articles.fork",
-            "peerpedia_core.commands.articles.publish",
-            "peerpedia_core.commands.articles.rollback",
-            "peerpedia_core.commands.articles._helpers",
+            "peerpedia_core.core.articles.create",
+            "peerpedia_core.core.articles.delete",
+            "peerpedia_core.core.articles.fork",
+            "peerpedia_core.core.articles.publish",
+            "peerpedia_core.core.articles.rollback",
+            "peerpedia_core.core.articles._helpers",
         ]
         patches = [
             patch.object(git_backend, "DEFAULT_ARTICLES_DIR", Path(tmp)),
-            patch("peerpedia_core.commands.articles.DEFAULT_ARTICLES_DIR", Path(tmp)),
+            patch("peerpedia_core.core.articles.DEFAULT_ARTICLES_DIR", Path(tmp)),
         ] + [patch(f"{m}.DEFAULT_ARTICLES_DIR", Path(tmp)) for m in _submodules]
         for p in patches:
             p.start()
@@ -219,7 +219,7 @@ class TestAcceptMerge:
         mp = _db_create_mp(db, "art-fork-conflict", "art-target-conflict", "alice")
         db.flush()
 
-        with patch("peerpedia_core.commands.merge.merge_git_repos") as mock_merge:
+        with patch("peerpedia_core.core.merge.merge_git_repos") as mock_merge:
             mock_merge.side_effect = MergeConflictError("conflict")
             result = accept_merge(db, "art-target-conflict", mp.id, "alice")
 

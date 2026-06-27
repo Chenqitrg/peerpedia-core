@@ -13,7 +13,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.routing import Route
 
-from peerpedia_core.commands import db_session
+from peerpedia_core.core import db_session
 from peerpedia_core.config.paths import DB_URL
 
 

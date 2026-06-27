@@ -11,7 +11,7 @@ import json
 
 from peerpedia_core.exceptions import ProtocolError, TransportError
 from peerpedia_core.transport.auth import build_auth_header
-from peerpedia_core.server.http._core import (
+from peerpedia_core.transport.http._core import (
     _api_path, _call, _encode_body, _get, _require_json_or_none, _post, _user_path,
     _require_ok_or_404,
 )

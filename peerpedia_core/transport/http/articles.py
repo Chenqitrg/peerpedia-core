@@ -11,7 +11,7 @@ confined to this module.
 """
 
 from peerpedia_core.exceptions import ConflictError, ProtocolError, TransportError
-from peerpedia_core.server.http._core import (
+from peerpedia_core.transport.http._core import (
     _api_path, _article_path, _call, _get, _require_json_or_none, _user_path,
 )
 from peerpedia_core.time import SYNC_TIMEOUT_SECONDS
@@ -56,12 +56,12 @@ def _push_bundle(server: str, article_id: str, bundle_bytes: bytes) -> None:
         f"push_bundle: unexpected status {resp.status_code} from {server}")
 
 
-def _fetch_incremental_bundle(
+def _fetch_bundle(
     server: str, article_id: str, since_hash: str | None,
 ) -> bytes | None:
     """GET /api/v1/articles/{id}/bundle?since= → bytes, None (404), or raises."""
     resp = _call("GET", server, _article_path(article_id, "bundle"), article_id,
-                 "fetch_incremental_bundle",
+                 "fetch_bundle",
                  params={"since": since_hash} if since_hash else None,
                  timeout=SYNC_TIMEOUT_SECONDS)
     if resp.status_code == 200 and resp.content:
@@ -69,22 +69,22 @@ def _fetch_incremental_bundle(
     if resp.status_code == 404:
         return None
     raise ProtocolError(
-        f"fetch_incremental_bundle: unexpected status {resp.status_code} "
+        f"fetch_bundle: unexpected status {resp.status_code} "
         f"from {server}")
 
 
-def _fetch_article_repo(server: str, article_id: str) -> str | None:
+def _fetch_repo(server: str, article_id: str) -> str | None:
     """GET /api/v1/articles/{id}/repo → base64 tar.gz string or None (404)."""
     resp = _call("GET", server, _article_path(article_id, "repo"), article_id,
-                 "fetch_article_repo", timeout=SYNC_TIMEOUT_SECONDS)
-    data = _require_json_or_none(resp, server, "fetch_article_repo")
+                 "fetch_repo", timeout=SYNC_TIMEOUT_SECONDS)
+    data = _require_json_or_none(resp, server, "fetch_repo")
     return data.get("repo_bundle") if data else None
 
 
-def _push_article_repo(server: str, article_id: str, bundle_b64: str) -> bool:
+def _push_repo(server: str, article_id: str, bundle_b64: str) -> bool:
     """POST /api/v1/articles → True (200/201), False (409), or raises."""
     resp = _call("POST", server, _api_path("articles"), article_id,
-                 "push_article_repo",
+                 "push_repo",
                  json={"id": article_id, "repo_bundle": bundle_b64},
                  timeout=SYNC_TIMEOUT_SECONDS)
     if resp.status_code in (200, 201):
@@ -92,15 +92,15 @@ def _push_article_repo(server: str, article_id: str, bundle_b64: str) -> bool:
     if resp.status_code == 409:
         return False
     raise ProtocolError(
-        f"push_article_repo: unexpected status {resp.status_code} "
+        f"push_repo: unexpected status {resp.status_code} "
         f"from {server}")
 
 
-def _fetch_article_source(server: str, article_id: str) -> tuple[str, str] | None:
+def _fetch_source(server: str, article_id: str) -> tuple[str, str] | None:
     """GET /api/v1/articles/{id}/source → (content, format) or None (404)."""
     resp = _call("GET", server, _article_path(article_id, "source"), article_id,
-                 "fetch_article_source")
-    data = _require_json_or_none(resp, server, "fetch_article_source")
+                 "fetch_source")
+    data = _require_json_or_none(resp, server, "fetch_source")
     return (data.get("content"), data.get("format", "markdown")) if data else None
 
 
@@ -125,11 +125,11 @@ def _fetch_search(
     )
 
 
-def _fetch_article_meta(server: str, article_id: str) -> dict | None:
+def _fetch_meta(server: str, article_id: str) -> dict | None:
     """GET /api/v1/articles/{id} → article metadata or None (404)."""
     resp = _call("GET", server, _article_path(article_id), article_id,
-                 "fetch_article_meta")
-    return _require_json_or_none(resp, server, "fetch_article_meta")
+                 "fetch_meta")
+    return _require_json_or_none(resp, server, "fetch_meta")
 
 
 def _fetch_user_articles(

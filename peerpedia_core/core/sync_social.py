@@ -4,7 +4,7 @@
 """Social discovery orchestration — fetch-then-merge.
 
 Each ``discover_*`` function: fetch from peer → convert JSON → ingest.
-Symmetric with ``core/bundle.py`` — both take a ``Transport`` instance.
+Symmetric with ``core/sync_article.py`` — both take a ``Transport`` instance.
 """
 
 from __future__ import annotations

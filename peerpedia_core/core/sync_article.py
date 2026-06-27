@@ -4,7 +4,7 @@
 r"""Git bundle sync — push/pull article repos to/from a remote server.
 
 Client-side and server-side of the sync protocol, symmetric with
-``core/discover.py`` (both take a ``Transport`` instance).
+``core/sync_social.py`` (both take a ``Transport`` instance).
 
 Client::
 
@@ -120,7 +120,7 @@ def pull_incremental(
     ff_only: bool = True,
 ) -> str:
     """Pull server commits and reconcile DB."""
-    bundle_bytes = transport.fetch_incremental_bundle(server, article_id, since_hash)
+    bundle_bytes = transport.fetch_bundle(server, article_id, since_hash)
     if not bundle_bytes:
         raise ProtocolError(
             f"pull_incremental: server returned empty bundle for article {article_id}")
@@ -132,7 +132,7 @@ def pull_incremental(
 
 def pull_new_article(db: Session, transport: Transport, server: str, article_id: str) -> str | None:
     """Download a full repo when the article is new locally."""
-    repo_b64 = transport.fetch_article_repo(server, article_id)
+    repo_b64 = transport.fetch_repo(server, article_id)
     if not repo_b64:
         return None
     return ingest_article(DEFAULT_ARTICLES_DIR / article_id,
@@ -155,7 +155,7 @@ def _upload_article(transport: Transport, server: str, article_id: str) -> bool:
     if not (rp / ".git").is_dir():
         raise FileNotFoundError(f"Repo not found: {rp}")
     get_head(rp)
-    return transport.push_article_repo(server, article_id, pack_article_repo(rp))
+    return transport.push_repo(server, article_id, pack_article_repo(rp))
 
 
 # ═══════════════════════════════════════════════════════════════════════════

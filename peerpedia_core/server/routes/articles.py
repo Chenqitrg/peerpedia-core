@@ -26,7 +26,7 @@ from starlette.routing import Route
 
 from peerpedia_core.config.paths import ARTICLES_DIR
 from peerpedia_core.core import get_article_view, list_article_views
-from peerpedia_core.core.bundle import apply_sync
+from peerpedia_core.core.sync_article import apply_sync
 from peerpedia_core.exceptions import BadRequestError, NotFoundError
 from peerpedia_core.server.shared import _parse_pagination, _require_field, _validate_id
 from peerpedia_core.storage.git import (

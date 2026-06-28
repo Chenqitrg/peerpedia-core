@@ -21,10 +21,10 @@ def _resolve_offset(repo_path: Path, ref: str) -> str:
     try:
         n = int(ref[1:])
     except ValueError:
-        raise ValueError(code="INVALID_COMMIT_REF")
+        raise ValueError("INVALID_COMMIT_REF")
     history = get_commit_history(repo_path, max_count=n + 1)
     if len(history) <= n:
-        raise ValueError(code="COMMIT_NOT_FOUND")
+        raise ValueError("COMMIT_NOT_FOUND")
     return history[n]["hash"]
 
 
@@ -32,9 +32,9 @@ def _resolve_hash_prefix(repo_path: Path, ref: str) -> str:
     """Resolve a full or partial commit hash — one exact prefix match required."""
     matches = [c for c in get_commit_history(repo_path) if c["hash"].startswith(ref)]
     if len(matches) == 0:
-        raise ValueError(code="COMMIT_NOT_FOUND")
+        raise ValueError("COMMIT_NOT_FOUND")
     if len(matches) > 1:
-        raise ValueError(code="INVALID_COMMIT_REF")
+        raise ValueError("INVALID_COMMIT_REF")
     return matches[0]["hash"]
 
 

@@ -75,7 +75,7 @@ def reconcile_reputation(db: Session, user_id: str, *, user=None) -> ReputationS
     if user is None:
         user = get_user(db, user_id)
     if user is None:
-        raise ValueError(f"User not found: {user_id}")
+        raise ValueError(f"USER_NOT_FOUND: {user_id}")
 
     state = extract_reputation_state(db, user_id)
     new_rep = compute_reputation(state, user_id)

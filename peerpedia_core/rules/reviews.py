@@ -102,4 +102,4 @@ def require_signing_key_not_none(signing_key: bytes | None) -> None:
 def require_integrity_level(level: str) -> None:
     """Raise ValueError if *level* is not 'light' or 'full'."""
     if level not in ("light", "full"):
-        raise ValueError(f"Unknown integrity level: {level}")
+        raise ValueError(f"INVALID_INTEGRITY_LEVEL: {level}")

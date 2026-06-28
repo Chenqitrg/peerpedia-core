@@ -18,10 +18,10 @@ def get_head(repo_path: Path) -> str:
     Raises FileNotFoundError if no .git directory, ValueError if no commits.
     """
     if not (repo_path / ".git").is_dir():
-        raise FileNotFoundError(code="REPO_NOT_FOUND")
+        raise FileNotFoundError("REPO_NOT_FOUND")
     repo = git.Repo(repo_path)
     if not repo.head.is_valid():
-        raise ValueError(code="REPO_NO_COMMITS")
+        raise ValueError("REPO_NO_COMMITS")
     return repo.head.commit.hexsha
 
 
@@ -33,7 +33,7 @@ def ingest_bundle(repo_path: Path, bundle_bytes: bytes) -> None:
     ``FETCH_HEAD`` and reconciling DB state.
     """
     if not (repo_path / ".git").is_dir():
-        raise FileNotFoundError(code="REPO_NOT_FOUND")
+        raise FileNotFoundError("REPO_NOT_FOUND")
 
     repo = git.Repo(repo_path)
     with tempfile.NamedTemporaryFile(suffix=".bundle", delete=False) as f:
@@ -59,12 +59,10 @@ def create_bundle(repo_path: Path, since_hash: str | None = None) -> bytes:
     *since_hash=None* → full bundle.  Otherwise incremental (``since_hash..HEAD``).
     """
     if not (repo_path / ".git").is_dir():
-        raise FileNotFoundError(code="REPO_NOT_FOUND")
+        raise FileNotFoundError("REPO_NOT_FOUND")
 
     if since_hash is not None and not is_ancestor(repo_path, since_hash):
-        raise ValueError(
-            f"since_hash {short_id(since_hash)} is not an ancestor of HEAD"
-        )
+        raise ValueError(f"INVALID_SINCE_HASH: {short_id(since_hash)}")
 
     repo = git.Repo(repo_path)
     rev_range = f"{since_hash}..HEAD" if since_hash else "HEAD"

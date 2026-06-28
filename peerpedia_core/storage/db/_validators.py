@@ -31,7 +31,7 @@ def require_not_same(a: str, b: str, *, label: str) -> None:
 def require_alias_nonempty(alias: str) -> None:
     """Raise ValueError if *alias* is empty or whitespace-only."""
     if not alias.strip():
-        raise ValueError("alias must not be empty")
+        raise ValueError("ALIAS_EMPTY")
 
 
 def require_title_nonempty(title: str) -> None:

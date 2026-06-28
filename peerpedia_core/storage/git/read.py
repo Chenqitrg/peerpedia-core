@@ -12,7 +12,7 @@ from typing import TypedDict
 import git
 
 from peerpedia_core.config.params import (
-    ARTICLE_EXTENSIONS, article_ext_to_format, article_filename,
+    ARTICLE_EXTENSIONS, article_ext_to_format, article_filename, article_format_to_ext,
     extract_user_id_from_email,
 )
 from peerpedia_core.types.status import parse_status_tag
@@ -74,7 +74,7 @@ def get_commit_history(
     repo = git.Repo(repo_path)
     assert_on_main(repo)
     if not repo.head.is_valid():
-        raise ValueError(code="REPO_NO_COMMITS")
+        raise ValueError("REPO_NO_COMMITS")
 
     rev = f"{since_hash}..HEAD" if since_hash else None
     return [
@@ -197,24 +197,26 @@ def get_diff_between(repo_path: Path, hash1: str, hash2: str) -> dict[str, objec
 # ── HEAD ───────────────────────────────────────────────────────────────────
 
 
-def get_head_commit(repo_path: Path) -> CommitInfo | None:
-    """Return the HEAD commit's metadata, or None if the repo has no commits."""
+def get_head_commit(repo_path: Path) -> CommitInfo:
+    """Return the HEAD commit's metadata.
+
+    Raises ValueError if the repo has no commits.
+    """
     commits = get_commit_history(repo_path, max_count=1)
-    return commits[0] if commits else None
+    return commits[0]
 
 
 def get_head_hash(repo_path: Path) -> str:
     """Return HEAD hash.  Raises ValueError if no commits."""
-    head = get_head_commit(repo_path)
-    if head is None:
-        raise ValueError(code="REPO_NO_COMMITS")
-    return head["hash"]
+    return get_head_commit(repo_path)["hash"]
 
 
 def get_head_or_none(repo_path: Path) -> str | None:
     """Return HEAD hash, or None if the repo has no commits."""
-    head = get_head_commit(repo_path)
-    return head["hash"] if head else None
+    try:
+        return get_head_commit(repo_path)["hash"]
+    except ValueError:
+        return None
 
 
 # ── ArticleMetaStorage source ─────────────────────────────────────────────────────────
@@ -248,7 +250,7 @@ def read_article_source(repo_path: Path) -> tuple[str, str] | None:
     Returns ``(content, format)`` or None if no article file is found.
     """
     fmt = resolve_article_format(repo_path)
-    f = repo_path / article_filename(article_ext_to_format(fmt))
+    f = repo_path / article_filename(article_format_to_ext(fmt))
     if f.is_file():
         return f.read_text(), fmt
     return None

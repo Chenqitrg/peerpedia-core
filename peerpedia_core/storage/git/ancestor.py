@@ -38,7 +38,7 @@ def find_common_ancestor(
     """
     repo = git.Repo(repo_path)
     if not repo.head.is_valid():
-        raise ValueError(code="REPO_NO_COMMITS")
+        raise ValueError("REPO_NO_COMMITS")
 
     # ── Fast path: local-ahead ──
     if server_head is not None and is_ancestor(repo_path, server_head, repo=repo):

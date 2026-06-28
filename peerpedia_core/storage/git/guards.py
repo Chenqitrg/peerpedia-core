@@ -12,7 +12,7 @@ import git
 from peerpedia_core.config.git import ssh_verify_env
 from peerpedia_core.config.paths import article_repo_path
 from peerpedia_core.crypto import pubkey_hex_to_ssh_line, write_allowed_signers_file
-from peerpedia_core.exceptions import NotFoundError, SignatureVerificationError
+from peerpedia_core.exceptions import BadRequestError, NotFoundError, SignatureVerificationError
 from peerpedia_core.storage.git.read import assert_on_main, read_review_scores
 from peerpedia_core.types.status import VALID_ARTICLE_STATUSES, is_platform_commit
 
@@ -20,20 +20,20 @@ from peerpedia_core.types.status import VALID_ARTICLE_STATUSES, is_platform_comm
 def require_valid_article_status(status: str) -> None:
     """Raise ValueError if *status* is not a known article status."""
     if status not in VALID_ARTICLE_STATUSES:
-        raise ValueError(code="INVALID_ARTICLE_STATUS")
+        raise BadRequestError(code="INVALID_ARTICLE_STATUS")
 
 
 def require_commit_signing_key(signing_key, pubkey_hex: str | None,
                                 author_email: str) -> None:
     """Raise ValueError if a non-platform commit is missing signing material."""
     if not is_platform_commit(author_email) and (signing_key is None or not pubkey_hex):
-        raise ValueError(code="MISSING_SIGNING_KEY")
+        raise BadRequestError(code="MISSING_SIGNING_KEY")
 
 
 def require_signing_key_for_pubkey(signing_key, pubkey_hex: str | None) -> None:
     """Raise ValueError if *pubkey_hex* is provided without *signing_key*."""
     if pubkey_hex and not signing_key:
-        raise ValueError(code="MISSING_SIGNING_KEY")
+        raise BadRequestError(code="MISSING_SIGNING_KEY")
 
 
 def extract_pubkey_from_message(message: str) -> str | None:
@@ -79,7 +79,7 @@ def require_commit_pubkey_signature(repo_path: Path, commit_hash: str,
 def guard_not_empty(repo: git.Repo, *, allow_empty: bool) -> None:
     """Raise ValueError if the repo is clean and *allow_empty* is False."""
     if not allow_empty and not repo.is_dirty(untracked_files=True) and repo.head.is_valid():
-        raise ValueError(code="REPO_IS_CLEAN")
+        raise ValueError("REPO_IS_CLEAN")
 
 
 def require_article_repo(article_id: str) -> Path:

@@ -143,7 +143,7 @@ class TestAliasCrud:
         _make_user(db, "target")
         follow_user(db, "owner", "target")
 
-        with pytest.raises(ValueError, match="must not be empty"):
+        with pytest.raises(ValueError, match="ALIAS_EMPTY"):
             set_alias(db, "owner", "target", "  ")
 
     def test_set_and_get_alias(self, db):

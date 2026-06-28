@@ -9,8 +9,9 @@ import logging
 import threading
 import time
 
-from peerpedia_core.config.params import params
 from peerpedia_core.cli.bundle_utils import _TRANSPORT
+from peerpedia_core.cli.helpers import _log
+from peerpedia_core.config.params import params
 from peerpedia_core.storage.peers import get_known_peers, merge_peers
 
 _logger = logging.getLogger(__name__)
@@ -56,18 +57,17 @@ def _start_discovery_thread(public_url: str) -> None:
             try:
                 n = merge_peers(_TRANSPORT, seed)
                 if n:
-                    _logger.info("Discovered %d peer(s) from seed %s", n, seed)
+                    _log("L_DISCOVERED_PEERS", level="info", count=n, seed=seed)
             except Exception as e:
-                _logger.debug("Seed peer %s unreachable: %s", seed, e)
+                _log("L_SEED_UNREACHABLE", level="debug", seed=seed, error=e)
 
-        # Step 2: announce this server to all known peers.
         peers = get_known_peers()
         for peer in peers:
             try:
                 _TRANSPORT.push_peer_registration(peer, public_url)
-                _logger.debug("Registered with peer %s", peer)
+                _log("L_REGISTERED_PEER", level="debug", peer=peer)
             except Exception as e:
-                _logger.debug("Peer registration to %s failed: %s", peer, e)
+                _log("L_PEER_REG_FAILED", level="debug", peer=peer, error=e)
 
     t = threading.Thread(target=_discover, daemon=True)
     t.start()

@@ -6,11 +6,11 @@
 Every handler calls ONE commands function and returns the result as JSON.
 All routes require auth (Ed25519 signature via ``AuthMiddleware``)::
 
-    GET  /api/v1/users/{id}/following  → _following    who this user follows
-    GET  /api/v1/users/{id}/followers  → _followers    who follows this user
-    GET  /api/v1/users/{id}/articles   → _articles     articles by this user
-    POST /api/v1/users/{id}/follow     → _follow       follow a user
-    POST /api/v1/users/{id}/unfollow   → _unfollow     unfollow a user
+    GET    /api/v1/users/{id}/following  → _following    who this user follows
+    GET    /api/v1/users/{id}/followers  → _followers    who follows this user
+    GET    /api/v1/users/{id}/articles   → _articles     articles by this user
+    POST   /api/v1/users/{id}/follow     → _follow       follow a user
+    DELETE /api/v1/users/{id}/follow     → _follow       unfollow a user
 """
 
 from starlette.requests import Request

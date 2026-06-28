@@ -53,6 +53,19 @@ from peerpedia_core.core.articles import (
     update_article_content,
 )
 
+
+def search_articles(db, query: str) -> list:
+    """Fuzzy-search articles by partial title, author, or ID prefix."""
+    return list_articles(db, search_query=query)
+
+
+def merge_article_meta(db, entries: list[dict]) -> int:
+    """Merge article metadata from a peer into the local DB."""
+    from peerpedia_core.storage.db.ingest import ingest_articles
+    from peerpedia_core.types.entities import ArticleMetaExchange
+    return ingest_articles(db, [ArticleMetaExchange.from_json(e) for e in entries])
+
+
 # ── Reviews ──────────────────────────────────────────────────────────────────
 
 from peerpedia_core.core.reviews import (

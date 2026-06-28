@@ -14,6 +14,8 @@ PeerpediaError (base)       ``code: str``  ``detail: str``  ``context: dict``
   ├── NotFoundError          resource_type, resource_id
   ├── NotAuthorizedError     permission, resource_type, resource_id
   ├── ConflictError          conflicting_entity
+  ├── MergeConflictError     merge-specific conflict (can't auto-resolve)
+  ├── AmbiguousError         exact ID match returned multiple records
   ├── BadRequestError        field, bad_value
   ├── SignatureVerificationError  reason, pubkey
   ├── TransportError         server, status_code
@@ -105,6 +107,26 @@ class MergeConflictError(ConflictError):
     ``bundle/git_bundle`` so callers can catch a single type regardless of
     which layer raises it.
     """
+
+
+class AmbiguousError(PeerpediaError):
+    """Exact ID lookup returned multiple records — data integrity violation.
+
+    This is NOT for fuzzy-search ambiguity (which is normal).  It signals
+    that the database contains duplicate records for what should be a unique
+    identifier, or that a UUID prefix matches too many records.
+
+    Optional context keys:
+        resource_type:  e.g. ``"article"``, ``"user"``
+        candidates:     List of matching IDs (truncated).
+    """
+
+    code = "AMBIGUOUS"
+
+    def __init__(self, detail: str, resource_type: str = "",
+                 candidates: list[str] | None = None):
+        super().__init__(detail, resource_type=resource_type,
+                         candidates=candidates or [])
 
 
 class BadRequestError(PeerpediaError):

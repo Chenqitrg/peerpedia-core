@@ -125,6 +125,7 @@ from peerpedia_core.core.views import (
 
 # ── Discovery (P2P) ──────────────────────────────────────────────────────────
 
+from peerpedia_core.core.sync_batch import sync_all, sync_all_peers, sync_one
 from peerpedia_core.core.sync_social import (
     discover_articles, discover_followers, discover_following,
     discover_network, discover_notifications, discover_shares,

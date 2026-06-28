@@ -31,6 +31,9 @@ from peerpedia_core.storage.db.crud_user import (
     update_user_public_key as _update_pubkey,
     update_user_salt as _update_salt,
 )
+from peerpedia_core.exceptions import BadRequestError
+from datetime import datetime, timezone
+from peerpedia_core.crypto import derive_key_pair
 
 
 def create_user(db: Session, *, name: str, public_key: str, affiliation: str = ""):
@@ -150,6 +153,30 @@ def reset_failed_login(db: Session, user_id: str) -> None:
 def soft_delete_user(db: Session, user_id: str) -> None:
     """Soft-delete a user account (GDPR right-to-erasure)."""
     _soft_delete(db, user_id)
+
+
+# ── Composite auth guards ────────────────────────────────────────────────
+
+
+def require_authenticable_user(user) -> None:
+    """Raise if *user* cannot authenticate (no salt, or locked out)."""
+    if user.salt is None:
+        raise BadRequestError(code="VALIDATION_FAILED")
+    if user.locked_until is not None:
+        now = datetime.now(timezone.utc)
+        if user.locked_until > now:
+            remaining = int((user.locked_until - now).total_seconds())
+            raise BadRequestError(code="ACCOUNT_LOCKED",
+                                  minutes=max(1, remaining // 60))
+
+
+def verify_user_password(db: Session, user, password: str) -> None:
+    """Raise if password does not match.  Tracks failed-login attempts."""
+    _, pubkey_bytes = derive_key_pair(password, user.salt)
+    if pubkey_bytes.hex() != user.public_key:
+        increment_failed_login(db, user.id)
+        raise BadRequestError(code="AUTH_FAILED")
+    reset_failed_login(db, user.id)
 
 
 def find_users(db: Session, ref: str, *, limit: int = 20) -> list[UserStorage]:

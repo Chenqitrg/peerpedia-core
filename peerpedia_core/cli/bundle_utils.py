@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""Auto-bundle helpers — thin CLI wrappers over ``core/sync_batch.py``.
+"""Auto-bundle helpers — thin CLI wrappers over ``app/commands/sync.py``.
 
 Only maps errors to ``_out`` codes.  All sync logic lives in ``core/``.
 """
@@ -10,12 +10,10 @@ from __future__ import annotations
 
 import os
 
-from peerpedia_core.cli.helpers import _out, _get_session_user
-from peerpedia_core.config.paths import DATA_ROOT
-from peerpedia_core.core.sync_batch import (
-    sync_all as _core_sync_all,
-    sync_all_peers as _core_sync_all_peers,
-)
+from peerpedia_core.cli.helpers import _get_session_user
+from peerpedia_core.cli.output import _die, _out
+from peerpedia_core.config.paths import SERVER_DEFAULT_FILE
+from peerpedia_core.app.commands.sync import sync_all as _core_sync_all, sync_all_peers as _core_sync_all_peers
 from peerpedia_core.exceptions import ConflictError, ProtocolError, TransportError
 from peerpedia_core.time import validate_clock_skew
 from peerpedia_core.transport import Transport
@@ -44,7 +42,6 @@ def _require_online_server(args) -> str:
 
 
 def _die_clockskew(err: str, server: str):
-    from peerpedia_core.cli.helpers import _die
     _die(f"{err} with {server}. Fix your system clock before syncing — "
          "commit timestamps would be unreliable for priority claims.",
          code="BAD_REQUEST")
@@ -84,7 +81,7 @@ def _try_sync(db, server: str | None = None) -> None:
     srv = _resolve_or_skip(server)
     if not srv:
         return
-    from peerpedia_core.core.sync_batch import sync_and_discover
+    from peerpedia_core.app.commands.sync import sync_and_discover
     sync_and_discover(
         db, _TRANSPORT, srv, user_id=_get_session_user(), pre_check=False,
         on_synced=lambda n: _out(None, "S_SYNCED_COUNT", count=n, server=srv),
@@ -109,7 +106,6 @@ def _try_sync_all(db) -> None:
 
 # ── Server URL resolution ────────────────────────────────────────────────────
 
-_default_file = DATA_ROOT / "server_default"
 
 
 def _resolve_server_url(args) -> str:
@@ -128,10 +124,10 @@ def _resolve_server_url(args) -> str:
 def _read_saved_server() -> str | None:
     """Read default URL from disk, or None if missing/unreadable."""
     try:
-        if _default_file.is_file():
-            return _default_file.read_text().strip()
+        if SERVER_DEFAULT_FILE.is_file():
+            return SERVER_DEFAULT_FILE.read_text().strip()
     except OSError as e:
-        _out(None, "CONFIG_ERROR", path=str(_default_file), error=str(e))
+        _out(None, "CONFIG_ERROR", path=str(SERVER_DEFAULT_FILE), error=str(e))
     return None
 
 
@@ -146,13 +142,13 @@ def _check_stale_server(url: str) -> None:
     _stale_counter[url] = _stale_counter.get(url, 0) + 1
     if _stale_counter[url] == 3:
         _out(None, "S_STALE_SERVER", server=url)
-        _out(None, "S_STALE_SERVER_HINT", path=str(_default_file))
+        _out(None, "S_STALE_SERVER_HINT", path=str(SERVER_DEFAULT_FILE))
 
 
 def _save_default_server(url: str) -> None:
     """Persist *url* as the default server for future commands."""
     try:
-        DATA_ROOT.mkdir(parents=True, exist_ok=True)
-        _default_file.write_text(url)
+        SERVER_DEFAULT_FILE.parent.mkdir(parents=True, exist_ok=True)
+        SERVER_DEFAULT_FILE.write_text(url)
     except OSError as e:
-        _out(None, "S_CANNOT_SAVE", path=str(DATA_ROOT), error=str(e))
+        _out(None, "S_CANNOT_SAVE", path=str(SERVER_DEFAULT_FILE.parent), error=str(e))

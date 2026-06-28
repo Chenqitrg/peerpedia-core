@@ -1,0 +1,50 @@
+[
+  {
+    "file": "/Users/chenqimeng/Projects/peerpedia-core/peerpedia_core/social/exchange.py",
+    "line": 211,
+    "summary": "Outer try/except around _try_fetch_with_fallback catches ConnectionError and ProtocolError that can never fire. _try_fetch_with_fallback catches TransportError and ProtocolError internally and returns None. fetch_following calls _signed_get which wraps httpx.HTTPError in TransportError — so builtins.ConnectionError never escapes either.",
+    "failure_scenario": "A maintainer adding a new exception path to _try_fetch_with_fallback (e.g. raising on auth failure) would think the outer catch provides safety, but the inner function swallows everything already. Conversely, removing the outer try/except changes nothing — it's misleading dead scaffolding."
+  },
+  {
+    "file": "/Users/chenqimeng/Projects/peerpedia-core/peerpedia_core/social/exchange.py",
+    "line": 268,
+    "summary": "Parameter `label` is accepted by _try_fetch_with_fallback but never referenced in the function body. All debug log messages use `user_id` directly. The caller passes `\"following\"` and all four test callers pass `\"test\"` — all wasted.",
+    "failure_scenario": "The label creates the impression it is used for diagnostics, so a future maintainer might add it to log messages thinking they are completing a partially-implemented feature. Meanwhile, if the parameter is ever actually used, all callers must be updated. It spreads noise without value."
+  },
+  {
+    "file": "/Users/chenqimeng/Projects/peerpedia-core/peerpedia_core/social/exchange.py",
+    "line": 285,
+    "summary": "Status code check (`status not in (401, 403)`) determines only whether a debug log is printed — the function falls through to auth retry for ALL TransportError statuses. The comment implies a branching decision but there is none.",
+    "failure_scenario": "A future reader changing error handling will assume the if/else has semantic meaning (e.g. skipping auth retry for 5xx errors). They would need to trace the full fall-through to discover the check is log-only. If they add a `return None` inside the `if` branch for non-401/403, they break the auth-fallback contract silently."
+  },
+  {
+    "file": "/Users/chenqimeng/Projects/peerpedia-core/peerpedia_core/social/exchange.py",
+    "line": 240,
+    "summary": "Nearly identical try/except blocks for discover_articles and for fetch_following: both catch (ConnectionError, ProtocolError) and log at debug. Only the label in the log message differs.",
+    "failure_scenario": "If error handling changes for one (e.g. raising on certain statuses, incrementing a counter, or rethrowing for the caller to handle), the update must be mirrored in the other. This is a classic copy-paste drift hazard."
+  },
+  {
+    "file": "/Users/chenqimeng/Projects/peerpedia-core/peerpedia_core/social/exchange.py",
+    "line": 207,
+    "summary": "max_users is checked in two places: before the fetch_following call (early exit optimization) and inside the inner for loop (enforcement). The outer check is redundant with the inner one.",
+    "failure_scenario": "If the inner check is moved or modified (e.g. changing the increment logic or cap condition), the outer check becomes inconsistent. It may either skip too early (missing the last batch of users) or let too many through."
+  },
+  {
+    "file": "/Users/chenqimeng/Projects/peerpedia-core/peerpedia_core/social/exchange.py",
+    "line": 198,
+    "summary": "`auth_kwargs` intermediate dict built once via _auth_args(), then immediately destructured via ** at the single call site. The variable is referenced exactly once.",
+    "failure_scenario": "When adding a second authenticated call inside discover_network (e.g. fetching followers too), a maintainer might reuse auth_kwargs not realizing it's a snapshot dict. Or they might add auth logic that mutates auth_kwargs, breaking _try_fetch_with_fallback. Inlining removes the indirection risk."
+  },
+  {
+    "file": "/Users/chenqimeng/Projects/peerpedia-core/peerpedia_core/social/exchange.py",
+    "line": 202,
+    "summary": "`depth_reached` accumulates max(current_depth) at pop time — BEFORE the `if current_depth >= depth: continue` guard. This means it records the depth of items that are immediately skipped (never processed). The metric label says \"depth_reached\" but the actual semantics are \"deepest level ever enqueued,\" not \"deepest level processed.\"",
+    "failure_scenario": "A maintainer refactoring the BFS loop (e.g. to post-filter instead of pre-filter) might move the depth_reached assignment after the continue guard, silently changing the metric without realizing the caller relies on it including skipped depths. Conversely, a caller interpreting \"depth_reached: 2\" when depth=2 assumes level 2 was processed, but it was not."
+  },
+  {
+    "file": "/Users/chenqimeng/Projects/peerpedia-core/peerpedia_core/social/exchange.py",
+    "line": 230,
+    "summary": "Inner for loop body is 4 levels deep (while → try → for → try) with 5 guards/operations before the actual article discovery: skip-if-visited, mark-visited, increment-users, check-max-users, enqueue-next. The actual logic (discover_articles) is buried in the middle.",
+    "failure_scenario": "Adding new per-user logic (e.g. fetching shares or followers) means modifying the loop body and re-evaluating all 5 guards. The complexity makes it easy to misplace an operation relative to the guards — e.g. incrementing users_discovered after the max_users check, creating an off-by-one."
+  }
+]

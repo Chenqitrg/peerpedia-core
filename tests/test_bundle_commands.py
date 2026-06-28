@@ -14,19 +14,17 @@ from unittest.mock import patch
 import pytest
 from sqlalchemy.orm import Session
 
-from peerpedia_core.commands.bundle import (
-    apply_sync_bundle,
-    sync_reviews_from_worktree,
-    sync_status_from_git,
-)
+from peerpedia_core.core.bundle import apply_sync_bundle
+from peerpedia_core.core.integrity import sync_reviews_from_worktree, sync_status_from_git
+from peerpedia_core.exceptions import NotFoundError
 from peerpedia_core.types.status import parse_status_tag
 from peerpedia_core.storage.db.crud_article import create_article, get_article
 from peerpedia_core.storage.db.crud_maintainer import add_maintainer
 from peerpedia_core.storage.db.crud_review import get_reviews_for_article
 from peerpedia_core.storage.db.engine import get_session
 from peerpedia_core.storage.db.models import User
-import peerpedia_core.storage.git_backend as git_backend
-from peerpedia_core.storage.git_backend import (
+import peerpedia_core.storage.git as git_backend
+from peerpedia_core.storage.git import (
     DEFAULT_ARTICLES_DIR,
     commit_article,
     init_article_repo,
@@ -137,17 +135,17 @@ def articles_dir():
     """Temporary directory for article repos — isolates tests from each other."""
     with tempfile.TemporaryDirectory() as tmp:
         patch_modules = [
-            "peerpedia_core.storage.git_backend",
-            "peerpedia_core.commands.bundle",
-            "peerpedia_core.commands.articles",
-            "peerpedia_core.commands.articles.create",
-            "peerpedia_core.commands.articles.delete",
-            "peerpedia_core.commands.articles.fork",
-            "peerpedia_core.commands.articles.publish",
-            "peerpedia_core.commands.articles.rollback",
-            "peerpedia_core.commands.articles._helpers",
-            "peerpedia_core.commands.reviews",
-            "peerpedia_core.commands.workflow",
+            "peerpedia_core.storage.git",
+            "peerpedia_core.core.bundle",
+            "peerpedia_core.core.articles",
+            "peerpedia_core.core.articles.create",
+            "peerpedia_core.core.articles.delete",
+            "peerpedia_core.core.articles.fork",
+            "peerpedia_core.core.articles.publish",
+            "peerpedia_core.core.articles.rollback",
+            "peerpedia_core.core.articles._helpers",
+            "peerpedia_core.core.reviews",
+            "peerpedia_core.core.workflow",
         ]
         patches = [patch(f"{m}.DEFAULT_ARTICLES_DIR", Path(tmp)) for m in patch_modules]
         for p in patches:
@@ -275,7 +273,7 @@ class TestGitSyncReviews:
         (review_dir / "threads" / "note.md").write_text("placeholder")
         commit_article_signed(rp, "Add review dir", "Ghost", "ghost@peerpedia")
 
-        with pytest.raises(FileNotFoundError, match="scores.json"):
+        with pytest.raises(NotFoundError, match="scores.json"):
             sync_reviews_from_worktree(db, "art-3")
 
 
@@ -341,7 +339,7 @@ class TestGitSyncStatus:
         assert art.status == "sedimentation"
 
     def test_article_not_found_raises(self, db):
-        with pytest.raises(FileNotFoundError, match="Article not found"):
+        with pytest.raises(NotFoundError, match="Article not found"):
             sync_status_from_git(db, "nonexistent")
 
     def test_repo_not_found_raises(self, db, articles_dir):
@@ -351,7 +349,7 @@ class TestGitSyncStatus:
         add_maintainer(db, "art-no-repo", "alice")
         db.flush()
 
-        with pytest.raises(FileNotFoundError, match="Git repo not found"):
+        with pytest.raises(NotFoundError, match="Article repo not found"):
             sync_status_from_git(db, "art-no-repo")
 
 
@@ -430,7 +428,7 @@ class TestApplySyncBundle:
         )
         repo.git.fetch(str(remote_dir), "refs/heads/main")
 
-        from peerpedia_core.storage.git_backend import MergeConflictError
+        from peerpedia_core.storage.git import MergeConflictError
 
         with pytest.raises(MergeConflictError, match="Merge failed"):
             apply_sync_bundle(db, "art-conflict-1", ff_only=True)
@@ -448,7 +446,7 @@ class TestPendingQueuePreservation:
     def test_pop_pending_after_commit_not_before(self, db, monkeypatch):
         """Queue entries survive a MergeConflictError on a later article."""
         from peerpedia_core.bundle.pending import add, clear, list_all, remove
-        from peerpedia_core.storage.git_backend import MergeConflictError
+        from peerpedia_core.storage.git import MergeConflictError
 
         # Start clean — other tests may have left queue entries.
         clear()

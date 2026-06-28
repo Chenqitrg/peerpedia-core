@@ -1,14 +1,17 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""Tests for commands/discover.py merge functions + sync/discovery.py."""
+"""Tests for commands/discover.py ingest/sync functions + sync/discovery.py."""
 
 from unittest.mock import patch
 
 import pytest
 from sqlalchemy.orm import Session
 
-from peerpedia_core.commands.discover import merge_article_meta, merge_followers, merge_follows, merge_users
+from peerpedia_core.core.discover import (
+    ingest_articles, ingest_followers, ingest_following, ingest_users,
+    sync_followers, sync_following,
+)
 from peerpedia_core.exceptions import ProtocolError, TransportError
 from peerpedia_core.storage.db.crud_article import create_article, get_article
 from peerpedia_core.storage.db.crud_user import get_user, is_following
@@ -32,12 +35,12 @@ def _make_user(db: Session, uid: str, name: str):
     return u
 
 
-# ── merge_users ──────────────────────────────────────────────────────────────
+# ── ingest_users ────────────────────────────────────────────────────────────
 
 
-class TestMergeUsers:
+class TestIngestUsers:
     def test_adds_new_user(self, db):
-        n = merge_users(db, [{"id": "u1", "name": "Alice", "address": "http://a:8080"}])
+        n = ingest_users(db, [{"id": "u1", "name": "Alice", "address": "http://a:8080"}])
         assert n == 1
         u = get_user(db, "u1")
         assert u.name == "Alice"
@@ -49,173 +52,173 @@ class TestMergeUsers:
         get_user(db, "u1").address = "http://existing:8080"
         db.flush()
         with pytest.raises(ValueError, match="address conflict"):
-            merge_users(db, [{"id": "u1", "name": "Alice", "address": "http://a:8080"}])
+            ingest_users(db, [{"id": "u1", "name": "Alice", "address": "http://a:8080"}])
 
     def test_address_filled_for_existing_user_without_address(self, db):
         """Existing user without address + peer has address → no conflict, address stays empty."""
         _make_user(db, "u1", "Alice")
         # Old behavior: raised ValueError.  New behavior: address is optional,
         # and conflict is only checked when BOTH sides have a non-empty address.
-        n = merge_users(db, [{"id": "u1", "name": "Alice", "address": "http://n:8080"}])
+        n = ingest_users(db, [{"id": "u1", "name": "Alice", "address": "http://n:8080"}])
         assert n == 0  # existing user, skipped
 
     def test_skips_existing_user_with_same_address(self, db):
         _make_user(db, "u1", "Alice")
         get_user(db, "u1").address = "http://same:8080"
         db.flush()
-        n = merge_users(db, [{"id": "u1", "name": "Alice", "address": "http://same:8080"}])
+        n = ingest_users(db, [{"id": "u1", "name": "Alice", "address": "http://same:8080"}])
         assert n == 0
 
     def test_address_is_optional(self, db):
         """Address is optional — not all users run their own server."""
-        n = merge_users(db, [{"id": "u1", "name": "Alice"}])
+        n = ingest_users(db, [{"id": "u1", "name": "Alice"}])
         assert n == 1
         u = get_user(db, "u1")
         assert u.address == ""
 
     def test_empty_address_accepted(self, db):
         """Empty address is accepted (treated as no address)."""
-        n = merge_users(db, [{"id": "u1", "name": "Alice", "address": ""}])
+        n = ingest_users(db, [{"id": "u1", "name": "Alice", "address": ""}])
         assert n == 1
         u = get_user(db, "u1")
         assert u.address == ""
 
 
-# ── merge_follows ────────────────────────────────────────────────────────────
+# ── ingest_following / sync_following ────────────────────────────────────────
 
 
-class TestMergeFollows:
+class TestIngestFollowing:
     def test_adds_new_follow(self, db):
         _make_user(db, "alice", "Alice")
         _make_user(db, "bob", "Bob")
-        n = merge_follows(db, "alice", [{"id": "bob"}])
+        n = ingest_following(db, "alice", [{"id": "bob"}])
         assert n == 1
         assert is_following(db, "alice", "bob")
 
     def test_skips_duplicate(self, db):
         _make_user(db, "alice", "Alice")
         _make_user(db, "bob", "Bob")
-        merge_follows(db, "alice", [{"id": "bob"}])
-        n = merge_follows(db, "alice", [{"id": "bob"}])
+        ingest_following(db, "alice", [{"id": "bob"}])
+        n = ingest_following(db, "alice", [{"id": "bob"}])
         assert n == 0
 
     def test_raises_on_self_follow(self, db):
         _make_user(db, "alice", "Alice")
         with pytest.raises(ValueError, match="self-follow"):
-            merge_follows(db, "alice", [{"id": "alice"}])
+            ingest_following(db, "alice", [{"id": "alice"}])
 
     def test_mixed_new_and_existing(self, db):
         _make_user(db, "alice", "Alice")
         _make_user(db, "bob", "Bob")
         _make_user(db, "carol", "Carol")
-        merge_follows(db, "alice", [{"id": "bob"}])
-        n = merge_follows(db, "alice", [{"id": "bob"}, {"id": "carol"}])
+        ingest_following(db, "alice", [{"id": "bob"}])
+        n = ingest_following(db, "alice", [{"id": "bob"}, {"id": "carol"}])
         assert n == 1
         assert is_following(db, "alice", "carol")
 
-    def test_authoritative_deletes_missing(self, db):
-        """authoritative=True soft-deletes local follows not in remote list."""
+    def test_sync_deletes_missing(self, db):
+        """sync_following soft-deletes local follows not in remote list."""
         _make_user(db, "alice", "Alice")
         _make_user(db, "bob", "Bob")
         _make_user(db, "carol", "Carol")
         _make_user(db, "dave", "Dave")
         # Local: alice follows bob, carol, dave
-        merge_follows(db, "alice", [{"id": "bob"}, {"id": "carol"}, {"id": "dave"}])
+        ingest_following(db, "alice", [{"id": "bob"}, {"id": "carol"}, {"id": "dave"}])
 
         # Authoritative pull: remote only has bob and carol — dave is gone.
-        merge_follows(db, "alice", [{"id": "bob"}, {"id": "carol"}], authoritative=True)
+        sync_following(db, "alice", [{"id": "bob"}, {"id": "carol"}])
 
         assert is_following(db, "alice", "bob")
         assert is_following(db, "alice", "carol")
         assert not is_following(db, "alice", "dave"), "dave should be soft-deleted"
 
-    def test_non_authoritative_only_adds(self, db):
-        """authoritative=False never deletes local follows."""
+    def test_ingest_only_adds(self, db):
+        """ingest_following never deletes local follows."""
         _make_user(db, "alice", "Alice")
         _make_user(db, "bob", "Bob")
         _make_user(db, "carol", "Carol")
         # Local: alice follows bob
-        merge_follows(db, "alice", [{"id": "bob"}])
+        ingest_following(db, "alice", [{"id": "bob"}])
 
         # Non-authoritative pull: remote has carol but NOT bob.
-        merge_follows(db, "alice", [{"id": "carol"}], authoritative=False)
+        ingest_following(db, "alice", [{"id": "carol"}])
 
         assert is_following(db, "alice", "bob"), "bob should still be followed"
         assert is_following(db, "alice", "carol"), "carol should be added"
 
 
-# ── merge_followers ──────────────────────────────────────────────────────────
+# ── ingest_followers / sync_followers ────────────────────────────────────────
 
 
-class TestMergeFollowers:
-    """Mirrors TestMergeFollows for the reverse direction (who follows me)."""
+class TestIngestFollowers:
+    """Mirrors TestIngestFollowing for the reverse direction (who follows me)."""
 
     def test_adds_new_follower(self, db):
         _make_user(db, "alice", "Alice")
         _make_user(db, "bob", "Bob")
-        n = merge_followers(db, "bob", [{"id": "alice"}])
+        n = ingest_followers(db, "bob", [{"id": "alice"}])
         assert n == 1
         assert is_following(db, "alice", "bob")
 
     def test_skips_duplicate(self, db):
         _make_user(db, "alice", "Alice")
         _make_user(db, "bob", "Bob")
-        merge_followers(db, "bob", [{"id": "alice"}])
-        n = merge_followers(db, "bob", [{"id": "alice"}])
+        ingest_followers(db, "bob", [{"id": "alice"}])
+        n = ingest_followers(db, "bob", [{"id": "alice"}])
         assert n == 0
 
     def test_raises_on_self_follow(self, db):
         _make_user(db, "alice", "Alice")
         with pytest.raises(ValueError, match="self-follow"):
-            merge_followers(db, "alice", [{"id": "alice"}])
+            ingest_followers(db, "alice", [{"id": "alice"}])
 
     def test_mixed_new_and_existing(self, db):
         _make_user(db, "alice", "Alice")
         _make_user(db, "bob", "Bob")
         _make_user(db, "carol", "Carol")
-        merge_followers(db, "carol", [{"id": "alice"}])
-        n = merge_followers(db, "carol", [{"id": "alice"}, {"id": "bob"}])
+        ingest_followers(db, "carol", [{"id": "alice"}])
+        n = ingest_followers(db, "carol", [{"id": "alice"}, {"id": "bob"}])
         assert n == 1
         assert is_following(db, "bob", "carol")
 
-    def test_authoritative_deletes_missing(self, db):
-        """authoritative=True soft-deletes local followers not in remote list."""
+    def test_sync_deletes_missing(self, db):
+        """sync_followers soft-deletes local followers not in remote list."""
         _make_user(db, "alice", "Alice")
         _make_user(db, "bob", "Bob")
         _make_user(db, "carol", "Carol")
         _make_user(db, "dave", "Dave")
         # Local: alice, bob, dave all follow carol
-        merge_followers(db, "carol", [{"id": "alice"}, {"id": "bob"}, {"id": "dave"}])
+        ingest_followers(db, "carol", [{"id": "alice"}, {"id": "bob"}, {"id": "dave"}])
 
         # Authoritative pull: remote only has alice and bob — dave unfollowed.
-        merge_followers(db, "carol", [{"id": "alice"}, {"id": "bob"}], authoritative=True)
+        sync_followers(db, "carol", [{"id": "alice"}, {"id": "bob"}])
 
         assert is_following(db, "alice", "carol")
         assert is_following(db, "bob", "carol")
         assert not is_following(db, "dave", "carol"), "dave should be soft-deleted"
 
-    def test_non_authoritative_only_adds(self, db):
-        """authoritative=False never deletes local followers."""
+    def test_ingest_only_adds(self, db):
+        """ingest_followers never deletes local followers."""
         _make_user(db, "alice", "Alice")
         _make_user(db, "bob", "Bob")
         _make_user(db, "carol", "Carol")
         # Local: alice follows carol
-        merge_followers(db, "carol", [{"id": "alice"}])
+        ingest_followers(db, "carol", [{"id": "alice"}])
 
         # Non-authoritative pull: remote has bob but NOT alice.
-        merge_followers(db, "carol", [{"id": "bob"}], authoritative=False)
+        ingest_followers(db, "carol", [{"id": "bob"}])
 
         assert is_following(db, "alice", "carol"), "alice should still be a follower"
         assert is_following(db, "bob", "carol"), "bob should be added"
 
 
-# ── merge_article_meta ───────────────────────────────────────────────────────
+# ── ingest_articles ─────────────────────────────────────────────────────────
 
 
-class TestMergeArticleMeta:
+class TestIngestArticles:
     def test_adds_new_article(self, db):
         _make_user(db, "alice", "Alice")
-        n = merge_article_meta(db, [
+        n = ingest_articles(db, [
             {"id": "art-1", "title": "Paper", "status": "published"}
         ])
         assert n == 1
@@ -227,12 +230,12 @@ class TestMergeArticleMeta:
         _make_user(db, "alice", "Alice")
         create_article(db, id="art-1", title="Paper", authors=[], status="published")
         db.flush()
-        n = merge_article_meta(db, [{"id": "art-1", "title": "Paper", "status": "published"}])
+        n = ingest_articles(db, [{"id": "art-1", "title": "Paper", "status": "published"}])
         assert n == 0
 
     def test_raises_on_missing_status(self, db):
         with pytest.raises(ValueError, match="missing 'status'"):
-            merge_article_meta(db, [{"id": "art-1", "title": "Paper"}])
+            ingest_articles(db, [{"id": "art-1", "title": "Paper"}])
 
 
 # ── discover_* — orchestration with mocked transport ─────────────────────────
@@ -465,66 +468,84 @@ class TestDiscoverNetwork:
             from peerpedia_core.social.exchange import discover_network
             result = discover_network(db, "http://peer:8080", "alice")
             assert set(result.keys()) == {"users_discovered", "articles_discovered",
-                                          "follows_added", "depth_reached"}
+                                          "follows_added", "depth_reached", "errors"}
+            assert result["errors"] == []
 
 
-# ── _try_fetch_with_fallback ────────────────────────────────────────────────
+# ── _fetch_with_auth_fallback ────────────────────────────────────────────────
 
 
-class TestTryFetchWithFallback:
+class TestFetchWithAuthFallback:
     """Auth fallback: unauthenticated → Ed25519 on 401/403."""
 
     def test_returns_data_without_auth(self):
         """Successful unauthenticated fetch returns data immediately."""
         expected = [{"id": "u1"}]
         fetch_fn = lambda s, uid, **kw: expected
-        from peerpedia_core.social.exchange import _try_fetch_with_fallback
-        result = _try_fetch_with_fallback(fetch_fn, "http://s", "u1", "test")
+        from peerpedia_core.transport._http_core import _fetch_with_auth_fallback
+        result = _fetch_with_auth_fallback(fetch_fn, "http://s", "u1")
         assert result == expected
 
     def test_retries_with_auth_on_401(self):
-        """401 triggers Ed25519 auth retry."""
-        from peerpedia_core.exceptions import TransportError
+        """401 ProtocolError triggers Ed25519 auth retry."""
+        from peerpedia_core.exceptions import ProtocolError
 
         call_count = [0]
 
         def fetch_fn(server, user_id, **kw):
             call_count[0] += 1
             if "private_key_bytes" not in kw:
-                raise TransportError("unauthorized", status_code=401)
+                raise ProtocolError("unauthorized", status_code=401)
             return [{"id": "u1"}]
 
-        from peerpedia_core.social.exchange import _try_fetch_with_fallback
-        result = _try_fetch_with_fallback(
-            fetch_fn, "http://s", "u1", "test",
+        from peerpedia_core.transport._http_core import _fetch_with_auth_fallback
+        result = _fetch_with_auth_fallback(
+            fetch_fn, "http://s", "u1",
             private_key_bytes=b"\x00" * 32,
             pubkey_hex="00" * 32,
         )
         assert result == [{"id": "u1"}]
         assert call_count[0] == 2
 
-    def test_returns_none_when_both_fail(self):
-        """Both unauthenticated and auth fetch fail → None."""
+    def test_returns_none_on_transport_error(self):
+        """TransportError (network failure) → None (no auth retry)."""
         from peerpedia_core.exceptions import TransportError
 
         def fetch_fn(server, user_id, **kw):
-            raise TransportError("down", status_code=500)
+            raise TransportError("down")
 
-        from peerpedia_core.social.exchange import _try_fetch_with_fallback
-        result = _try_fetch_with_fallback(
-            fetch_fn, "http://s", "u1", "test",
+        from peerpedia_core.transport._http_core import _fetch_with_auth_fallback
+        result = _fetch_with_auth_fallback(
+            fetch_fn, "http://s", "u1",
             private_key_bytes=b"\x00" * 32,
             pubkey_hex="00" * 32,
         )
         assert result is None
 
-    def test_no_auth_kwargs_returns_none_on_failure(self):
-        """No auth kwargs available → returns None after first failure."""
-        from peerpedia_core.exceptions import TransportError
+    def test_returns_none_on_404(self):
+        """404 (None return) → None immediately (no auth retry)."""
+        call_count = [0]
 
         def fetch_fn(server, user_id, **kw):
-            raise TransportError("unauthorized", status_code=401)
+            call_count[0] += 1
+            return None
 
-        from peerpedia_core.social.exchange import _try_fetch_with_fallback
-        result = _try_fetch_with_fallback(fetch_fn, "http://s", "u1", "test")
+        from peerpedia_core.transport._http_core import _fetch_with_auth_fallback
+        result = _fetch_with_auth_fallback(
+            fetch_fn, "http://s", "u1",
+            private_key_bytes=b"\x00" * 32,
+            pubkey_hex="00" * 32,
+        )
+        assert result is None
+        assert call_count[0] == 1  # No retry — 404 isn't fixed by auth
+
+    def test_no_auth_kwargs_returns_none_on_failure(self):
+        """No auth kwargs available → returns None after first failure."""
+        from peerpedia_core.exceptions import ProtocolError
+
+        def fetch_fn(server, user_id, **kw):
+            raise ProtocolError("unauthorized", status_code=401)
+
+        from peerpedia_core.transport._http_core import _fetch_with_auth_fallback
+        result = _fetch_with_auth_fallback(fetch_fn, "http://s", "u1")
         assert result is None

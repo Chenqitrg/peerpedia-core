@@ -79,8 +79,9 @@ from peerpedia_core.core.users import (
     create_user, create_user_stub, find_users, follow_user,
     get_followers, get_following, get_top_users_by_followers,
     get_user, get_user_by_name, increment_failed_login, is_following,
-    list_users, reset_failed_login, search_users, soft_delete_user,
-    unfollow_user, update_user_public_key, update_user_salt,
+    list_users, require_authenticable_user, reset_failed_login,
+    search_users, soft_delete_user, unfollow_user, update_user_public_key,
+    update_user_salt, verify_user_password,
 )
 
 # ── Maintainers ──────────────────────────────────────────────────────────────
@@ -125,7 +126,7 @@ from peerpedia_core.core.views import (
 
 # ── Discovery (P2P) ──────────────────────────────────────────────────────────
 
-from peerpedia_core.core.sync_batch import sync_all, sync_all_peers, sync_one
+from peerpedia_core.app.commands.sync import sync_all, sync_all_peers, sync_one
 from peerpedia_core.core.sync_social import (
     discover_articles, discover_followers, discover_following,
     discover_network, discover_notifications, discover_shares,

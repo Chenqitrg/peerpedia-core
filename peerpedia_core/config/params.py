@@ -170,6 +170,10 @@ class ServerParams:
     db_skip_suffixes: tuple[str, ...] = ("/head", "/bundle", "/repo")
     db_skip_contains: tuple[str, ...] = ("/ancestor/",)
 
+    # Login rate limiting — account lockout after repeated failures
+    max_failed_login_attempts: int = 5
+    login_lockout_minutes: int = 15
+
     # Auth — paths that don't require authentication
     auth_public_prefixes: tuple[str, ...] = ("/health", "/api/v1/school")
     auth_public_suffixes: tuple[str, ...] = (

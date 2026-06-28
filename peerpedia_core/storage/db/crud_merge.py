@@ -66,7 +66,7 @@ def get_merge_proposals_for_article(session: Session, article_id: str) -> list[M
 def _resolve(session: Session, proposal_id: str, new_status: str) -> MergeProposalStorage:
     mp = session.get(MergeProposalStorage, proposal_id)
     if mp is None:
-        raise ValueError(f"MergeProposal {proposal_id} not found")
+        raise ValueError("MERGE_PROPOSAL_NOT_FOUND")
     require_merge_proposal_open(mp)
     mp.status = new_status
     mp.resolved_at = datetime.now(timezone.utc)

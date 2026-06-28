@@ -74,7 +74,7 @@ def get_commit_history(
     repo = git.Repo(repo_path)
     assert_on_main(repo)
     if not repo.head.is_valid():
-        raise ValueError(f"Repo has no commits: {repo_path}")
+        raise ValueError(code="REPO_NO_COMMITS")
 
     rev = f"{since_hash}..HEAD" if since_hash else None
     return [
@@ -207,7 +207,7 @@ def get_head_hash(repo_path: Path) -> str:
     """Return HEAD hash.  Raises ValueError if no commits."""
     head = get_head_commit(repo_path)
     if head is None:
-        raise ValueError(f"Repo has no commits: {repo_path}")
+        raise ValueError(code="REPO_NO_COMMITS")
     return head["hash"]
 
 

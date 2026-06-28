@@ -84,3 +84,11 @@ REPL_HISTORY_FILE = DATA_ROOT / ".repl_history"
 # modern disk.  No central server, no LFS, no IPFS daemon.
 
 BLOBS_DIR = DATA_ROOT / "blobs"
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Peers / networking
+# ═══════════════════════════════════════════════════════════════════════════════
+
+PEERS_FILE = DATA_ROOT / "peers.json"
+SERVER_DEFAULT_FILE = DATA_ROOT / "server_default"
+HEALTH_CACHE_FILE = DATA_ROOT / "server_health.json"

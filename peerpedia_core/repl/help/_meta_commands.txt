@@ -1,0 +1,13 @@
+:help <command> :: Show detailed help with examples (e.g. :help create)
+:h <command> :: Same as :help, shorter
+:user <name> :: Focus on a researcher — auto-fills --user in commands
+:u <name> :: Same as :user, shorter
+:article <ref> :: Focus on a paper — auto-fills its ID
+:a <ref> :: Same as :article, shorter
+:write :: Guided paper creation wizard (interactive prompts)
+:feed :: Papers from researchers you follow
+:school :: Discover popular researchers (interactive leaderboard)
+:inbox :: Your notification inbox
+:theme light|dark :: Switch between light (parchment) and dark (ember)
+:compact :: Toggle between compact tables and rich panels
+:quit, :q :: Exit the REPL

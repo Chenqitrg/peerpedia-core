@@ -1,12 +1,7 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""REPL interactive browsing — full-screen article and user selection views.
-
-Architecture: all data access goes through ``cli.helpers`` — no direct
-``commands/`` or ``storage/`` imports.  All imports are at module level
-(no lazy imports needed — zero circular dependency).
-"""
+"""REPL interactive browsing — full-screen article and user selection views."""
 
 from __future__ import annotations
 
@@ -15,39 +10,52 @@ from prompt_toolkit.key_binding import KeyBindings
 from prompt_toolkit.layout import HSplit, Layout, Window
 from prompt_toolkit.layout.controls import FormattedTextControl
 
-from peerpedia_core.cli.display import _stars
-from peerpedia_core.cli.helpers import (
-    _get_article_head_hash, _get_session_user_id,
+import peerpedia_core.repl.state as _st
+from peerpedia_core.cli.display import _score_lines
+from peerpedia_core.app.context import read_session
+from peerpedia_core.core import (
+    get_head_hash as _get_article_head_hash,
     get_reviews_for_article, get_top_users_by_followers,
     get_user, get_users_by_ids, list_articles,
 )
 
+def _get_session_user_id() -> str:
+    """Return the current user ID from session, or '' if not logged in."""
+    s = read_session()
+    return s["user_id"] if s else ""
+from peerpedia_core.types import short_id
+
 from peerpedia_core.repl.state import (
-    _repl_compact, _repl_article_id, _repl_article_title, _repl_article_commit,
     console, repl_style,
 )
-from peerpedia_core.repl.typography import styled, title as _T_raw, status as _St_raw
-
-_T = styled(_T_raw)
-_St = styled(_St_raw)
 
 
-def _build_browser(title: str, render_fn, status_fn, kb):
+def _build_browser(title: str, render_fn, status_fn, kb,
+                   *, selected: list[int], lines_per_item: int = 1):
     """Build and run a full-screen prompt_toolkit Application.
 
-    Args:
-        title: Header text for the top bar.
-        render_fn: () → list of (style, text) tuples for the list area.
-        status_fn: () → str for the status bar.
-        kb: KeyBindings instance.
+    Renders ALL items in a ``FormattedTextControl`` — the ``Window``
+    handles clipping and scrolls natively when content overflows.
+    ``mouse_support=True`` on the ``Application`` means mouse wheel
+    scrolling works without any custom handler.
 
-    Returns the result of ``app.run()``.
+    *lines_per_item* maps ``selected[0]`` (card index) to the correct
+    scroll line offset: ``1`` for single-line cards, ``>1`` for multi-line.
     """
     header = Window(height=1, content=FormattedTextControl(
         [("class:prompt", f"▔▔▔ {title} " + "▔" * 50)]
     ))
-    list_view = Window(content=FormattedTextControl(render_fn), always_hide_cursor=True)
-    status_bar = Window(height=1, content=FormattedTextControl(status_fn), style="class:status-bar")
+
+    list_view = Window(
+        content=FormattedTextControl(
+            lambda: render_fn(),     # renders ALL items
+        ),
+        always_hide_cursor=True,
+        get_vertical_scroll=lambda win: selected[0] * lines_per_item,
+    )
+
+    status_bar = Window(height=1, content=FormattedTextControl(status_fn),
+                        style="class:status-bar")
     root = HSplit([header, list_view, Window(height=1), status_bar])
     app = Application(
         layout=Layout(root), key_bindings=kb,
@@ -56,17 +64,38 @@ def _build_browser(title: str, render_fn, status_fn, kb):
     return app.run()
 
 
+# ── Shared key-binding helpers ──────────────────────────────────────────────
+
+
+def _add_browser_nav_keys(kb: KeyBindings, selected: list[int], n: int) -> None:
+    """Register ↑/↓ navigation and q/Escape exit on *kb*.
+
+    ``selected[0]`` is mutated in-place so callers that wrap it in a
+    closure (e.g. ``selected = [0]``) see live updates after every keypress.
+    """
+    @kb.add("up")
+    def _(event):
+        selected[0] = (selected[0] - 1) % n
+
+    @kb.add("down")
+    def _(event):
+        selected[0] = (selected[0] + 1) % n
+
+    @kb.add("q")
+    @kb.add("escape")
+    def _(event):
+        event.app.exit(result=None)
+
+
 def _set_article_context(article):
     """Cache article context for prompt display."""
-    global _repl_article_id, _repl_article_title, _repl_article_commit
-    _repl_article_id = article.id
-    _repl_article_title = article.title
-    _repl_article_commit = _get_article_head_hash(article.id)
+    _st._repl_article_id = article.id
+    _st._repl_article_title = article.title
+    _st._repl_article_commit = _get_article_head_hash(article.id)
 
 
 def _browse_articles(db, viewer_id: str | None = None) -> str | None:
-    """Launch a full-screen article browser.  Returns the selected article ID
-    or 'action:id' string, or None if cancelled."""
+    """Full-screen article browser.  Returns article ID or 'action:id'.  """
     articles = list_articles(db)
     if not articles:
         console.print("[muted]No articles.[/]")
@@ -75,36 +104,39 @@ def _browse_articles(db, viewer_id: str | None = None) -> str | None:
     n = len(articles)
     selected = [0]
 
+    def _formatted_score(v: int) -> str:
+        """'★★★☆☆' for a single dimension (used in compact mode)."""
+        return f"{'★'*v}{'☆'*(5-v)}"
+
     def _render():
         lines = []
         for i, a in enumerate(articles):
             prefix = "▸" if i == selected[0] else " "
-            style_class = "class:selected" if i == selected[0] else ""
-            if _repl_compact:
-                star_val = f" {a.score['originality']:.0f}" if a.score and 'originality' in a.score else "—"
-                status_badge = _St(a.status[:4].upper()) if a.status else a.status
-                lines.append((style_class, f"{prefix} {a.id[:8]}  {_T(a.title[:45]):<45} {status_badge:<15} {star_val}\n"))
+            style = "class:selected" if i == selected[0] else ""
+            status = a.status[:4].upper() if a.status else "?"
+            star_lines = _score_lines(a.score)
+            if _st._repl_compact:
+                # One-line card: id + title-truncated + status + single-star
+                single = _formatted_score(int(a.score.get('originality', 0))) if a.score else "—"
+                lines.append((style, f"{prefix} {short_id(a.id)}  {a.title[:45]:<45} {status:<8} {single}\n"))
             else:
-                star = _stars(a.score) if a.score else "[muted]  —  [/]"
-                status_badge = _St(a.status[:4].upper()) if a.status else a.status
-                lines.append((style_class, f"{prefix} {a.id[:8]}  {_T(a.title):<40} {status_badge:<15} {star}\n"))
+                # Full card: header line + one line per score dimension
+                lines.append((style, f"{prefix} {short_id(a.id)}  {a.title}  {status}\n"))
+                for sl in star_lines:
+                    lines.append((style, f"          {sl}\n"))
+                # Blank separator between cards
+                lines.append(("", "\n"))
         return lines
 
     def _status_text():
         a = articles[selected[0]]
-        compact_mark = "[⊞]" if _repl_compact else ""
-        actions = "Enter:view p:publish e:edit r:review b:bookmark q:back"
+        compact_mark = "[⊞]" if _st._repl_compact else ""
+        actions = "Enter:view p:publish e:edit r:review b:bookmark q:back  ↑↓/wheel:scroll"
         return f" {compact_mark} {selected[0]+1}/{n}  ▸ {a.title[:45]}  │  {actions}"
 
     browse_kb = KeyBindings()
 
-    @browse_kb.add("up")
-    def _(event):
-        selected[0] = (selected[0] - 1) % n
-
-    @browse_kb.add("down")
-    def _(event):
-        selected[0] = (selected[0] + 1) % n
+    _add_browser_nav_keys(browse_kb, selected, n)
 
     @browse_kb.add("enter")
     def _(event):
@@ -127,16 +159,13 @@ def _browse_articles(db, viewer_id: str | None = None) -> str | None:
     def _(event):
         event.app.exit(result=f"bookmark:{articles[selected[0]].id}")
 
-    @browse_kb.add("q")
-    @browse_kb.add("escape")
-    def _(event):
-        event.app.exit(result=None)
-
-    return _build_browser("Articles", _render, _status_text, browse_kb)
+    article_lines = 1 if _st._repl_compact else 7  # title + 5 scores + blank
+    return _build_browser("Articles", _render, _status_text, browse_kb,
+                          selected=selected, lines_per_item=article_lines)
 
 
 def _browse_school(db) -> str | None:
-    """Launch an interactive user leaderboard.  Returns 'follow:<id>' or None."""
+    """Interactive user leaderboard.  Returns 'follow:<id>' or None."""
     users = get_top_users_by_followers(db, limit=20)
     if not users:
         console.print("[muted]No users found.[/]")
@@ -159,18 +188,12 @@ def _browse_school(db) -> str | None:
     def _status_text():
         u = users[selected[0]]
         if u.id == current_user_id:
-            return f" {selected[0]+1}/{n}  ▸ {u.name} (you)  │  q: back"
-        return f" {selected[0]+1}/{n}  ▸ {u.name}  │  Enter: follow  q: back"
+            return f" {selected[0]+1}/{n}  ▸ {u.name} (you)  │  q: back  ↑↓/wheel:scroll"
+        return f" {selected[0]+1}/{n}  ▸ {u.name}  │  Enter: follow  q: back  ↑↓/wheel:scroll"
 
     kb = KeyBindings()
 
-    @kb.add("up")
-    def _(event):
-        selected[0] = (selected[0] - 1) % n
-
-    @kb.add("down")
-    def _(event):
-        selected[0] = (selected[0] + 1) % n
+    _add_browser_nav_keys(kb, selected, n)
 
     @kb.add("enter")
     def _(event):
@@ -178,23 +201,17 @@ def _browse_school(db) -> str | None:
         if u.id != current_user_id:
             event.app.exit(result=f"follow:{u.id}")
 
-    @kb.add("q")
-    @kb.add("escape")
-    def _(event):
-        event.app.exit(result=None)
-
-    return _build_browser("School — Top Users", _render, _status_text, kb)
+    return _build_browser("School — Top Users", _render, _status_text, kb,
+                          selected=selected, lines_per_item=1)
 
 
 def _browse_reviews(db, article_id: str) -> str | None:
-    """Launch an interactive review viewer. Returns the selected reviewer ID
-    or 'reply:<id>' for reply action, or None if cancelled."""
+    """Interactive review viewer.  Returns reviewer ID or 'reply:<id>'."""
     reviews = get_reviews_for_article(db, article_id)
     if not reviews:
         console.print("[muted]No reviews yet.[/]")
         return None
 
-    # Batch-load reviewer names
     reviewer_ids = {r.reviewer_id for r in reviews if hasattr(r, 'reviewer_id')}
     users_by_id = {u.id: u for u in get_users_by_ids(db, reviewer_ids)} if reviewer_ids else {}
 
@@ -208,7 +225,7 @@ def _browse_reviews(db, article_id: str) -> str | None:
             style_class = "class:selected" if i == selected[0] else ""
             rid = r.reviewer_id if hasattr(r, 'reviewer_id') else "?"
             user = users_by_id.get(rid)
-            name = user.name if user else rid[:8]
+            name = user.name if user else short_id(rid)
             s = r.scores if hasattr(r, 'scores') and r.scores else {}
             avg = sum(s.values()) / len(s) if s else 0
             stars = "★" * int(avg) + "☆" * (5 - int(avg)) if avg else "  —  "
@@ -219,18 +236,12 @@ def _browse_reviews(db, article_id: str) -> str | None:
         r = reviews[selected[0]]
         rid = r.reviewer_id if hasattr(r, 'reviewer_id') else "?"
         user = users_by_id.get(rid)
-        name = user.name if user else rid[:8]
-        return f" {selected[0]+1}/{n}  ▸ {name}  │  Enter: view  r: reply  q: back"
+        name = user.name if user else short_id(rid)
+        return f" {selected[0]+1}/{n}  ▸ {name}  │  Enter: view  r: reply  q: back  ↑↓/wheel:scroll"
 
     kb = KeyBindings()
 
-    @kb.add("up")
-    def _(event):
-        selected[0] = (selected[0] - 1) % n
-
-    @kb.add("down")
-    def _(event):
-        selected[0] = (selected[0] + 1) % n
+    _add_browser_nav_keys(kb, selected, n)
 
     @kb.add("enter")
     def _(event):
@@ -244,9 +255,5 @@ def _browse_reviews(db, article_id: str) -> str | None:
         rid = r.reviewer_id if hasattr(r, 'reviewer_id') else ""
         event.app.exit(result=f"reply:{rid}")
 
-    @kb.add("q")
-    @kb.add("escape")
-    def _(event):
-        event.app.exit(result=None)
-
-    return _build_browser("Reviews", _render, _status_text, kb)
+    return _build_browser("Reviews", _render, _status_text, kb,
+                          selected=selected, lines_per_item=1)

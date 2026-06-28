@@ -18,7 +18,7 @@ def ingest_article(repo_path: Path, payload: dict[str, str]) -> str:
     try:
         return ingest_article_repo(repo_path, payload)
     except FileExistsError:
-        raise ConflictError(f"Article already exists locally: {repo_path.name}") from None
+        raise ConflictError(code="ARTICLE_ALREADY_EXISTS") from None
 
 
 def ingest_article_repo(repo_path: Path, payload: dict[str, str]) -> str:

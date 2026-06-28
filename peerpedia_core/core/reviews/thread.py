@@ -141,7 +141,7 @@ def _write_thread_message(
 
     lock = get_article_lock(article_id)
     if not lock.acquire(timeout=10):
-        raise ConflictError("Article busy — retry later")
+        raise ConflictError(code="ARTICLE_BUSY")
     try:
         # ── Write thread file ──────────────────────────────────────────────
         existing = sorted(threads_dir.glob("*.md"))

@@ -1,0 +1,11 @@
+[bold info]Welcome to PeerPedia REPL[/] — your interactive research terminal.
+[muted]Type a command and press [/][bold]Enter[/][muted] to run it.  Here is how to get started:[/]
+
+[accent]  register --name "Marie Curie"[/]     Create your identity
+[accent]  create --title "My Paper"[/]         Write a new paper
+[accent]  list[/]                              Browse all papers
+[accent]  show "quantum"[/]                    Find and read by title keyword
+[accent]  :help create[/]                      See detailed help with examples
+
+[muted]Run [/][info]:help <command>[/][muted] for detailed examples of any command.[/]
+[muted]Run [/][info]peerpedia --help[/][muted] for the full CLI command tree.[/]

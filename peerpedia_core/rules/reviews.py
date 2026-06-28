@@ -17,7 +17,7 @@ def assert_valid_review(scores: dict, comment: str | None = None, *, check_comme
     # ── Validate ───────────────────────────────────────────────────────────
     errors = _collect_review_errors(scores, comment, check_comment=check_comment)
     if errors:
-        raise BadRequestError("; ".join(errors))
+        raise BadRequestError(code="INVALID_REVIEW")
 
     # ── Normalize keys ─────────────────────────────────────────────────────
     normalize_score_keys(scores)
@@ -90,13 +90,13 @@ def guard_proposal_owner(mp, user_id: str) -> None:
     """Raise NotAuthorizedError if *user_id* is not the proposal owner."""
     from peerpedia_core.exceptions import NotAuthorizedError
     if mp.proposer_id != user_id:
-        raise NotAuthorizedError("Only the proposal creator can withdraw this proposal")
+        raise NotAuthorizedError(code="NOT_PROPOSAL_CREATOR")
 
 
 def require_signing_key_not_none(signing_key: bytes | None) -> None:
     """Raise ValueError if *signing_key* is None."""
     if signing_key is None:
-        raise ValueError("signing_key is required for anonymous review ID derivation")
+        raise ValueError(code="MISSING_SIGNING_KEY")
 
 
 def require_integrity_level(level: str) -> None:

@@ -37,6 +37,7 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
+from peerpedia_core.exceptions import NotFoundError
 from peerpedia_core.storage.db.models import ArticleMetaStorage, ReviewMetaStorage
 
 
@@ -62,7 +63,7 @@ def upsert_review(
         options=[load_only(ArticleMetaStorage.status)],
     )
     if article is None:
-        raise ValueError(f"Article {article_id} not found")
+        raise NotFoundError(code="ARTICLE_NOT_FOUND", resource_type="article", resource_id=article_id)
 
     existing = (
         session.query(ReviewMetaStorage)

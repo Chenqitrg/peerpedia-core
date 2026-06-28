@@ -5,6 +5,7 @@
 
 from sqlalchemy.orm import Session
 
+from peerpedia_core.exceptions import NotFoundError
 from peerpedia_core.storage.db.models import NotificationStorage
 
 
@@ -78,7 +79,7 @@ def mark_read(session: Session, notification_id: str) -> None:
     """Mark a notification as read.  Raises ValueError if not found."""
     n = session.get(NotificationStorage, notification_id)
     if n is None:
-        raise ValueError(f"Notification {notification_id} not found")
+        raise NotFoundError(code="NOTIFICATION_NOT_FOUND", resource_type="notification", resource_id=notification_id)
     if n.read == 0:
         n.read = 1
         session.flush()

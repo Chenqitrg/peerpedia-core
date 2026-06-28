@@ -16,7 +16,6 @@ Push back when a simpler approach exists.
 Stop when confused. Name what's unclear.
 If you code before thinking, you are IDOIT!
 
-
 ## Goal-Driven Execution
 Define success criteria. Loop until verified.
 Don't follow steps. Define success and iterate.
@@ -31,49 +30,79 @@ If you are not sure about my meaning, ASK.
 Do NOT pretend you have understood it.
 You are IDIOT if you do not ask me and do it brutally.
 
+## Read BEFORE grep-jumping
+1. Read the import block (first 40 lines) before editing any file.
+2. Read the full function, not just the target line.
+3. Check existing functions before adding new ones.
+4. No lazy imports. No new wrappers without checking.
 
 ## Architecture
 
 ```
-cli/          User commands — imports commands/ + transport/, never storage/
+cli/          User commands — imports core/ + transport/, never storage/
   ↓
-commands/     Business logic — ONLY layer that calls storage/db/crud_*
+core/         Orchestration — merges transport + storage (e.g. sync_article, discover)
   ↓
-storage/db/   SQLite (SQLAlchemy) — CRUD + models + engine
-storage/      Git backend (git_backend.py) — pure git, no DB
-
-transport/    HTTP client+server — ONLY layer importing httpx/starlette
-bundle/       Git bundle protocol — push/pull article repos (tar.gz, bundle)
-social/       Social graph exchange — follow/unfollow propagation via HTTP
+transport/    P2P protocol — Transport dataclass bundles HTTP callbacks
+  http/       HTTP implementation — ONLY layer importing httpx (_core.py)
+storage/      Git backend (git/) + DB (db/) + local files (peers.py)
+server/       HTTP server — Starlette routes + middleware. Imports core/, never transport/http/
+config/       Constants + tunable params (params.py)
 workflow/     Pure compute — scoring, reputation, sedimentation (no IO)
 ```
 
-### Import rules (enforced by tests/test_architecture.py)
-- `transport/http_client.py` + `transport/health.py` only: `import httpx`
-- `storage/git_backend.py` + `bundle/git_bundle.py` only: `import git`
-- `storage/db/` only: `import sqlalchemy`
-- `commands/` + `storage/db/` only: import from `storage/db/crud_*.py`
-- `bundle/client.py` + `bundle/server.py` + `bundle/__init__.py` only: import from `bundle/git_bundle.py`
-- Foundation modules (`config/`, `policies/`, `storage/`, `workflow/`, `types/`, `compiler.py`, `crypto.py`, `exceptions.py`, `frontmatter.py`, `repl.py`) must NOT import from `bundle/`, `social/`, `transport/`
+### Layer rules
+- `core/` imports `transport/` (protocol) + `storage/` (git, db).  Never imports `server/`.
+- `server/` imports `core/`.  Never imports `transport/http/` directly.
+- `transport/http/` imports `httpx`.  Only this directory touches HTTP primitives.
+- `storage/db/` imports `sqlalchemy`.  Only this directory touches SQLite.
+- Foundation (`config/`, `crypto.py`, `time.py`, `exceptions.py`, `types/`) import nothing from other layers.
+
+### CLI message system (cli/msgs.py)
+All user-facing output goes through a centralized registry with structured codes:
+```python
+_out(args, "REGISTERED", {"id": uid}, name="Alice")     # success → prints ✓, exits 0
+_out(args, "AUTH_FAILED")                                 # error → prints ✗, exits 1
+_out(None, "W_NO_KNOWN_PEERS")                           # notify → prints, continues
+_log("L_SYNC_FAILED", level="warning", server=s, error=e)  # log only
+```
+- `_out(args, code, data=None, /, **fmt)` — single entry point.  First 3 args are positional-only (/).
+- `_log(code, *, level="info", **fmt)` — for background/daemon code (no `args` object).
+- Every message has `kind` (SUCCESS/ERROR/NOTIFY/WARNING/INFO), `suggestion`, and `see_also` tuple.
+- Add new messages to `cli/msgs.py` `_REGISTRY` dict.  NEVER hardcode error/success strings in handlers.
+
+### CLI handler organization
+One file per domain concept, < 250 lines:
+- `account.py`, `login.py`, `register.py`, `bootstrap.py` — auth
+- `social.py` (follow/unfollow), `share.py`, `alias.py`, `bookmark.py`, `school.py` — social
+- `create.py`, `read.py`, `edit.py` — articles (CRUD)
+- `fork.py` — fork + merge
+- `bundle.py` — sync commands
+- `reviews.py`, `notifications.py`, `compile_.py`, `server.py` — misc
+
+### Server middleware order
+Request → RateLimit → AuditLog → DBSession → Auth → Route → ErrorHandler
+- DBSession skips git-only routes (head, bundle, repo, ancestor).
+- Auth skips public routes (school, following, followers, articles, shares).
+- Tuneable params in `config/params.py` → `ServerParams`.
 
 ### Naming conventions
-- `fetch_*` = HTTP GET from remote server → data or None
-- `push_*` = HTTP POST to remote server → None/True or raises
-- `pull_*` = download + store locally (git repo)
-- `discover_*` = fetch from peer + merge into local DB
-- `merge_*` = insert/update local DB from peer data (commands/discover.py)
+- `_cmd_*` = CLI command handler (registered in parser.py). `_` prefix = module-private.
+- `_out()` / `_log()` = unified output (cli/helpers.py).
+- `fetch_*` = HTTP GET from peer. `push_*` = HTTP POST to peer.
+- `discover_*` = fetch from peer + store locally. `reconcile_*` = git/DB → compute → write back.
 
 ### Auth
 Ed25519 key pairs (same as git commit signing). HTTP requests carry
 `Authorization: Peerpedia <uid>:<ts>:<body_sha256>:<sig>`. Server
-verifies against user's stored public key. ±30s replay window.
+verifies against stored public key (TOFU model). ±30s replay window.
 
-### Sync protocol (sync_article)
-1. `fetch_head` → server HEAD (404 → first-time upload)
+### Sync protocol (core/sync_article.py)
+1. `Transport.fetch_head` → server HEAD (404 → first-time upload)
 2. k-exponential probe `ancestor_probe` → find common ancestor
-3. `fetch_incremental_bundle` (server ahead) or `push_bundle` (local ahead)
-4. Server records `witnessed_at` timestamp for priority disputes
-5. Clock skew >30s → hard block (refuse sync)
+3. `fetch_bundle` (server ahead) or `push_bundle` (local ahead)
+4. Clock skew >30s → hard block (refuse sync)
 
 ### Key files
-commands/__init__.py  transport/http_server.py  bundle/client.py  storage/db/models.py
+core/sync_article.py  core/sync_social.py  transport/__init__.py  server/app.py
+cli/helpers.py  cli/msgs.py  config/params.py  storage/db/models.py

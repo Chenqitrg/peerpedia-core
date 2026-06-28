@@ -44,10 +44,10 @@ Reviewer's checklist
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from peerpedia_core.exceptions import NotFoundError
+from peerpedia_core.exceptions import BadRequestError, NotFoundError
 from peerpedia_core.storage.db.models import (
     ArticleMetaStorage, ArticleAuthorStorage, BookmarkStorage, CitationStorage, FollowStorage, MergeProposalStorage,
     ReviewMetaStorage, ScriptMaintainerStorage,
@@ -58,13 +58,24 @@ from peerpedia_core.storage.db.crud_user import create_user_stub
 
 
 def add_article_authors(session: Session, article_id: str, author_ids: list[str]) -> None:
-    """Insert ArticleAuthorStorage rows for an article."""
-    for pos, author_id in enumerate(author_ids):
+    """Append author rows for *article_id*, starting after the current max position.
+
+    Idempotent at the DB level — the unique constraint on
+    ``(article_id, author_id)`` prevents duplicates, so an author already
+    in the join table will raise ``IntegrityError``.  Callers that might
+    re-insert existing authors should deduplicate first (see
+    ``reconcile_authors`` in ``core/reconcile/mirror.py``).
+    """
+    max_pos = session.query(func.max(ArticleAuthorStorage.position)).filter(
+        ArticleAuthorStorage.article_id == article_id
+    ).scalar()
+    start = 0 if max_pos is None else max_pos + 1
+    for i, author_id in enumerate(author_ids):
         session.add(
             ArticleAuthorStorage(
                 article_id=article_id,
                 author_id=author_id,
-                position=pos,
+                position=start + i,
             )
         )
 
@@ -257,7 +268,7 @@ def update_article_compiled(
         synchronize_session="fetch",
     )
     if rows == 0:
-        raise NotFoundError("Article not found", resource_type="article", resource_id=article_id)
+        raise NotFoundError(code="ARTICLE_NOT_FOUND", resource_type="article", resource_id=article_id)
     session.expire_all()
 
 
@@ -270,12 +281,12 @@ def update_article_status(session: Session, article_id: str, new_status: str) ->
     """
     _VALID_STATUSES = {"draft", "sedimentation", "published", "rejected"}
     if new_status not in _VALID_STATUSES:
-        raise ValueError(f"Invalid status {new_status!r}, must be one of {_VALID_STATUSES}")
+        raise BadRequestError(code="INVALID_ARTICLE_STATUS")
     rows = session.query(ArticleMetaStorage).filter(ArticleMetaStorage.id == article_id).update(
         {"status": new_status}, synchronize_session="fetch"
     )
     if rows == 0:
-        raise NotFoundError("Article not found", resource_type="article", resource_id=article_id)
+        raise NotFoundError(code="ARTICLE_NOT_FOUND", resource_type="article", resource_id=article_id)
     session.expire_all()
 
 
@@ -285,7 +296,7 @@ def update_article_score(session: Session, article_id: str, score: dict[str, flo
         {"score": score}, synchronize_session="fetch"
     )
     if rows == 0:
-        raise NotFoundError("Article not found", resource_type="article", resource_id=article_id)
+        raise NotFoundError(code="ARTICLE_NOT_FOUND", resource_type="article", resource_id=article_id)
     session.expire_all()
 
 
@@ -295,7 +306,7 @@ def increment_fork_count(session: Session, article_id: str) -> None:
         {"fork_count": ArticleMetaStorage.fork_count + 1}, synchronize_session="fetch"
     )
     if rows == 0:
-        raise NotFoundError("Article not found", resource_type="article", resource_id=article_id)
+        raise NotFoundError(code="ARTICLE_NOT_FOUND", resource_type="article", resource_id=article_id)
     session.expire_all()
 
 
@@ -307,7 +318,7 @@ def decrement_fork_count(session: Session, article_id: str) -> None:
         synchronize_session="fetch",
     )
     if rows == 0:
-        raise NotFoundError("Article not found", resource_type="article", resource_id=article_id)
+        raise NotFoundError(code="ARTICLE_NOT_FOUND", resource_type="article", resource_id=article_id)
     session.expire_all()
 
 
@@ -324,7 +335,7 @@ def set_sink_start(session: Session, article_id: str, duration_days: int) -> Non
         synchronize_session="fetch",
     )
     if rows == 0:
-        raise NotFoundError("Article not found", resource_type="article", resource_id=article_id)
+        raise NotFoundError(code="ARTICLE_NOT_FOUND", resource_type="article", resource_id=article_id)
     session.expire_all()
 
 
@@ -350,7 +361,7 @@ def delete_article(session: Session, article_id: str) -> None:
 
     rows = session.query(ArticleMetaStorage).filter(ArticleMetaStorage.id == article_id).delete()
     if rows == 0:
-        raise NotFoundError("Article not found", resource_type="article", resource_id=article_id)
+        raise NotFoundError(code="ARTICLE_NOT_FOUND", resource_type="article", resource_id=article_id)
     session.flush()
     session.expire_all()
 
@@ -362,12 +373,12 @@ def extend_sink(session: Session, article_id: str, extra_days: int, max_days: in
     Only increments sink_extended_count when the duration actually increases.
     """
     if extra_days <= 0:
-        raise ValueError(f"extra_days must be positive, got {extra_days}")
+        raise ValueError("VALIDATION_FAILED")
     row = session.query(ArticleMetaStorage.sink_duration_days, ArticleMetaStorage.sink_extended_count).filter(
         ArticleMetaStorage.id == article_id
     ).first()
     if row is None:
-        raise NotFoundError("Article not found", resource_type="article", resource_id=article_id)
+        raise NotFoundError(code="ARTICLE_NOT_FOUND", resource_type="article", resource_id=article_id)
     old_total, old_count = row
     new_total = min(old_total + extra_days, max_days)
     extended_count = old_count + 1 if new_total > old_total else old_count
@@ -409,7 +420,7 @@ def update_witnessed_at(session: Session, article_id: str) -> None:
         synchronize_session="fetch",
     )
     if rows == 0:
-        raise NotFoundError("Article not found", resource_type="article", resource_id=article_id)
+        raise NotFoundError(code="ARTICLE_NOT_FOUND", resource_type="article", resource_id=article_id)
     session.expire_all()
 
 
@@ -420,7 +431,7 @@ def _get_article_or_raise(session: Session, article_id: str) -> ArticleMetaStora
     """Return an article or raise NotFoundError."""
     article = session.get(ArticleMetaStorage, article_id)
     if article is None:
-        raise NotFoundError("Article not found", resource_type="article", resource_id=article_id)
+        raise NotFoundError(code="ARTICLE_NOT_FOUND", resource_type="article", resource_id=article_id)
     return article
 
 

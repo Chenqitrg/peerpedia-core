@@ -14,12 +14,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from peerpedia_core.config.params import params
-from peerpedia_core.config.paths import DATA_ROOT
+from peerpedia_core.config.paths import PEERS_FILE
 
 if TYPE_CHECKING:
     from peerpedia_core.transport import Transport
-
-_PEERS_FILE = DATA_ROOT / "peers.json"
 
 # ── Backoff state ────────────────────────────────────────────────────────────
 
@@ -39,9 +37,9 @@ def _ensure_backoff_hydrated() -> None:
 
 def _load_peers_raw() -> list:
     """Load the raw peer list from disk (list of urls or list of dicts)."""
-    if _PEERS_FILE.is_file():
+    if PEERS_FILE.is_file():
         try:
-            with open(_PEERS_FILE) as f:
+            with open(PEERS_FILE) as f:
                 data = json.load(f)
                 if isinstance(data, list):
                     return data
@@ -52,8 +50,8 @@ def _load_peers_raw() -> list:
 
 def _save_peers_raw(peers: list) -> None:
     """Persist peers to disk, capped at max_known_peers."""
-    _PEERS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(_PEERS_FILE, "w") as f:
+    PEERS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(PEERS_FILE, "w") as f:
         json.dump(peers[: params.discovery.max_known_peers], f)
 
 
@@ -107,10 +105,10 @@ def _persist_backoff() -> None:
 
 def _hydrate_backoff() -> None:
     """Load backoff state from peers.json on module init."""
-    if not _PEERS_FILE.is_file():
+    if not PEERS_FILE.is_file():
         return
     try:
-        with open(_PEERS_FILE) as f:
+        with open(PEERS_FILE) as f:
             data = json.load(f)
             if isinstance(data, list):
                 for entry in data:

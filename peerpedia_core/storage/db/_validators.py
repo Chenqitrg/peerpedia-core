@@ -22,7 +22,7 @@ from peerpedia_core.storage.db.models import ArticleMetaStorage, MergeProposalSt
 def require_not_same(a: str, b: str, *, label: str) -> None:
     """Raise BadRequestError if *a* and *b* are the same."""
     if a == b:
-        raise BadRequestError(f"Cannot {label} yourself")
+        raise BadRequestError(code="CANNOT_SELF_ACTION")
 
 
 # ── String validation ──────────────────────────────────────────────────────
@@ -31,13 +31,13 @@ def require_not_same(a: str, b: str, *, label: str) -> None:
 def require_alias_nonempty(alias: str) -> None:
     """Raise ValueError if *alias* is empty or whitespace-only."""
     if not alias.strip():
-        raise ValueError("Alias must not be empty")
+        raise ValueError("alias must not be empty")
 
 
 def require_title_nonempty(title: str) -> None:
     """Raise BadRequestError if *title* is empty or whitespace-only."""
     if not title.strip():
-        raise BadRequestError("Title is required")
+        raise BadRequestError(code="TITLE_REQUIRED")
 
 
 # ── Numeric validation ─────────────────────────────────────────────────────
@@ -46,27 +46,27 @@ def require_title_nonempty(title: str) -> None:
 def require_helpfulness_score_range(score: int) -> None:
     """Raise BadRequestError if *score* is outside 1-5."""
     if score < 1 or score > 5:
-        raise BadRequestError("Helpfulness score must be between 1 and 5")
+        raise BadRequestError(code="HELPFULNESS_RANGE")
 
 
 # ── Crypto / key validation ────────────────────────────────────────────────
 
 
 def require_signing_key(key_bytes: bytes | None, pubkey_hex: str | None, action: str) -> None:
-    """Raise ValueError if signing key material is missing."""
+    """Raise BadRequestError if signing key material is missing."""
     if key_bytes is None or not pubkey_hex:
-        raise ValueError(f"signing_key_bytes and pubkey_hex are required for {action}")
+        raise BadRequestError(code="MISSING_SIGNING_KEY")
 
 
 # ── Entry / dict validation ────────────────────────────────────────────────
 
 
 def require_keys(entries: list[dict[str, object]], *keys: str, label: str) -> None:
-    """Raise ValueError if any entry is missing a required key."""
+    """Raise BadRequestError if any entry is missing a required key."""
     for e in entries:
         for k in keys:
             if not e.get(k):
-                raise ValueError(f"ingest_{label}: missing '{k}' in entry {e}")
+                raise BadRequestError(code="VALIDATION_FAILED")
 
 
 def validate_follow_entries(
@@ -76,7 +76,7 @@ def validate_follow_entries(
     require_keys(entries, "id", label=label)
     remote_ids = {e["id"] for e in entries}
     if source_id in remote_ids:
-        raise ValueError(f"{label}: self-follow detected for user {source_id}")
+        raise BadRequestError(code="SELF_FOLLOW")
     return remote_ids
 
 
@@ -86,16 +86,16 @@ def validate_follow_entries(
 def require_draft_status(article: ArticleMetaStorage) -> None:
     """Raise BadRequestError if the article is not in draft status."""
     if article.status != "draft":
-        raise BadRequestError("Only draft articles can be published")
+        raise BadRequestError(code="VALIDATION_FAILED")
 
 
 def require_sedimentation(article: ArticleMetaStorage) -> None:
     """Raise BadRequestError if the article is not in sedimentation."""
     if article.status != "sedimentation":
-        raise BadRequestError("Can only invite reviewers to articles in sedimentation")
+        raise BadRequestError(code="SEDIMENTATION_INVITE_ONLY")
 
 
 def require_merge_proposal_open(mp: MergeProposalStorage) -> None:
     """Raise BadRequestError if the merge proposal is not open."""
     if mp.status != "open":
-        raise BadRequestError(f"Merge proposal {mp.id} is already {mp.status}")
+        raise BadRequestError(code="MERGE_PROPOSAL_CLOSED")

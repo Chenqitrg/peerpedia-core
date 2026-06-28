@@ -5,25 +5,60 @@ r"""User CRUD — database only, ``session.flush()`` only.
 
 Functions
 ---------
-create_user             New user with Ed25519 public key
-get_user                By ID or name
-get_user_by_name        Exact name match
-update_user_reputation  Write reputation dict (flush only)
-follow_user / unfollow_user / get_followers / get_following / get_follower_count
+**User creation**
+  create_user              New user with random UUID
+  create_user_stub         Bootstrap user with pre-determined id and salt
+  ensure_user              Upsert — create if not exists, verify address consistency
+
+**User queries**
+  get_user                 By ID, or None
+  get_user_by_name         Exact name match (active users only)
+  list_users               Active users, newest first
+  search_users             By name (ILIKE) or UUID prefix
+  get_users_by_ids         Bulk fetch; raises if any missing
+
+**User updates**
+  update_user_public_key   Replace public key
+  set_user_pubkey_tofu     TOFU (Trust On First Use) semantics for public key
+  update_user_salt         Replace scrypt salt
+  update_user_reputation   Write reputation scores dict
+
+**Rate limiting**
+  increment_failed_login   Bump counter; lock account at threshold
+  reset_failed_login       Clear counter and lock after successful login
+
+**Account lifecycle**
+  soft_delete_user         GDPR right-to-erasure (sets deleted_at)
+
+**Follow — writes**
+  follow_user / unfollow_user / follow_users / add_followers
+  set_following / set_followers
+
+**Follow — reads**
+  is_following / get_followers / get_following
+  get_follower_count / get_following_count / get_top_users_by_followers
 
 Reviewer's checklist
 --------------------
 - All functions call ``session.flush()``, not ``session.commit()``.
+- Active-user queries always filter ``deleted_at.is_(None)``.
 """
 
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from peerpedia_core.exceptions import NotFoundError
+from peerpedia_core.config.params import params
+from peerpedia_core.exceptions import ConflictError, NotFoundError
 from peerpedia_core.storage.db._validators import require_not_same
 from peerpedia_core.storage.db.models import FollowStorage, UserStorage
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# User creation
+# ═══════════════════════════════════════════════════════════════════════════════
 
 
 def create_user(
@@ -85,15 +120,17 @@ def ensure_user(
     existing = session.get(UserStorage, user_id)
     if existing is not None:
         if existing.address and address and existing.address != address:
-            raise ValueError(
-                f"Address conflict for {user_id}: "
-                f"local={existing.address!r}, peer={address!r}"
-            )
+            raise ConflictError(code="ADDRESS_CONFLICT", conflicting_entity="user_address")
         return existing
     u = UserStorage(id=user_id, name=name, address=address)
     session.add(u)
     session.flush()
     return u
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# User queries
+# ═══════════════════════════════════════════════════════════════════════════════
 
 
 def get_user(session: Session, user_id: str) -> UserStorage | None:
@@ -103,12 +140,16 @@ def get_user(session: Session, user_id: str) -> UserStorage | None:
 
 def get_user_by_name(session: Session, name: str) -> list[UserStorage]:
     """Return all active users with the given name (may be multiple — P2P allows duplicates)."""
-    return session.query(UserStorage).filter(UserStorage.name == name, UserStorage.deleted_at.is_(None)).all()
+    return session.query(UserStorage).filter(
+        UserStorage.name == name, UserStorage.deleted_at.is_(None)
+    ).all()
 
 
 def list_users(session: Session, limit: int | None = 100) -> list[UserStorage]:
     """Return active users, newest first.  Capped at *limit* (default 100)."""
-    q = session.query(UserStorage).filter(UserStorage.deleted_at.is_(None)).order_by(UserStorage.created_at.desc())
+    q = session.query(UserStorage).filter(
+        UserStorage.deleted_at.is_(None)
+    ).order_by(UserStorage.created_at.desc())
     if limit is not None:
         q = q.limit(limit)
     return q.all()
@@ -132,7 +173,7 @@ def search_users(session: Session, query: str = "", *,
 def get_users_by_ids(session: Session, user_ids: set[str]) -> list[UserStorage]:
     """Return UserStorage records for the given IDs.
 
-    Raises ValueError if any *user_ids* are not found — missing users
+    Raises NotFoundError if any *user_ids* are not found — missing users
     at this point means data corruption (review from nonexistent user).
     """
     if not user_ids:
@@ -141,17 +182,22 @@ def get_users_by_ids(session: Session, user_ids: set[str]) -> list[UserStorage]:
     found = {u.id for u in users}
     missing = user_ids - found
     if missing:
-        raise NotFoundError(f"Users not found: {', '.join(sorted(missing))}", resource_type="user")
+        raise NotFoundError(code="USER_NOT_FOUND", resource_type="user")
     return users
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# User updates
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
 def update_user_public_key(session: Session, user_id: str, pubkey_hex: str) -> None:
-    """Set the public_key for a user. Raises ValueError if user not found."""
+    """Set the public_key for a user. Raises NotFoundError if user not found."""
     rows = session.query(UserStorage).filter(UserStorage.id == user_id).update(
         {"public_key": pubkey_hex}, synchronize_session="fetch"
     )
     if rows == 0:
-        raise NotFoundError(f"User {user_id} not found", resource_type="user", resource_id=user_id)
+        raise NotFoundError(code="USER_NOT_FOUND", resource_type="user", resource_id=user_id)
     session.expire_all()
 
 
@@ -179,12 +225,12 @@ def set_user_pubkey_tofu(session: Session, user_id: str, pubkey_hex: str, *,
 
 
 def update_user_salt(session: Session, user_id: str, salt_hex: str) -> None:
-    """Set the scrypt salt for a user. Raises ValueError if user not found."""
+    """Set the scrypt salt for a user. Raises NotFoundError if user not found."""
     rows = session.query(UserStorage).filter(UserStorage.id == user_id).update(
         {"salt": salt_hex}, synchronize_session="fetch"
     )
     if rows == 0:
-        raise NotFoundError(f"User {user_id} not found", resource_type="user", resource_id=user_id)
+        raise NotFoundError(code="USER_NOT_FOUND", resource_type="user", resource_id=user_id)
     session.expire_all()
 
 
@@ -194,14 +240,13 @@ def update_user_reputation(session: Session, user_id: str, reputation: dict[str,
         {"reputation": reputation}, synchronize_session="fetch"
     )
     if rows == 0:
-        raise NotFoundError(f"User {user_id} not found", resource_type="user", resource_id=user_id)
+        raise NotFoundError(code="USER_NOT_FOUND", resource_type="user", resource_id=user_id)
     session.expire_all()
 
 
-# ── Rate limiting ────────────────────────────────────────────────────────
-
-_MAX_FAILED_ATTEMPTS = 5
-_LOCKOUT_MINUTES = 15
+# ═══════════════════════════════════════════════════════════════════════════════
+# Rate limiting
+# ═══════════════════════════════════════════════════════════════════════════════
 
 
 def increment_failed_login(session: Session, user_id: str) -> None:
@@ -210,14 +255,14 @@ def increment_failed_login(session: Session, user_id: str) -> None:
 
     Raises NotFoundError if the user does not exist.
     """
-    from datetime import datetime, timedelta, timezone
-
     user = session.get(UserStorage, user_id)
     if user is None:
-        raise NotFoundError(f"User {user_id} not found", resource_type="user", resource_id=user_id)
+        raise NotFoundError(code="USER_NOT_FOUND", resource_type="user", resource_id=user_id)
     user.failed_login_attempts += 1
-    if user.failed_login_attempts >= _MAX_FAILED_ATTEMPTS:
-        user.locked_until = datetime.now(timezone.utc) + timedelta(minutes=_LOCKOUT_MINUTES)
+    if user.failed_login_attempts >= params.server.max_failed_login_attempts:
+        user.locked_until = datetime.now(timezone.utc) + timedelta(
+            minutes=params.server.login_lockout_minutes
+        )
     session.flush()
 
 
@@ -233,11 +278,13 @@ def reset_failed_login(session: Session, user_id: str) -> None:
         synchronize_session="fetch",
     )
     if rows == 0:
-        raise NotFoundError(f"User {user_id} not found", resource_type="user", resource_id=user_id)
+        raise NotFoundError(code="USER_NOT_FOUND", resource_type="user", resource_id=user_id)
     session.expire_all()
 
 
-# ── Account lifecycle ────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════════
+# Account lifecycle
+# ═══════════════════════════════════════════════════════════════════════════════
 
 
 def soft_delete_user(session: Session, user_id: str) -> None:
@@ -248,18 +295,20 @@ def soft_delete_user(session: Session, user_id: str) -> None:
 
     Raises NotFoundError if the user does not exist.
     """
-    from datetime import datetime, timezone
-
-    rows = session.query(UserStorage).filter(UserStorage.id == user_id, UserStorage.deleted_at.is_(None)).update(
+    rows = session.query(UserStorage).filter(
+        UserStorage.id == user_id, UserStorage.deleted_at.is_(None)
+    ).update(
         {"deleted_at": datetime.now(timezone.utc)}, synchronize_session="fetch"
     )
     if rows == 0:
-        raise NotFoundError(f"User {user_id} not found or already deleted",
+        raise NotFoundError(code="USER_NOT_FOUND",
                             resource_type="user", resource_id=user_id)
     session.expire_all()
 
 
-# ── FollowStorage ───────────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════════
+# Follow — writes
+# ═══════════════════════════════════════════════════════════════════════════════
 
 
 def follow_user(session: Session, follower_id: str, followed_id: str) -> FollowStorage:
@@ -282,7 +331,7 @@ def follow_user(session: Session, follower_id: str, followed_id: str) -> FollowS
     return f
 
 
-def _soft_delete_follow_row(row: Follow) -> None:
+def _soft_delete_follow_row(row: FollowStorage) -> None:
     """Mark a FollowStorage row as soft-deleted.  Caller owns flush."""
     row.deleted_at = datetime.now(timezone.utc)
 
@@ -375,6 +424,11 @@ def unfollow_user(session: Session, follower_id: str, followed_id: str) -> None:
         session.flush()
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# Follow — reads
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
 def is_following(session: Session, follower_id: str, followed_id: str) -> bool:
     """Return True if *follower_id* follows *followed_id* (excludes soft-deleted)."""
     return session.query(FollowStorage).filter(
@@ -429,7 +483,6 @@ def get_top_users_by_followers(session: Session, limit: int = 20) -> list[dict]:
     Includes all users — even those with 0 followers — so new users
     are discoverable via ``peerpedia school``.
     """
-    from sqlalchemy import func
     rows = (
         session.query(
             UserStorage.id, UserStorage.name,

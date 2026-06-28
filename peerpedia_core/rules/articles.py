@@ -117,7 +117,7 @@ def assert_can_read_article(
         return article
     if _is_author(author_ids, user):
         return article
-    raise NotAuthorizedError("Article is private")
+    raise NotAuthorizedError(code="PRIVATE_ARTICLE")
 
 
 def assert_can_access_content(
@@ -129,7 +129,7 @@ def assert_can_access_content(
         return article
     if _is_author(author_ids, user):
         return article
-    raise NotAuthorizedError("Content download not available for this article")
+    raise NotAuthorizedError(code="CONTENT_NOT_AVAILABLE")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -168,16 +168,16 @@ def assert_can_accept_merge(article: ArticleMetaExchange, maintainer_ids: list[s
 def assert_can_submit_review(article: ArticleMetaExchange) -> ArticleMetaExchange:
     if article.status in ("sedimentation", "published"):
         return article
-    raise NotAuthorizedError("Cannot review a draft article")
+    raise NotAuthorizedError(code="CANNOT_REVIEW_DRAFT")
 
 
 def assert_can_reply_to_review(article: ArticleMetaExchange, maintainer_ids: list[str], user: UserExchange, *,
                                fold_threshold: float = 1.0) -> ArticleMetaExchange:
     assert_not_folded(article, threshold=fold_threshold)
     if article.status not in ("sedimentation", "published"):
-        raise NotAuthorizedError("Cannot reply to reviews on a draft article")
+        raise NotAuthorizedError(code="CANNOT_REPLY_DRAFT")
     if user.id not in maintainer_ids:
-        raise NotAuthorizedError("Only article authors can reply to reviews")
+        raise NotAuthorizedError(code="NOT_ARTICLE_AUTHOR")
     return article
 
 
@@ -215,7 +215,7 @@ def assert_can_fork_article(
         )
 
     if existing_fork is not None:
-        raise ConflictError("Already forked this article")
+        raise ConflictError(code="ALREADY_FORKED")
 
     return article
 
@@ -228,4 +228,4 @@ def assert_can_fork_article(
 def assert_article_has_score(article) -> None:
     """Raise BadRequestError if the article's score is None."""
     if article.score is None:
-        raise BadRequestError("Article must have a score before publishing")
+        raise BadRequestError(code="ARTICLE_NO_SCORE")

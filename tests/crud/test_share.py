@@ -1,12 +1,12 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""Tests for Share CRUD."""
+"""Tests for ShareStorage and AliasStorage CRUD."""
 
 import pytest
 
 from peerpedia_core.storage.db.engine import get_session
-from peerpedia_core.storage.db.models import User, Article, Follow
+from peerpedia_core.storage.db.models import ArticleMetaStorage, UserStorage
 
 
 @pytest.fixture
@@ -18,14 +18,14 @@ def db(engine):
 
 
 def _make_user(db, uid, name="Test"):
-    u = User(id=uid, name=name)
+    u = UserStorage(id=uid, name=name)
     db.add(u)
     db.flush()
     return u
 
 
 def _make_article(db, aid, title="Test"):
-    a = Article(id=aid, title=title, status="draft")
+    a = ArticleMetaStorage(id=aid, title=title, status="draft")
     db.add(a)
     db.flush()
     return a
@@ -132,7 +132,7 @@ class TestAliasCrud:
         _make_user(db, "target")
 
         from peerpedia_core.exceptions import BadRequestError
-        with pytest.raises(BadRequestError, match="must follow"):
+        with pytest.raises(BadRequestError, match="MUST_FOLLOW_FOR_ALIAS"):
             set_alias(db, "owner", "target", "my-alias")
 
     def test_set_alias_empty_raises(self, db):
@@ -218,17 +218,14 @@ class TestAliasCrud:
         follow_user(db, "owner", "target")
         set_alias(db, "owner", "target", "nick")
 
-        # Resolve by username
         users = resolve_username_or_alias(db, "owner", "RealName")
         assert len(users) == 1
         assert users[0].id == "target"
 
-        # Resolve by alias
         users = resolve_username_or_alias(db, "owner", "nick")
         assert len(users) == 1
         assert users[0].id == "target"
 
-        # No match
         users = resolve_username_or_alias(db, "owner", "nobody")
         assert len(users) == 0
 
@@ -242,6 +239,5 @@ class TestAliasCrud:
         follow_user(db, "owner", "target")
         set_alias(db, "owner", "target", "nick")
 
-        # other user cannot resolve "nick" — they didn't set it
         users = resolve_username_or_alias(db, "other", "nick")
         assert len(users) == 0

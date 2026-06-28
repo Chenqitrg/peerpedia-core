@@ -130,7 +130,7 @@ def withdraw_merge_proposal(db: Session, proposal_id: str, user_id: str) -> dict
     """Withdraw a merge proposal — proposer only."""
     mp = get_merge_proposal(db, proposal_id)
     if mp is None:
-        raise NotFoundError("Merge proposal not found")
+        raise NotFoundError(code="MERGE_PROPOSAL_NOT_FOUND")
     guard_proposal_owner(mp, user_id)
     try:
         _withdraw(db, proposal_id)

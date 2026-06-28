@@ -80,7 +80,7 @@ def remove_maintainer_from_article(
 
     deleted = crud_maintainer.remove_maintainer(db, article_id, user_id)
     if not deleted:
-        raise NotFoundError("User is not a maintainer of this script")
+        raise NotFoundError(code="NOT_MAINTAINER_REMOVE")
 
     return {"article_id": article_id, "user_id": user_id, "action": "removed"}
 

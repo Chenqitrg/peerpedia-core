@@ -107,10 +107,10 @@ def test_no_internal_peerpedia_imports():
             "heavy: imports Starlette/uvicorn — only needed for `server start`",
         # ── Circular dependency breaks ──────────────────────────────────
         ("peerpedia_core/commands/integrity.py",
-         "peerpedia_core.commands.articles"):
+         "peerpedia_core.core.articles"):
             "circular: articles/__init__.py → integrity.py → articles._helpers (rebuild_article_authors)",
         ("peerpedia_core/commands/integrity.py",
-         "peerpedia_core.commands.bundle"):
+         "peerpedia_core.core.bundle"):
             "circular: integrity.py → bundle.sync_reviews_from_worktree → bundle.py → integrity.assert_article_integrity",
         ("peerpedia_core/cli/handlers/schema.py",
          "peerpedia_core.cli.parser"):
@@ -125,7 +125,7 @@ def test_no_internal_peerpedia_imports():
         ("peerpedia_core/repl/state.py",
          "peerpedia_core.cli"):
             "heavy: parser (argparse registration) only needed when _get_parser is first called",
-        ("peerpedia_core/repl/commands.py",
+        ("peerpedia_core/repl/dispatch.py",
          "peerpedia_core.repl.browse"):
             "heavy: prompt_toolkit Application — only loaded for interactive browse views",
     }
@@ -311,14 +311,14 @@ def test_storage_db_only_imports_within_db():
 # ═══════════════════════════════════════════════════════════════════════════════
 
 _COMMANDS_SUBMODULES = {
-    "peerpedia_core.commands.articles",
-    "peerpedia_core.commands.reviews",
-    "peerpedia_core.commands.merge",
-    "peerpedia_core.commands.bundle",
-    "peerpedia_core.commands.users",
-    "peerpedia_core.commands.bookmarks",
-    "peerpedia_core.commands.workflow",
-    "peerpedia_core.commands.maintainers",
+    "peerpedia_core.core.articles",
+    "peerpedia_core.core.reviews",
+    "peerpedia_core.core.merge",
+    "peerpedia_core.core.bundle",
+    "peerpedia_core.core.users",
+    "peerpedia_core.core.bookmarks",
+    "peerpedia_core.core.workflow",
+    "peerpedia_core.core.maintainers",
 }
 # Files allowed to import commands submodules directly:
 # - commands/__init__.py (the facade itself)
@@ -334,7 +334,7 @@ def test_external_code_uses_commands_facade():
         for m, _name, _internal in _imports(f):
             if m in _COMMANDS_SUBMODULES:
                 raise AssertionError(
-                    f"{rel}: imports {m} — use `from peerpedia_core.commands import ...`"
+                    f"{rel}: imports {m} — use `from peerpedia_core.core import ...`"
                 )
 
 
@@ -803,12 +803,11 @@ def test_cli_only_imports_models_from_storage():
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def test_repl_only_imports_from_cli():
-    """``repl/`` is a pure UI layer — it must only import from ``cli/``
-    (helpers, display, parser) and from within ``repl/`` itself.
-    No direct ``commands/``, ``storage/``, ``bundle/``, ``social/``,
+    """``repl/`` is a pure UI layer — it may import from ``app/``,
+    ``core/`` (facade), ``cli/display``, ``cli/parser``, and within
+    ``repl/`` itself.  No direct ``storage/``, ``bundle/``, ``social/``,
     or ``transport/`` imports."""
     _FORBIDDEN_PREFIXES = (
-        "peerpedia_core.commands",
         "peerpedia_core.storage",
         "peerpedia_core.bundle",
         "peerpedia_core.social",
@@ -822,6 +821,85 @@ def test_repl_only_imports_from_cli():
             if any(m.startswith(p) for p in _FORBIDDEN_PREFIXES):
                 raise AssertionError(
                     f"{rel}: imports {m} — "
-                    "repl/ is a pure UI layer; import from cli/helpers, "
+                    "repl/ is a pure UI layer; import from app/, core/, "
                     "cli/display, or cli/parser instead"
+                )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Q. REPL — must not import from cli.helpers (post-refactor rule)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def test_repl_does_not_import_cli_helpers():
+    """repl/ must not import from ``cli.helpers`` after the app-layer refactor.
+
+    REPL data access goes through ``app.context`` and ``core/`` facade,
+    not through CLI internal helpers.
+    """
+    for f in _all_modules():
+        rel = _rel(f)
+        if not rel.startswith("peerpedia_core/repl/"):
+            continue
+        for m, _name, _internal in _imports(f):
+            if m == "peerpedia_core.cli.helpers":
+                raise AssertionError(
+                    f"{rel}: imports {m} — "
+                    "repl/ must not import from cli/helpers; "
+                    "use app.context, core/, or cli/parser instead"
+                )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# R. CLI parser — must not import handlers (post-refactor rule)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def test_cli_parser_does_not_import_handlers():
+    """``cli/parser.py`` must not import from ``cli.handlers``.
+
+    Parser sets ``command_id`` and delegates to ``cli/dispatch.py`` for
+    lazy handler loading.
+    """
+    f = ROOT / "cli/parser.py"
+    if not f.exists():
+        return
+    for m, _name, _internal in _imports(f):
+        if m.startswith("peerpedia_core.cli.handlers"):
+            raise AssertionError(
+                f"cli/parser.py: imports {m} — "
+                "parser must not import handlers; use command_id + dispatch"
+            )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# S. App layer — must not import CLI, REPL, or server
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def test_app_does_not_import_cli_repl_or_server():
+    """``app/`` must not import from ``cli/``, ``repl/``, or ``server/``.
+
+    The app layer is a pure orchestration layer — no presentation.
+    """
+    _FORBIDDEN = (
+        "peerpedia_core.cli",
+        "peerpedia_core.repl",
+        "peerpedia_core.server",
+    )
+    # Temporary exceptions for migration — remove as handlers are fully migrated
+    _ALLOWED: dict[tuple[str, str], str] = {}
+    for f in _all_modules():
+        rel = _rel(f)
+        if not rel.startswith("peerpedia_core/app/"):
+            continue
+        for m, _name, _internal in _imports(f):
+            if any(m.startswith(p) for p in _FORBIDDEN):
+                key = (rel, m)
+                if key in _ALLOWED:
+                    continue
+                raise AssertionError(
+                    f"{rel}: imports {m} — "
+                    "app/ must not import from cli/, repl/, or server/; "
+                    "app is a pure orchestration layer"
                 )

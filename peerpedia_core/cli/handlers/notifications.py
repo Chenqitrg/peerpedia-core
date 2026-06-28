@@ -3,61 +3,20 @@
 
 """Notification commands — list and manage notifications."""
 
-from peerpedia_core.cli.helpers import (
-    _with_db, _get_session_user, _ok, _out, _json_out,
-)
-from peerpedia_core.cli.display import console
-from peerpedia_core.types import short_id
-from peerpedia_core.core import (
-    count_unread_notifications, get_notifications, mark_read,
-)
+from __future__ import annotations
+
+from peerpedia_core.cli.handler import with_context
+import peerpedia_core.app.commands.notification as _notify
 
 
-@_with_db
-def _cmd_notifications(db, args):
+@with_context
+def _cmd_notifications(ctx, args):
     """List notifications. Shows unread by default; use --all for all."""
-    user_id = _get_session_user()
     unread_only = not getattr(args, "all", False)
-    notifs = get_notifications(db, user_id, unread_only=unread_only, limit=50)
-    unread_count = count_unread_notifications(db, user_id)
-
-    if args.json:
-        _json_out([
-            {
-                "id": n.id,
-                "event": n.event,
-                "message": n.message,
-                "article_id": n.article_id,
-                "actor_id": n.actor_id,
-                "read": bool(n.read),
-                "created_at": str(n.created_at) if n.created_at else None,
-            }
-            for n in notifs
-        ])
-        return
-
-    if not notifs:
-        _out(args, "EMPTY_NOTIFICATIONS")
-        return
-
-    if unread_only and unread_count > 0:
-        console.print(f"[info]{unread_count} unread notification(s)[/]\n")
-
-    for n in notifs:
-        ts = n.created_at.strftime("%Y-%m-%d %H:%M") if n.created_at else ""
-        unread_tag = "" if n.read else " [bold yellow]NEW[/]"
-        console.print(f"  [accent]{short_id(n.id)}[/]  {ts}  {n.message}{unread_tag}")
+    return _notify.list_notifications(ctx, unread_only=unread_only)
 
 
-@_with_db
-def _cmd_notification_read(db, args):
-    """Mark a notification as read.
-
-    args: notification_id [positional]
-    """
-    try:
-        mark_read(db, args.notification_id)
-        db.commit()
-        _ok(f"Notification {short_id(args.notification_id)} marked as read")
-    except ValueError as e:
-        _out(args, "NOT_FOUND", what=str(e))
+@with_context
+def _cmd_notification_read(ctx, args):
+    """Mark a notification as read."""
+    return _notify.mark_read_notification(ctx, notification_id=args.notification_id)

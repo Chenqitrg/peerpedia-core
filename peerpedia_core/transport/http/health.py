@@ -27,7 +27,7 @@ import random
 import time
 from pathlib import Path
 
-from peerpedia_core.config.paths import DATA_ROOT as _DATA_ROOT
+from peerpedia_core.config.paths import DATA_ROOT, HEALTH_CACHE_FILE
 from peerpedia_core.exceptions import TransportError
 from peerpedia_core.time import HEALTH_CACHE_SECONDS, compute_clock_skew
 from peerpedia_core.transport.http._core import _api_path, _call
@@ -42,40 +42,39 @@ logger = logging.getLogger(__name__)
 _cache: dict[str, tuple[float, bool, int | None]] = {}
 
 # File cache — cross-process.  Stored as {url: [timestamp, online, server_ts]}.
-_CACHE_FILE = _DATA_ROOT / "server_health.json"
 _MAX_CACHE_ENTRIES = 10  # prevent unbounded growth
 
 def _read_file_cache() -> dict[str, tuple[float, bool, int | None]]:
     """Read health cache from disk.  Returns {} on any error."""
     try:
-        raw = json.loads(_CACHE_FILE.read_text())
+        raw = json.loads(HEALTH_CACHE_FILE.read_text())
         return {
             k: (float(v[0]), bool(v[1]), int(v[2]) if v[2] is not None else None)
             for k, v in raw.items()
         }
     except (OSError, json.JSONDecodeError, ValueError, KeyError, IndexError):
-        logger.debug("Health cache read error for %s", _CACHE_FILE, exc_info=True)
+        logger.debug("Health cache read error for %s", HEALTH_CACHE_FILE, exc_info=True)
     return {}
 
 
 def _write_file_cache(data: dict[str, tuple[float, bool, int | None]]) -> None:
     """Write health cache to disk atomically (best-effort, never raises)."""
     try:
-        _DATA_ROOT.mkdir(parents=True, exist_ok=True)
+        DATA_ROOT.mkdir(parents=True, exist_ok=True)
         serialized = json.dumps({k: [v[0], v[1], v[2]] for k, v in data.items()})
         # Write to temp file first, then atomically replace — crash-safe.
-        tmp = _DATA_ROOT / ".server_health.tmp"
+        tmp = DATA_ROOT / ".server_health.tmp"
         tmp.write_text(serialized)
-        os.replace(tmp, _CACHE_FILE)
+        os.replace(tmp, HEALTH_CACHE_FILE)
     except OSError:
-        logger.debug("Health cache write error for %s", _CACHE_FILE, exc_info=True)
+        logger.debug("Health cache write error for %s", HEALTH_CACHE_FILE, exc_info=True)
 
 
 def clear_health_cache() -> None:
     """Clear both in-memory and on-disk health caches.  Used by tests."""
     _cache.clear()
     try:
-        _CACHE_FILE.unlink(missing_ok=True)
+        HEALTH_CACHE_FILE.unlink(missing_ok=True)
     except OSError:
         pass
 

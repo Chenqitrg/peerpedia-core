@@ -47,11 +47,16 @@ class PeerpediaError(Exception):
 
     code: str = "ERROR"
 
-    def __init__(self, detail: str, **context):
+    def __init__(self, detail: str = "", **context):
+        # Allow callers to pass ``code=`` — it becomes an instance attribute
+        # overriding the class-level code (e.g. "NOT_FOUND" → "USER_NOT_FOUND").
+        if "code" in context:
+            self.code = context.pop("code")
+        if not detail and self.code != "ERROR":
+            detail = self.code
         super().__init__(detail)
         self.detail = detail
         self.context = context
-        # Expose context keys as attributes for easy access.
         for k, v in context.items():
             setattr(self, k, v)
 
@@ -66,8 +71,8 @@ class NotFoundError(PeerpediaError):
 
     code = "NOT_FOUND"
 
-    def __init__(self, detail: str, resource_type: str = "", resource_id: str = ""):
-        super().__init__(detail, resource_type=resource_type, resource_id=resource_id)
+    def __init__(self, detail: str = "", resource_type: str = "", resource_id: str = "", **kwargs):
+        super().__init__(detail, resource_type=resource_type, resource_id=resource_id, **kwargs)
 
 
 class NotAuthorizedError(PeerpediaError):
@@ -81,10 +86,10 @@ class NotAuthorizedError(PeerpediaError):
 
     code = "NOT_AUTHORIZED"
 
-    def __init__(self, detail: str, permission: str = "",
-                 resource_type: str = "", resource_id: str = ""):
+    def __init__(self, detail: str = "", permission: str = "",
+                 resource_type: str = "", resource_id: str = "", **kwargs):
         super().__init__(detail, permission=permission,
-                         resource_type=resource_type, resource_id=resource_id)
+                         resource_type=resource_type, resource_id=resource_id, **kwargs)
 
 
 class ConflictError(PeerpediaError):
@@ -96,8 +101,8 @@ class ConflictError(PeerpediaError):
 
     code = "CONFLICT"
 
-    def __init__(self, detail: str, conflicting_entity: str = ""):
-        super().__init__(detail, conflicting_entity=conflicting_entity)
+    def __init__(self, detail: str = "", conflicting_entity: str = "", **kwargs):
+        super().__init__(detail, conflicting_entity=conflicting_entity, **kwargs)
 
 
 class MergeConflictError(ConflictError):
@@ -107,6 +112,9 @@ class MergeConflictError(ConflictError):
     ``bundle/git_bundle`` so callers can catch a single type regardless of
     which layer raises it.
     """
+
+    def __init__(self, detail: str = "", conflicting_entity: str = "", **kwargs):
+        super().__init__(detail, conflicting_entity=conflicting_entity, **kwargs)
 
 
 class AmbiguousError(PeerpediaError):
@@ -123,10 +131,10 @@ class AmbiguousError(PeerpediaError):
 
     code = "AMBIGUOUS"
 
-    def __init__(self, detail: str, resource_type: str = "",
-                 candidates: list[str] | None = None):
+    def __init__(self, detail: str = "", resource_type: str = "",
+                 candidates: list[str] | None = None, **kwargs):
         super().__init__(detail, resource_type=resource_type,
-                         candidates=candidates or [])
+                         candidates=candidates or [], **kwargs)
 
 
 class BadRequestError(PeerpediaError):
@@ -139,8 +147,8 @@ class BadRequestError(PeerpediaError):
 
     code = "BAD_REQUEST"
 
-    def __init__(self, detail: str, field: str = "", bad_value: str = ""):
-        super().__init__(detail, field=field, bad_value=bad_value)
+    def __init__(self, detail: str = "", field: str = "", bad_value: str = "", **kwargs):
+        super().__init__(detail, field=field, bad_value=bad_value, **kwargs)
 
 
 class SignatureVerificationError(PeerpediaError):
@@ -153,8 +161,8 @@ class SignatureVerificationError(PeerpediaError):
 
     code = "SIGNATURE_ERROR"
 
-    def __init__(self, detail: str, reason: str = "", pubkey: str = ""):
-        super().__init__(detail, reason=reason, pubkey=pubkey)
+    def __init__(self, detail: str = "", reason: str = "", pubkey: str = "", **kwargs):
+        super().__init__(detail, reason=reason, pubkey=pubkey, **kwargs)
 
 
 class TransportError(PeerpediaError):
@@ -167,8 +175,8 @@ class TransportError(PeerpediaError):
 
     code = "TRANSPORT_ERROR"
 
-    def __init__(self, detail: str, server: str = "", status_code: int | None = None):
-        super().__init__(detail, server=server, status_code=status_code)
+    def __init__(self, detail: str = "", server: str = "", status_code: int | None = None, **kwargs):
+        super().__init__(detail, server=server, status_code=status_code, **kwargs)
 
 
 class ProtocolError(PeerpediaError):
@@ -181,5 +189,5 @@ class ProtocolError(PeerpediaError):
 
     code = "PROTOCOL_ERROR"
 
-    def __init__(self, detail: str, server: str = "", status_code: int | None = None):
-        super().__init__(detail, server=server, status_code=status_code)
+    def __init__(self, detail: str = "", server: str = "", status_code: int | None = None, **kwargs):
+        super().__init__(detail, server=server, status_code=status_code, **kwargs)

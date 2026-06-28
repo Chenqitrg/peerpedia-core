@@ -1,0 +1,8 @@
+Enter :: Submit your command
+Ctrl+J :: Insert a newline (for multi-line input)
+Ctrl+C :: Cancel current input
+Ctrl+D :: Exit the REPL
+Tab :: Auto-complete commands, paper IDs, or @names
+↑ ↓ :: Navigate in interactive lists
+p e r b :: Publish / edit / review / bookmark in paper browser
+q Esc :: Quit current browser or cancel

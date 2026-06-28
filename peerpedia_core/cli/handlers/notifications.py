@@ -4,11 +4,11 @@
 """Notification commands — list and manage notifications."""
 
 from peerpedia_core.cli.helpers import (
-    _with_db, _get_session_user, _ok, _die, _json_out,
-    _empty_state,
+    _with_db, _get_session_user, _ok, _out, _json_out,
 )
 from peerpedia_core.cli.display import console
-from peerpedia_core.commands import (
+from peerpedia_core.types import short_id
+from peerpedia_core.core import (
     count_unread_notifications, get_notifications, mark_read,
 )
 
@@ -37,7 +37,7 @@ def _cmd_notifications(db, args):
         return
 
     if not notifs:
-        _empty_state("No notifications.")
+        _out(args, "EMPTY_NOTIFICATIONS")
         return
 
     if unread_only and unread_count > 0:
@@ -46,7 +46,7 @@ def _cmd_notifications(db, args):
     for n in notifs:
         ts = n.created_at.strftime("%Y-%m-%d %H:%M") if n.created_at else ""
         unread_tag = "" if n.read else " [bold yellow]NEW[/]"
-        console.print(f"  [accent]{n.id[:8]}[/]  {ts}  {n.message}{unread_tag}")
+        console.print(f"  [accent]{short_id(n.id)}[/]  {ts}  {n.message}{unread_tag}")
 
 
 @_with_db
@@ -58,9 +58,6 @@ def _cmd_notification_read(db, args):
     try:
         mark_read(db, args.notification_id)
         db.commit()
-        _ok(f"Notification {args.notification_id[:8]} marked as read")
+        _ok(f"Notification {short_id(args.notification_id)} marked as read")
     except ValueError as e:
-        _die(str(e), code="NOT_FOUND",
-             suggestion="Check the notification ID. You can list your "
-                        "notifications with 'peerpedia notifications'.",
-             see_also=["notifications"])
+        _out(args, "NOT_FOUND", what=str(e))

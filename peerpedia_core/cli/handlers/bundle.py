@@ -6,80 +6,59 @@
 from __future__ import annotations
 
 from peerpedia_core.cli.helpers import _with_db, _ok, _die, _json_out, _get_session_user, _get_session_key, _get_session_pubkey
+from peerpedia_core.types import short_id
 from peerpedia_core.cli.display import _print_panel, console
-from peerpedia_core.cli.bundle_utils import _require_online_server, _resolve_server_url
+from peerpedia_core.cli.bundle_utils import (
+    _TRANSPORT, _require_online_server, _resolve_server_url,
+)
 from peerpedia_core.exceptions import ConflictError, ProtocolError, TransportError
-from peerpedia_core.transport import is_online, fetch_search
-from peerpedia_core.bundle.pending import list_all, remove as pop_pending
-from peerpedia_core.bundle import count as pending_count, sync_article, pull_new_article
-from peerpedia_core.commands import get_all_article_ids, list_articles, merge_article_meta
-from peerpedia_core.social import discover_network
+from peerpedia_core.core.sync_article import pull_new_article, sync_article
+from peerpedia_core.core import get_all_article_ids, list_articles, merge_article_meta
+from peerpedia_core.core.sync_social import discover_network
 
 
 @_with_db
 def _cmd_sync_status(db, args):
-    """Check connection to a peer server and count pending sync operations.
+    """Check connection to a peer server.
 
     args: --server, --json
     """
     server = _resolve_server_url(args)
-    online = is_online(server)
-    n = pending_count()
+    online = _TRANSPORT.is_online(server)
     if args.json:
-        _json_out({"server": server, "online": online, "pending": n})
+        _json_out({"server": server, "online": online})
         return
     status = "[success]online[/]" if online else "[error]offline[/]"
-    body = (
-        f"Server:  {server} ({status})\n"
-        f"Pending: {n} ops\n"
-    )
-    if n > 0:
-        body += f"\n[warning]⚠ {n} changes not yet synced. Run sync push.[/]"
+    body = f"Server:  {server} ({status})\n"
     _print_panel("Sync Status", body)
 
 
-def _sync_loop(db, server, items, label, *, on_success=None):
-    """Iterate *items* (each with an ``"id"`` key), sync each, commit on success.
-
-    *on_success* is called with ``(db, op)`` after each successful sync
-    (e.g. to remove from the pending queue).
-    """
+def _sync_loop(db, server, items, label):
+    """Iterate *items* (each with an ``"id"`` key), sync each, commit on success."""
     synced = []
     failed = []
     for op in items:
         article_id = op["id"]
         try:
-            result = sync_article(db, server, article_id)
+            result = sync_article(db, _TRANSPORT, server, article_id)
         except (TransportError, ProtocolError) as e:
-            console.print(f"[warning]⚠ {article_id[:8]}: {e.detail}[/]")
-            failed.append((article_id[:8], str(e.detail)))
+            console.print(f"[warning]⚠ {short_id(article_id)}: {e.detail}[/]")
+            failed.append((short_id(article_id), str(e.detail)))
             continue
         except ConflictError as e:
-            console.print(f"[warning]⚠ {article_id[:8]}: {e.detail}[/]")
-            failed.append((article_id[:8], "conflict"))
+            console.print(f"[warning]⚠ {short_id(article_id)}: {e.detail}[/]")
+            failed.append((short_id(article_id), "conflict"))
             continue
         if result["synced"]:
             db.commit()
-            if on_success:
-                on_success(op)
-            synced.append(article_id[:8])
+            synced.append(short_id(article_id))
             head = result.get("head", "")
-            console.print(f"  [success]✓[/] {article_id[:8]} → {head[:8]}")
+            console.print(f"  [success]✓[/] {short_id(article_id)} → {short_id(head)}")
 
     if synced:
         _ok(f"{label} {len(synced)} article(s): {', '.join(synced)}")
     else:
         _print_panel(label, "[muted]Nothing to sync.[/]")
-
-
-@_with_db
-def _cmd_sync_push(db, args):
-    """Push all pending offline operations to a peer server.
-
-    args: --server, --json
-    """
-    server = _require_online_server(args)
-    _sync_loop(db, server, list_all(), "Push", on_success=lambda op: pop_pending(op["id"]))
 
 
 @_with_db
@@ -94,7 +73,7 @@ def _cmd_sync_pull(db, args):
     user_id = _get_session_user()
     key = _get_session_key()
     pubkey = _get_session_pubkey()
-    server_articles = fetch_search(
+    server_articles = _TRANSPORT.fetch_search(
         server, user_id,
         private_key_bytes=key, pubkey_hex=pubkey,
     )
@@ -103,7 +82,7 @@ def _cmd_sync_pull(db, args):
         for entry in server_articles:
             if entry["id"] not in local_ids:
                 merge_article_meta(db, [entry])
-                pull_new_article(db, server, entry["id"])
+                pull_new_article(db, _TRANSPORT, server, entry["id"])
 
     _sync_loop(db, server, [{"id": aid} for aid in get_all_article_ids(db)], "Pull")
 
@@ -118,7 +97,7 @@ def _auto_discover(db, server: str) -> None:
         key = _get_session_key()
         pubkey = _get_session_pubkey()
         result = discover_network(
-            db, server, user_id, depth=1, max_users=50,
+            db, _TRANSPORT, server, user_id, depth=1, max_users=50,
             signing_key_bytes=key, pubkey_hex=pubkey,
         )
         if result["users_discovered"] or result["articles_discovered"]:
@@ -126,9 +105,18 @@ def _auto_discover(db, server: str) -> None:
                 f"[dim]✓ Auto-discovery: {result['users_discovered']} user(s), "
                 f"{result['articles_discovered']} article(s).[/]"
             )
-    except Exception as e:
+        n_errors = len(result.get("errors", []))
+        if n_errors:
+            import logging
+            logging.getLogger(__name__).debug(
+                "auto-discovery: %d error(s) during BFS", n_errors,
+            )
+    except (TransportError, ProtocolError) as e:
         import logging
         logging.getLogger(__name__).debug("auto-discovery failed: %s", e)
+    except ValueError as e:
+        import logging
+        logging.getLogger(__name__).debug("auto-discovery data error: %s", e)
 
 
 @_with_db
@@ -150,7 +138,7 @@ def _cmd_sync_discover(db, args):
     pubkey = _get_session_pubkey()
 
     result = discover_network(
-        db, server, user_id,
+        db, _TRANSPORT, server, user_id,
         depth=depth,
         max_users=max_users,
         signing_key_bytes=key,
@@ -168,3 +156,8 @@ def _cmd_sync_discover(db, args):
             f"  Follows added: {result['follows_added']}\n"
             f"  Depth reached: {result['depth_reached']}"
         )
+        n_errors = len(result.get("errors", []))
+        if n_errors:
+            console.print(
+                f"  [warning]⚠ {n_errors} error(s) during discovery.[/]"
+            )

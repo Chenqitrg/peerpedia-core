@@ -3,26 +3,24 @@
 
 """Auto-bundle helpers — push/pull all local articles after state changes.
 
-Layer 1 of the CLI package.  Imports from ``helpers`` (Layer 1 sibling)
-and ``bundle/`` (external).  Does NOT import from handlers or parser.
+Layer 1 of the CLI package.  Imports from ``helpers`` (Layer 1 sibling).
+Does NOT import from handlers or parser.
 """
 
 from __future__ import annotations
 
 import os
 
-from peerpedia_core.cli.display import console
-from peerpedia_core.cli.helpers import DEFAULT_ARTICLES_DIR, _die, _get_session_user
-from peerpedia_core.exceptions import ConflictError, ProtocolError, TransportError
-from peerpedia_core.bundle import count as pending_count, sync_article
+from peerpedia_core.cli.helpers import DEFAULT_ARTICLES_DIR, _out, _get_session_user
 from peerpedia_core.config.paths import DATA_ROOT
-from peerpedia_core.transport import is_online
-from peerpedia_core.transport.health import check_clock_skew
-from peerpedia_core.social import discover_articles
-from peerpedia_core.social.discovery import get_known_peers, record_peer_result
-from peerpedia_core.transport import fetch_head
+from peerpedia_core.core.sync_article import sync_article
+from peerpedia_core.core.sync_social import discover_articles
+from peerpedia_core.exceptions import ConflictError, ProtocolError, TransportError
+from peerpedia_core.storage.peers import get_known_peers, record_peer_result
+from peerpedia_core.time import validate_clock_skew
+from peerpedia_core.transport import Transport
 
-
+_TRANSPORT = Transport.from_http()
 _no_server_warned = False
 
 
@@ -32,42 +30,31 @@ def _warn_no_server() -> None:
     if _no_server_warned:
         return
     _no_server_warned = True
-    console.print(
-        "[dim]⚠ No PEERPEDIA_SERVER set — network sync skipped. "
-        "Set with: export PEERPEDIA_SERVER=https://your-peer.example.com[/]"
-    )
+    _out(None, "W_NO_KNOWN_PEERS")
 
 
 def _require_online_server(args) -> str:
-    """Resolve server URL, ensure it's online, check clock skew, die if not.
-
-    Replaces the duplicated 7-line guard in ``_cmd_sync_push`` and
-    ``_cmd_sync_pull``.
-    """
+    """Resolve server URL, ensure it's online, check clock skew, die if not."""
     server = _resolve_server_url(args)
-    if not is_online(server):
-        _die("Server unreachable",
-             suggestion=f"Cannot connect to {server}. Check: (1) is the server "
-                        "running? (2) is PEERPEDIA_SERVER set correctly? "
-                        "(3) is your network up?",
-             see_also=["sync status"])
-    # Clock skew check only before sync operations (push/pull/discover).
-    skew = check_clock_skew(server)
-    if skew is not None and abs(skew) > 30:
-        direction = "behind" if skew > 0 else "ahead"
-        _die(
-            f"Clock is {abs(skew)}s {direction} {server}. "
-            "Fix your system clock before syncing — "
-            "commit timestamps would be unreliable for priority claims."
-        )
+    if not _TRANSPORT.is_online(server):
+        _out(None, "OFFLINE", server=server)
+    skew = _TRANSPORT.check_clock_skew(server)
+    err = validate_clock_skew(skew)
+    if err:
+        _die_clockskew(err, server)
     return server
 
-def _sync_articles_to_peer(db, server: str, *, pre_check: bool = True) -> int:
-    """Sync local articles to *server*.  Returns count of synced articles.
 
-    When *pre_check* is True, calls ``fetch_head`` first and skips
-    articles the peer doesn't have (avoids wasteful bundle push/pull).
-    """
+def _die_clockskew(err: str, server: str):
+    """Exit with clock skew error.  Keep as helper — message is dynamic."""
+    from peerpedia_core.cli.helpers import _die
+    _die(f"{err} with {server}. Fix your system clock before syncing — "
+         "commit timestamps would be unreliable for priority claims.",
+         code="BAD_REQUEST")
+
+
+def _sync_articles_to_peer(db, server: str, *, pre_check: bool = True) -> int:
+    """Sync local articles to *server*.  Returns count of synced articles."""
     synced = 0
     for article_dir in DEFAULT_ARTICLES_DIR.iterdir():
         if not (article_dir / ".git").is_dir():
@@ -75,12 +62,12 @@ def _sync_articles_to_peer(db, server: str, *, pre_check: bool = True) -> int:
         article_id = article_dir.name
         if pre_check:
             try:
-                if fetch_head(server, article_id) is None:
+                if _TRANSPORT.fetch_head(server, article_id) is None:
                     continue
             except (TransportError, ProtocolError, ConflictError, ConnectionError):
                 continue
         try:
-            result = sync_article(db, server, article_id)
+            result = sync_article(db, _TRANSPORT, server, article_id)
             if result["synced"]:
                 db.commit()
                 synced += 1
@@ -92,102 +79,72 @@ def _sync_articles_to_peer(db, server: str, *, pre_check: bool = True) -> int:
 def _try_sync(db, server: str | None = None) -> None:
     """Sync all local articles with the server if online.  No-op otherwise.
 
-    Called AFTER ``db.commit()`` in each state-changing command so the
-    main operation is safely persisted before sync touches anything.
-    Each synced article commits its own changes immediately.
-
     Best-effort: network and conflict errors are silent — local state
-    is already persisted and manual push can retry later.  Warns on
-    the first invocation per process if the server is unreachable;
-    subsequent calls in the same process are silent.
+    is already persisted and manual push can retry later.
     """
     srv = server or os.environ.get("PEERPEDIA_SERVER")
     if not srv:
         _warn_no_server()
         return
-    if not is_online(srv):
-        console.print(f"[dim]⚠ Server {srv} is offline — auto-sync skipped.[/]")
+    if not _TRANSPORT.is_online(srv):
+        _out(None, "S_AUTO_SYNC_OFFLINE", server=srv)
         return
     try:
         _sync_articles_to_peer(db, srv, pre_check=False)
-
-        # Discover new articles from followed users.
         user_id = _get_session_user()
-        n = discover_articles(db, srv, user_id)
+        n = discover_articles(db, _TRANSPORT, srv, user_id)
         if n:
-            console.print(f"[dim]✓ Discovered {n} new article(s).[/]")
+            _out(None, "S_AUTO_SYNC_DISCOVERED", count=n)
     except TransportError as e:
-        console.print(f"[dim]⚠ Auto-sync failed (network): {e.detail}[/]")
+        _out(None, "S_AUTO_SYNC_FAILED", reason="network", detail=e.detail)
     except ProtocolError as e:
-        console.print(f"[dim]⚠ Auto-sync failed (protocol): {e.detail}[/]")
+        _out(None, "S_AUTO_SYNC_FAILED", reason="protocol", detail=e.detail)
     except ConflictError:
-        console.print("[dim]⚠ Auto-sync conflict — pull and retry.[/]")
+        _out(None, "S_AUTO_SYNC_CONFLICT")
     except ConnectionError as e:
-        console.print(f"[dim]⚠ Auto-sync failed (connection): {e}[/]")
+        _out(None, "S_AUTO_SYNC_FAILED", reason="connection", detail=str(e))
 
 
 def _try_sync_all(db) -> None:
-    """Sync all local articles with every known peer.  Best-effort.
-
-    Iterates ``get_known_peers()`` (skipping backoff'd peers), checks
-    each peer's HEAD for each local article via ``fetch_head``, and only
-    syncs articles the peer actually has.  Records success/failure via
-    ``record_peer_result`` for exponential backoff.
-
-    Called after ``db.commit()`` in state-changing commands so local
-    state is persisted before sync touches anything.
-    """
+    """Sync all local articles with every known peer.  Best-effort."""
     peers = get_known_peers()
     if not peers:
-        console.print("[dim]No known peers — multi-peer sync skipped.[/]")
+        _out(None, "S_NO_KNOWN_PEERS")
+        return
+    for server in peers:
+        _try_sync_to_peer(db, server)
+
+
+def _try_sync_to_peer(db, server: str) -> None:
+    """Sync articles + discover new content from *server*.  Best-effort."""
+    if not _TRANSPORT.is_online(server):
+        record_peer_result(server, success=False)
         return
 
-    for server in peers:
-        if not is_online(server):
-            record_peer_result(server, success=False)
-            continue
+    skew = _TRANSPORT.check_clock_skew(server)
+    if validate_clock_skew(skew):
+        _out(None, "S_CLOCK_SKEW_SKIP", skew=skew, server=server)
+        record_peer_result(server, success=False)
+        return
 
-        # Check clock skew — skip if too far out of sync.
-        skew = check_clock_skew(server)
-        if skew is not None and abs(skew) > 30:
-            console.print(
-                f"[dim]⚠ Clock skew {skew}s with {server} — skipped.[/]"
-            )
-            record_peer_result(server, success=False)
-            continue
-
+    try:
+        synced = _sync_articles_to_peer(db, server, pre_check=True)
         try:
-            synced = _sync_articles_to_peer(db, server, pre_check=True)
-
-            # Discover new articles from followed users on this peer.
-            try:
-                user_id = _get_session_user()
-                n = discover_articles(db, server, user_id)
-                if n:
-                    console.print(
-                        f"[dim]✓ {server}: discovered {n} article(s).[/]"
-                    )
-            except (TransportError, ProtocolError, ConflictError, ConnectionError):
-                pass
-
-            if synced:
-                console.print(
-                    f"[dim]✓ Synced {synced} article(s) with {server}.[/]"
-                )
-            record_peer_result(server, success=True)
+            user_id = _get_session_user()
+            n = discover_articles(db, _TRANSPORT, server, user_id)
+            if n:
+                _out(None, "S_DISCOVERED_FROM", server=server, count=n)
         except (TransportError, ProtocolError, ConflictError, ConnectionError):
-            record_peer_result(server, success=False)
+            pass
+        if synced:
+            _out(None, "S_SYNCED_COUNT", count=synced, server=server)
+        record_peer_result(server, success=True)
+    except (TransportError, ProtocolError, ConflictError, ConnectionError):
+        record_peer_result(server, success=False)
 
 
 def _resolve_server_url(args) -> str:
-    """Return the peer server URL from --server flag, env var, or saved default.
-
-    The last-used server URL is saved to ``~/.peerpedia/server_default`` so
-    users don't need to pass ``--server`` on every command.
-
-    Warns once if the saved default server has been unreachable for 3+
-    consecutive calls, and offers to clear it.
-    """
+    """Return the peer server URL from --server flag, env var, or saved default."""
     srv = getattr(args, "server", None) or os.environ.get("PEERPEDIA_SERVER")
     if not srv:
         default_file = DATA_ROOT / "server_default"
@@ -195,36 +152,26 @@ def _resolve_server_url(args) -> str:
             if default_file.is_file():
                 srv = default_file.read_text().strip()
         except OSError as e:
-            _die(f"Cannot read default server from {default_file}: {e}")
+            _out(None, "CONFIG_ERROR", path=str(default_file), error=str(e))
     if not srv:
-        _die("No peer server configured.  Set PEERPEDIA_SERVER or pass --server.")
+        _out(None, "NOT_CONFIGURED")
 
-    # Only write to disk if the URL actually changed — avoids unnecessary
-    # filesystem I/O on every network-touching command.
     default_file = DATA_ROOT / "server_default"
     if not default_file.is_file() or default_file.read_text().strip() != srv:
         _save_default_server(srv)
 
-    # Warn if the saved default server has been unreachable for 3+ consecutive
-    # calls — the user may not realize it's a stale server from a past session.
-    if not is_online(srv):
+    if not _TRANSPORT.is_online(srv):
         _stale_hits = _stale_counter.get(srv, 0) + 1
         _stale_counter[srv] = _stale_hits
         if _stale_hits == 3:
-            console.print(
-                f"[warning]⚠ Server {srv} is unreachable after 3 attempts. "
-                f"It may be from a previous session.[/]"
-            )
-            console.print(
-                f"  [dim]→ To clear: rm {DATA_ROOT / 'server_default'}[/]"
-            )
+            _out(None, "S_STALE_SERVER", server=srv)
+            _out(None, "S_STALE_SERVER_HINT", path=str(DATA_ROOT / "server_default"))
     else:
         _stale_counter.pop(srv, None)
 
     return srv
 
 
-# Track consecutive stale-server hits for the warning threshold.
 _stale_counter: dict[str, int] = {}
 
 
@@ -234,6 +181,4 @@ def _save_default_server(url: str) -> None:
         DATA_ROOT.mkdir(parents=True, exist_ok=True)
         (DATA_ROOT / "server_default").write_text(url)
     except OSError as e:
-        console.print(
-            f"[dim]⚠ Cannot save default server to {DATA_ROOT}: {e}[/]"
-        )
+        _out(None, "S_CANNOT_SAVE", path=str(DATA_ROOT), error=str(e))

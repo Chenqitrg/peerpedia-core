@@ -9,7 +9,9 @@ Layer 1 of the CLI package.  Imports from ``display`` (Layer 0) and
 
 from __future__ import annotations
 
+import contextvars
 import functools
+import getpass
 import json
 import logging
 import os
@@ -19,22 +21,55 @@ import tempfile
 from pathlib import Path
 
 from peerpedia_core.cli.display import console, theme, display_article as _render_article
-from peerpedia_core.commands import (
-    assert_article_integrity, count_articles, count_unread_notifications,
-    db_repl_setup, db_session, get_article, get_author_ids,
+from peerpedia_core.core import (
+    reconcile_integrity, count_articles, count_unread_notifications,
+    db_repl_setup, db_session, find_users, get_article, get_author_ids,
     get_head_hash, get_notifications_for_user,
     get_reviews_for_article, get_top_users_by_followers,
     get_user, get_user_by_name, get_users_by_ids, list_articles, list_users,
-    parse_frontmatter, publish_ready_articles, resolve_username_or_alias,
+    parse_frontmatter, publish_ready_articles,
+    resolve_username_or_alias, search_articles,
 )
+# Re-export for REPL (arch rule: repl/ only imports from cli/).
+# These are pure search functions — no _die, no exit.
+__all_helpers__ = ["find_users", "search_articles", "list_articles"]
 from peerpedia_core.config.paths import ARTICLES_DIR as DEFAULT_ARTICLES_DIR, DB_PATH, DB_URL, SESSION_FILE
 from peerpedia_core.crypto import load_private_key, _public_key_to_bytes
 from peerpedia_core.exceptions import PeerpediaError, TransportError
-from peerpedia_core.storage.db.models import Article, User
+from peerpedia_core.types import short_id
 from peerpedia_core.types.scores import SCORE_DIMENSIONS
 
 
 _data_dir_ready = False
+
+# Whether the current handler was invoked with --json.  Set by _with_db
+# before the handler runs; read by _die to decide output format.
+_die_json_mode: contextvars.ContextVar[bool] = contextvars.ContextVar(
+    "_die_json_mode", default=False,
+)
+
+
+def _set_die_json_mode(enabled: bool) -> None:
+    """Set JSON mode for the current handler context (used by _with_db)."""
+    _die_json_mode.set(enabled)
+
+
+def _get_password(args, confirm: bool = False) -> str:
+    """Read password from --password, env, or TTY prompt."""
+    pw = getattr(args, "password", None) or os.environ.get("PEERPEDIA_PASSWORD")
+    if pw:
+        return pw
+    if not sys.stdin.isatty():
+        _out(None, "NO_TTY")
+    password = getpass.getpass("Password: ")
+    if not password:
+        _out(None, "EMPTY_PASSWORD")
+    if confirm:
+        again = getpass.getpass("Confirm password: ")
+        if password != again:
+            _out(None, "PASSWORD_MISMATCH")
+    return password
+
 
 # Cached DB engine for REPL (REPL keeps a persistent session, unlike CLI's
 # one-shot _with_db).  None until first call.
@@ -100,6 +135,7 @@ def _with_db(func):
         if not _data_dir_ready:
             DB_PATH.parent.mkdir(parents=True, exist_ok=True)
             _data_dir_ready = True
+        _set_die_json_mode(getattr(args, "json", False))
         try:
             with db_session(DB_URL) as db:
                 return func(db, args)
@@ -107,9 +143,16 @@ def _with_db(func):
             # Expected business-logic error — preserve type information.
             _die(str(e.detail), code=e.code, **e.context)
         except Exception as e:
-            import traceback
-            traceback.print_exc()
-            _die(str(e), code="INTERNAL_ERROR")
+            if _die_json_mode.get():
+                import traceback
+                _die(str(e), code="INTERNAL_ERROR",
+                     traceback=traceback.format_exc())
+            else:
+                import traceback
+                traceback.print_exc()
+                _die(str(e), code="INTERNAL_ERROR")
+        finally:
+            _set_die_json_mode(False)
 
     return wrapper
 
@@ -147,61 +190,114 @@ def _ok(what: str) -> None:
     console.print(f"✓ [{theme.styles['success']}]{what}[/]")
 
 
-def _die(msg: str, code: str = "ERROR", *,
-         suggestion: str = "", see_also: list[str] | None = None,
-         **context) -> None:
-    """Error message with actionable guidance, then exit.
-
-    Args:
-        msg: Human-readable error description.
-        code: Machine-readable error code (e.g. ``"NOT_FOUND"``).
-        suggestion: What the user should do next (displayed as a hint).
-        see_also: Related commands or topics the user can explore.
-        **context: Arbitrary key-value pairs for structured error output.
-    """
+def _out_error_raw(msg: str, **kwargs):
+    """Fallback for old-style _die calls with literal messages.  No registry lookup."""
+    code = kwargs.pop("code", "ERROR")
+    if _die_json_mode.get():
+        payload: dict = {"error": code, "message": msg}
+        if kwargs:
+            payload.update(kwargs)
+        print(json.dumps(payload, indent=2, default=str))
+        sys.exit(1)
     from rich.text import Text
-    console.print(Text(f"✗ {msg}", style=theme.styles['error']))
+    console.print(Text(f"✗ {msg}", style=theme.styles["error"]))
+    suggestion = kwargs.get("suggestion", "")
     if suggestion:
         console.print()
         console.print(f"  [dim]→ {suggestion}[/]")
-    if see_also:
-        labels = " · ".join(see_also)
-        console.print(f"  [muted]See also: {labels}[/]")
     sys.exit(1)
 
 
-def _resolve_article_id(db, article_ref: str):
-    """Resolve an article by UUID, prefix, or fuzzy title.
+def _die(code_or_msg: str = "INTERNAL_ERROR", /, **fmt):
+    """Backward-compat wrapper — delegates to ``_out(None, code, **fmt)``.
 
-    Returns the Article object or calls _die with suggestions.
+    Prefer ``_out(args, code, data, **fmt)`` in new code.
     """
-    # 1. Exact UUID match
-    article = db.get(Article, article_ref)
-    if article is not None:
-        return article
+    from peerpedia_core.cli.msgs import _lookup
+    code, m = _lookup(code_or_msg)
+    if m.text != code_or_msg:
+        _out(None, code, **fmt)
+    else:
+        _out_error_raw(code_or_msg, **fmt)
 
-    # 2. UUID prefix match
-    candidates = db.query(Article).filter(Article.id.startswith(article_ref)).all()
-    if len(candidates) == 1:
-        return candidates[0]
-    if len(candidates) > 1:
-        names = ", ".join(f"{a.id[:8]} ({a.title})" for a in candidates)
-        _die(f"Multiple ID prefix matches for '{article_ref}': {names}")
-
-    # 3. Title search
-    candidates = list_articles(db, search_query=article_ref, limit=5)
-    if len(candidates) == 1:
-        return candidates[0]
-    if len(candidates) > 1:
-        names = ", ".join(f"{a.id[:8]} ({a.title})" for a in candidates)
-        _die(f"Multiple title matches for '{article_ref}': {names}")
-
-    _die(f"Article '{article_ref}' not found. Try a title keyword or article ID prefix.")
 
 
 def _json_out(data: dict | list) -> None:
     """Machine-readable output, used when --json is passed."""
     print(json.dumps(data, indent=2, default=str))
+
+
+def _out(args, code: str, data=None, /, **fmt):
+    """Single output entry point. Dispatches on message kind.
+
+    ``_out(args, "REGISTERED", {"id": uid}, name="Alice")``  → success
+    ``_out(args, "AUTH_FAILED")``                              → error (die)
+    ``_out(None, "AUTH_FAILED")``                              → error, no JSON
+    ``_out(args, "", data)``                                   → JSON-only (no message)
+    """
+    from peerpedia_core.cli.msgs import Kind, _lookup
+    if not code:
+        if args is not None and getattr(args, "json", False):
+            _json_out(data)
+            sys.exit(0)
+        return
+    code, m = _lookup(code)
+    use_json = args is not None and getattr(args, "json", False)
+
+    if m.kind == Kind.ERROR:
+        msg = m.text.format(**fmt) if fmt else m.text
+        if _die_json_mode.get() and use_json:
+            payload: dict = {"error": m.code, "message": msg}
+            if m.suggestion:
+                payload["suggestion"] = m.suggestion.format(**fmt) if fmt else m.suggestion
+            if m.see_also:
+                payload["see_also"] = list(m.see_also)
+            print(json.dumps(payload, indent=2, default=str))
+            sys.exit(1)
+        from rich.text import Text
+        console.print(Text(f"✗ {msg}", style=theme.styles['error']))
+        if m.suggestion:
+            console.print()
+            console.print(f"  [dim]→ {m.suggestion.format(**fmt) if fmt else m.suggestion}[/]")
+        if m.see_also:
+            console.print(f"  [muted]See also: {' · '.join(m.see_also)}[/]")
+        sys.exit(1)
+
+    if m.kind == Kind.NOTIFY:
+        # Display-only — JSON mode skips, pretty prints and continues.
+        if not use_json and m.text:
+            console.print(m.text.format(**fmt) if fmt else m.text)
+        return
+
+    # ── Success path ────────────────────────────────────────────────────
+    if use_json:
+        payload: dict = {"code": m.code}
+        if isinstance(data, dict):
+            payload.update(data)
+        elif isinstance(data, list):
+            payload["items"] = data
+        elif data is not None:
+            payload["value"] = data
+        _json_out(payload)
+        sys.exit(0)
+    if m.text:
+        _ok(m.text.format(**fmt) if fmt else m.text)
+
+
+def _show(args, code: str = "", data=None, /, **fmt):
+    """Backward-compat wrapper — delegates to ``_out(args, code, data, **fmt)``."""
+    _out(args, code, data, **fmt)
+
+
+def _log(code: str, *, level: str = "info", **fmt):
+    """Log a structured message by code.  For background/daemon code.
+
+    ``_log("L_SYNC_FAILED", server=srv, error=e)``
+    """
+    import logging
+    from peerpedia_core.cli.msgs import _log_text
+    text = _log_text(code, **fmt)
+    getattr(logging.getLogger(__name__), level)(text)
 
 
 # ── Shared logic — reused by multiple commands ──────────────────────────
@@ -226,9 +322,10 @@ def _find_article_file(article_id: str, db=None) -> Path:
     # Lazy pull: file doesn't exist locally, try to fetch from peer server.
     server = os.environ.get("PEERPEDIA_SERVER")
     if server and db is not None:
-        from peerpedia_core.bundle import pull_new_article
+        from peerpedia_core.core.sync_article import pull_new_article
+        from peerpedia_core.cli.bundle_utils import _TRANSPORT
         try:
-            pull_new_article(db, server, article_id)
+            pull_new_article(db, _TRANSPORT, server, article_id)
         except TransportError:
             pass  # best-effort: server unreachable, fall through to die
         # Retry after pull
@@ -237,9 +334,7 @@ def _find_article_file(article_id: str, db=None) -> Path:
             if f.exists():
                 return f
 
-    _die(f"No source file found for article {article_id}",
-         suggestion="The article may have been discovered from a peer but its "
-                    "content hasn't been downloaded yet.  Try 'sync pull' first.")
+    _out(None, "SOURCE_NOT_FOUND", article_id=article_id)
 
 
 def _resolve_and_display_article(db, article, *, author_ids: list[str] | None = None) -> None:
@@ -259,7 +354,7 @@ def _resolve_and_display_article(db, article, *, author_ids: list[str] | None = 
     try:
         raw = _find_article_file(article.id, db=db).read_text()
     except SystemExit:
-        # Article stub without local source — display metadata only.
+        # ArticleMetaStorage stub without local source — display metadata only.
         _render_article(
             title=article.title,
             status=article.status,
@@ -320,62 +415,50 @@ def _get_session_user() -> str:
     s = _read_session()
     if s:
         return s["user_id"]
-    _die("No user specified. Register first:\n"
-         "  peerpedia account register --name <your-name>")
+    _out(None, "USER_NOT_REGISTERED")
 
 
+def _resolve_user_by_atname(db, name: str) -> str:
+    """Resolve ``@name`` → user ID via username/alias lookup.
+
+    Returns the user ID on exact match.  Calls ``_die`` only when zero or
+    multiple users match — both are terminal for one-shot CLI commands.
+    In the REPL this function is NOT used; REPL calls
+    ``resolve_username_or_alias`` directly and handles ambiguity interactively.
+    """
+    session_user = _get_session_user()
+    users = resolve_username_or_alias(db, session_user, name)
+
+    if len(users) == 1:
+        return users[0].id
+    if len(users) > 1:
+        candidates = "\n".join(f"  {u.id}  {u.name}" for u in users)
+        _out(None, "AMBIGUOUS_NAME", name=f"@{name}", ids=candidates)
+    _out(None, "USER_NOT_FOUND", name=f"@{name}")
+
+
+# FIXME: _resolve_user wraps find_users with _die — REPL can't use this.
+# Callers that need a single user should use get_user (exact) or handle
+# list results from search_users themselves.
 def _resolve_user(db, user_ref: str) -> str:
     """Resolve a user reference to a user ID.
 
-    ``@name`` → look up username first, then aliases.
-    UUID or UUID prefix → search DB for matching user.
+    ``@name`` → username/alias lookup.
+    Plain string → delegates to ``commands.find_users`` (UUID → prefix → name).
+
+    Terminal for CLI callers: zero or multiple matches call ``_die``.
     """
     if user_ref.startswith("@"):
-        name = user_ref[1:]
-        session_user = _get_session_user()
-        users = resolve_username_or_alias(db, session_user, name)
+        return _resolve_user_by_atname(db, user_ref[1:])
 
-        if len(users) == 1:
-            return users[0].id
-        if len(users) > 1:
-            candidates = "\n".join(
-                f"  {u.id}  {u.name}" for u in users
-            )
-            _die(
-                f"Multiple users match '@{name}':\n{candidates}\n"
-                f"Use the UUID to specify which one."
-            )
-        _die(
-            f"User '@{name}' not found.\n"
-            f"  Register: peerpedia account register --name {name}\n"
-            f"  Or set an alias: peerpedia alias set <user_id> {name}"
-        )
-
-    # Plain string — resolve as UUID, prefix, or exact name match.
-    # Exact UUID match
-    user = db.get(User, user_ref)
-    if user is not None:
-        return user.id
-    # UUID prefix match
-    candidates = db.query(User).filter(User.id.startswith(user_ref)).all()
-    if len(candidates) == 1:
-        return candidates[0].id
-    if len(candidates) > 1:
-        names = ", ".join(f"{u.id[:8]} ({u.name})" for u in candidates)
-        _die(f"Multiple UUID prefix matches for '{user_ref}': {names}",
-             suggestion="Use a longer prefix or the full UUID.")
-    # Name match
-    candidates = db.query(User).filter(User.name.ilike(f"%{user_ref}%")).all()
-    if len(candidates) == 1:
-        return candidates[0].id
-    if len(candidates) > 1:
-        names = ", ".join(f"{u.id[:8]} ({u.name})" for u in candidates)
-        _die(f"Multiple users match '{user_ref}': {names}",
-             suggestion="Use an @name, a UUID prefix, or try 'account search' first.",
-             see_also=["account search"])
-    _die(f"User '{user_ref}' not found.",
-         suggestion="Check the spelling, use an @name, or search with 'account search'.",
-         see_also=["account search", "account register"])
+    results = find_users(db, user_ref)
+    if len(results) == 1:
+        return results[0].id
+    if len(results) > 1:
+        names = ", ".join(f"{short_id(u.id)} ({u.name})" for u in results)
+        _out(None, "AMBIGUOUS_NAME", name=user_ref, ids=names)
+        return ""  # unreachable
+    _out(None, "USER_NOT_FOUND", name=user_ref)
 
 
 def _get_session_key() -> bytes | None:
@@ -408,7 +491,6 @@ def _parse_scores(scores_str: str | None) -> dict | None:
     """
     if not scores_str:
         return None
-    # Build valid-key sets: both abbreviations ("orig") and full names ("originality").
     _valid_abbr = set(SCORE_DIMENSIONS.keys())
     _valid_full = set(SCORE_DIMENSIONS.values())
     _valid = _valid_abbr | _valid_full
@@ -417,28 +499,30 @@ def _parse_scores(scores_str: str | None) -> dict | None:
         part = part.strip()
         if not part:
             continue
-        if "=" not in part:
-            _die(f"Malformed score: '{part}' — expected key=value",
-                 code="BAD_REQUEST", field="scores", bad_value=part)
-        k, v = part.split("=", 1)
-        k, v = k.strip(), v.strip()
-        if k not in _valid:
-            abbr_list = ", ".join(sorted(_valid_abbr))
-            _die(f"Unknown score dimension: '{k}'. Valid: {abbr_list}",
-                 code="BAD_REQUEST", field="scores", bad_dimension=k)
-        # Normalize abbreviations to full names (downstream code expects full names).
-        if k in _valid_abbr:
-            k = SCORE_DIMENSIONS[k]
-        try:
-            score = int(v)
-        except ValueError:
-            _die(f"Score for '{k}' must be an integer, got '{v}'",
-                 code="BAD_REQUEST", field=f"scores.{k}", bad_value=v)
-        if not 1 <= score <= 5:
-            _die(f"Score for '{k}' must be 1-5, got {score}",
-                 code="BAD_REQUEST", field=f"scores.{k}", bad_value=str(score))
-        result[k] = score
+        k, v = _parse_score_part(part, _valid, _valid_abbr)
+        result[k] = v
     return result
+
+
+def _parse_score_part(part: str, valid_keys: set[str], valid_abbr: set[str]) -> tuple[str, int]:
+    """Parse one ``key=value`` score part.  Dies with BAD_REQUEST on invalid input."""
+    if "=" not in part:
+        _out(None, "SCORE_MALFORMED", part=part)
+    k, v = part.split("=", 1)
+    k, v = k.strip(), v.strip()
+    if k not in valid_keys:
+        abbr_list = ", ".join(sorted(valid_abbr))
+        _out(None, "SCORE_UNKNOWN_DIM", key=k, valid=abbr_list)
+    # Normalize abbreviations to full names (downstream code expects full names).
+    if k in valid_abbr:
+        k = SCORE_DIMENSIONS[k]
+    try:
+        score = int(v)
+    except ValueError:
+        _out(None, "SCORE_NOT_INT", key=k, value=v)
+    if not 1 <= score <= 5:
+        _out(None, "SCORE_OUT_OF_RANGE", key=k, value=str(score))
+    return k, score
 
 
 def _prompt_commit_message(diff: str = "") -> str:
@@ -449,10 +533,7 @@ def _prompt_commit_message(diff: str = "") -> str:
     Empty messages are rejected.
     """
     if not sys.stdin.isatty():
-        _die(
-            "No TTY available for commit message editor.",
-            suggestion="Use --message '<text>' to provide a commit message non-interactively.",
-        )
+        _out(None, "NO_TTY_EDITOR")
     header = (
         "\n# Please enter a commit message for your changes.\n"
         "# Lines starting with '#' will be ignored.\n"
@@ -471,7 +552,7 @@ def _prompt_commit_message(diff: str = "") -> str:
     lines = [l for l in text.splitlines() if not l.strip().startswith("#")]
     msg = "\n".join(lines).strip()
     if not msg:
-        _die("Aborting: empty commit message.")
+        _out(None, "EMPTY_COMMIT_MSG")
     return msg
 
 
@@ -483,10 +564,7 @@ def _open_editor(initial: str) -> str:
       EDITOR=code peerpedia article create --title "Hello"  # one-off
     """
     if not sys.stdin.isatty():
-        _die(
-            "No TTY available for editor.",
-            suggestion="Use --content '<text>' or pipe input to provide content non-interactively.",
-        )
+        _out(None, "NO_TTY_EDITOR")
     editor = os.environ.get("EDITOR", "vim")
     with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False) as f:
         f.write(initial)
@@ -523,16 +601,24 @@ def _resolve_author_names(db, author_ids: list[str]) -> list[str]:
     if not author_ids:
         return []
     users = {u.id: u for u in get_users_by_ids(db, set(author_ids))}
-    return [users[uid].name if uid in users else uid[:8] for uid in author_ids]
+    return [users[uid].name if uid in users else short_id(uid) for uid in author_ids]
 
 
+# FIXME: should use get_article (exact) for the "require exactly one" case,
+# not search_articles.  Multiple matches from search are normal — the
+# problem is using the wrong function, not having too many results.
 def _require_resolved_article(db, args_id: str, *, check_integrity: bool = True):
-    """Resolve an article by ref, assert integrity, return (article, article_id).
+    """Search articles by *args_id* and require exactly one match.
 
-    Replaces the repeated triplet of ``_resolve_article_id`` +
-    ``article_id = article.id`` + ``assert_article_integrity``.
+    Zero or multiple matches call ``_die`` (CLI can't pick interactively).
     """
-    article = _resolve_article_id(db, args_id)
-    if check_integrity:
-        assert_article_integrity(db, article.id)
-    return article, article.id
+    results = search_articles(db, args_id)
+    if len(results) == 1:
+        article = results[0]
+        if check_integrity:
+            reconcile_integrity(db, article.id)
+        return article, article.id
+    if len(results) > 1:
+        names = ", ".join(f"{short_id(a.id)} ({a.title})" for a in results)
+        _out(None, "ARTICLE_MULTIPLE", query=args_id, ids=names)
+    _out(None, "ARTICLE_NOT_FOUND", article_id=args_id)

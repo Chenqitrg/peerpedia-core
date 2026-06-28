@@ -103,7 +103,8 @@ def _cmd_schema(args):
                 commands.append(_build_command_schema(name, "", handler, arg_specs))
 
     # Top-level commands (e.g. ``fork``, ``follow``)
-    for name, handler, arg_specs in TOP_LEVEL:
+    for entry in TOP_LEVEL:
+        name, handler, arg_specs = entry[0], entry[1], entry[2]
         commands.append(_build_command_schema("", name, handler, arg_specs))
 
     # Filter by command name if provided

@@ -15,6 +15,7 @@ from rich.table import Table
 from rich.theme import Theme
 
 from peerpedia_core.types.scores import SCORE_DIMENSIONS
+from peerpedia_core.types import short_id
 
 # ── Rich console with theme ──────────────────────────────────────────────
 
@@ -59,7 +60,7 @@ def display_article(title: str, status: str, authors: list[str], score: dict | N
     body = (
         f"[bold info]{title}[/]      {_status_badge(status)}\n"
         f"Authors: {', '.join(authors)}\n"
-        f"Score:   {scores_str}"
+        f"Score:\n{scores_str}"
     )
     if abstract:
         body += f"\nAbstract: {abstract}"
@@ -74,8 +75,8 @@ def display_user(name: str, affiliation: str, expertise: list[str], reputation: 
     if expertise:
         body += f"\nExpertise: {', '.join(expertise)}"
     if reputation:
-        body += f"\nReputation: {_stars(reputation)}"
-    body += f"\nID: [accent]{user_id[:8]}[/]"
+        body += f"\nReputation:\n{_stars(reputation)}"
+    body += f"\nID: [accent]{short_id(user_id)}[/]"
     _print_panel("User", body)
 
 
@@ -108,17 +109,39 @@ def display_diff(diff_text: str, stats: dict) -> None:
         elif line.startswith("-") and not line.startswith("---"):
             console.print(f"[red]{line}[/]")
         else:
-            console.print(f"[dim]{line}[/]", markup=False)
+            console.print(line, style="dim")
 
     console.print()
 
 
+# ── Score display component ─────────────────────────────────────────────
+
+SCORE_DIM_NAMES: list[str] = list(SCORE_DIMENSIONS.values())
+
+
+def _score_lines(score: dict | None, dims: list[str] | None = None) -> list[str]:
+    """Return one plain-text line per dimension, e.g. ``'originality    ★★★☆☆  3/5'``.
+
+    Pure data → text.  No Rich markup.  Reusable in FormattedTextControl
+    and anywhere else that needs plain stars.
+    """
+    if not score:
+        return ["—"]
+    if dims is None:
+        dims = SCORE_DIM_NAMES
+    return [
+        f"  {d:<14} {'★'*v}{'☆'*(5-v)}  {v}/5"
+        for d in dims
+        for v in [int(score.get(d, 0))]
+    ]
+
+
 def _stars(score: dict | None, dims: list[str] | None = None) -> str:
-    """Render 5-dim scores as stars, e.g. ★★★★☆ 4/5."""
+    """Render 5-dim scores with Rich markup, e.g. ``[accent]★★★★☆[/][muted]☆[/]  4/5``."""
     if not score:
         return "[muted]no score[/]"
     if dims is None:
-        dims = list(SCORE_DIMENSIONS.values())
+        dims = SCORE_DIM_NAMES
     return "\n".join(
         f"  {d:<14} [accent]{'★'*v}[/][muted]{'☆'*(5-v)}[/]  {v}/5"
         for d in dims

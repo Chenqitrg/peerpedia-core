@@ -27,8 +27,9 @@ warnings.filterwarnings("ignore", category=Warning, module="sqlalchemy")
 from peerpedia_core.cli.parser import build_parser
 from peerpedia_core.config.paths import DB_PATH, DB_URL
 from peerpedia_core.cli.display import console
-from peerpedia_core.commands import db_session, count_articles, get_user, list_users, publish_ready_articles
+from peerpedia_core.core import db_session, count_articles, get_user, list_users, publish_ready_articles
 from peerpedia_core.cli.helpers import _read_session
+from peerpedia_core.types import short_id
 def _count_users() -> int:
     """Return the number of users in the local DB.  Returns 0 on fresh install."""
     try:
@@ -49,13 +50,13 @@ def _show_dashboard() -> None:
     if session:
         user_id = session.get("user_id", "")
         user_name = session.get("name", "?")
-        console.print(f"  Currently: [accent]{user_name}[/] ({user_id[:8] if user_id else '?'})")
+        console.print(f"  Currently: [accent]{user_name}[/] ({short_id(user_id) if user_id else '?'})")
 
         try:
             with db_session(DB_URL) as db:
-                drafts = count_articles(db, status="draft", author_id=user_id)
-                in_review = count_articles(db, status="sedimentation", author_id=user_id)
-                published = count_articles(db, status="published", author_id=user_id)
+                drafts = count_articles(db, statuses={"draft"}, author_id=user_id)
+                in_review = count_articles(db, statuses={"sedimentation"}, author_id=user_id)
+                published = count_articles(db, statuses={"published"}, author_id=user_id)
                 console.print(f"    Drafts:      {drafts}")
                 console.print(f"    In review:   {in_review}")
                 console.print(f"    Published:   {published}")

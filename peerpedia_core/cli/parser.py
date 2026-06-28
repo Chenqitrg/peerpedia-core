@@ -39,7 +39,7 @@ from peerpedia_core.cli.handlers import (
     _cmd_meta_help,
     _cmd_review_accept, _cmd_review_decline, _cmd_review_invite, _cmd_review_list, _cmd_review_rate, _cmd_review_reply, _cmd_review_submit,
     _cmd_server_start,
-    _cmd_sync_discover, _cmd_sync_pull, _cmd_sync_push, _cmd_sync_status,
+    _cmd_sync_discover, _cmd_sync_pull, _cmd_sync_status,
     _cmd_whoami,
 )
 
@@ -263,9 +263,6 @@ COMMAND_GROUPS = [
         ("status", _cmd_sync_status, [
             (("--server",), {"help": "Peer server URL (or set PEERPEDIA_SERVER env var)"}),
         ], {"epilog": _load_help("sync_status")}),
-        ("push", _cmd_sync_push, [
-            (("--server",), {"help": "Peer server URL (or set PEERPEDIA_SERVER env var)"}),
-        ], {"epilog": _load_help("sync_push")}),
         ("pull", _cmd_sync_pull, [
             (("--server",), {"help": "Peer server URL (or set PEERPEDIA_SERVER env var)"}),
         ], {"epilog": _load_help("sync_pull")}),
@@ -489,15 +486,36 @@ def _first_line(func) -> str:
 def get_cmd_map() -> dict[str, list[str]]:
     """Return ``{flat_cmd: [group, subcmd]}`` for the REPL dispatcher.
 
-    Flat commands like ``"create"`` map to argparse groups like
-    ``["article", "create"]`` so the REPL can build the full argv.
+    Includes **short names** (``"create"`` → ``["article", "create"]``) and
+    **compound names** (``"review submit"`` → ``["review", "submit"]``).
+    Compound names *always* work; short names work for unambiguous
+    subcommands.  When a sub-name is shared by multiple groups (e.g.
+    ``"list"`` in article / review / alias / share / maintainer), the short
+    name maps to the first group that defines it in ``COMMAND_GROUPS``.
     """
+    from collections import defaultdict
+
     result: dict[str, list[str]] = {}
+    sub_name_groups: dict[str, list[str]] = defaultdict(list)
+
+    # First pass: collect which groups share each sub-name
     for name, _help, subcommands in COMMAND_GROUPS:
         for entry in subcommands:
             sub_name = entry[0]
             if sub_name:
-                result[sub_name] = [name, sub_name]
+                sub_name_groups[sub_name].append(name)
+
+    # Second pass: register compound names (always) + short names (when safe)
+    for name, _help, subcommands in COMMAND_GROUPS:
+        for entry in subcommands:
+            sub_name = entry[0]
+            if sub_name:
+                # Always available under its full compound name
+                result[f"{name} {sub_name}"] = [name, sub_name]
+                # Short name: only if unique, or first group (most common)
+                if sub_name_groups[sub_name][0] == name:
+                    result[sub_name] = [name, sub_name]
+
     for entry in TOP_LEVEL:
         result[entry[0]] = [entry[0]]
     return result

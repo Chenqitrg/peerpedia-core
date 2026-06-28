@@ -10,7 +10,7 @@ from datetime import timedelta, timezone
 from peerpedia_core.storage.db import Session
 from peerpedia_core.config.params import params
 from peerpedia_core.storage.db.crud_article import (
-    get_author_ids, list_articles, update_article_score, update_article_status,
+    list_author_ids, list_articles, update_article_score, update_article_status,
 )
 from peerpedia_core.storage.db.crud_review import get_reviews_for_article
 from peerpedia_core.storage.git import DEFAULT_ARTICLES_DIR, commit_status_marker
@@ -62,7 +62,7 @@ def _process_sink_article(db: Session, article) -> list[str] | None:
         return None
 
     # ── Count approvals ────────────────────────────────────────────────────
-    authors = get_author_ids(db, article.id)
+    authors = list_author_ids(db, article.id)
     approval_count = _count_approving_reviews(db, article.id, authors)
 
     # ── Decide disposition (pure — no side effects) ────────────────────────

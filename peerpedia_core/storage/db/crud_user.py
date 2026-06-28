@@ -12,10 +12,10 @@ Functions
 
 **User queries**
   get_user                 By ID, or None
-  get_user_by_name         Exact name match (active users only)
+  list_users_by_name       Exact name match (active users only)
   list_users               Active users, newest first
   search_users             By name (ILIKE) or UUID prefix
-  get_users_by_ids         Bulk fetch; raises if any missing
+  list_users_by_ids        Bulk fetch; raises if any missing
 
 **User updates**
   update_user_public_key   Replace public key
@@ -138,8 +138,8 @@ def get_user(session: Session, user_id: str) -> UserStorage | None:
     return session.get(UserStorage, user_id)
 
 
-def get_user_by_name(session: Session, name: str) -> list[UserStorage]:
-    """Return all active users with the given name (may be multiple — P2P allows duplicates)."""
+def list_users_by_name(session: Session, name: str) -> list[UserStorage]:
+    """List active users with the given name (may be multiple — P2P allows duplicates)."""
     return session.query(UserStorage).filter(
         UserStorage.name == name, UserStorage.deleted_at.is_(None)
     ).all()
@@ -170,8 +170,8 @@ def search_users(session: Session, query: str = "", *,
     return q.all()
 
 
-def get_users_by_ids(session: Session, user_ids: set[str]) -> list[UserStorage]:
-    """Return UserStorage records for the given IDs.
+def list_users_by_ids(session: Session, user_ids: set[str]) -> list[UserStorage]:
+    """List UserStorage records for the given IDs.
 
     Raises NotFoundError if any *user_ids* are not found — missing users
     at this point means data corruption (review from nonexistent user).

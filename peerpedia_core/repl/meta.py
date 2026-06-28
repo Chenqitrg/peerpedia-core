@@ -20,7 +20,7 @@ import peerpedia_core.repl.state as _st
 from peerpedia_core.app.context import read_session as _read_session
 from peerpedia_core.core import (
     get_head_hash as _get_article_head_hash,
-    get_notifications_for_user, get_user, get_user_by_name,
+    get_notifications_for_user, get_user, list_users_by_name,
     list_articles, search_articles,
 )
 from peerpedia_core.repl.state import ensure_db as _ensure_db
@@ -35,7 +35,7 @@ def _meta_user(name):
     db = _ensure_db()
     u = get_user(db, name)
     if u is None:
-        users = get_user_by_name(db, name)
+        users = list_users_by_name(db, name)
         if len(users) == 1:
             u = users[0]
         elif len(users) > 1:

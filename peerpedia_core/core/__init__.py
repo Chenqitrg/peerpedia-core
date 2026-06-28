@@ -43,9 +43,9 @@ from peerpedia_core.core.articles import (
     delete_article,
     diff_article,
     fork_article,
-    get_all_article_ids,
+    list_all_article_ids,
     get_article,
-    get_author_ids,
+    list_author_ids,
     list_articles,
     publish_article,
     publish_ready_articles,
@@ -78,7 +78,7 @@ from peerpedia_core.core.reviews import (
 from peerpedia_core.core.users import (
     create_user, create_user_stub, find_users, follow_user,
     get_followers, get_following, get_top_users_by_followers,
-    get_user, get_user_by_name, increment_failed_login, is_following,
+    get_user, list_users_by_name, increment_failed_login, is_following,
     list_users, require_authenticable_user, reset_failed_login,
     search_users, soft_delete_user, unfollow_user, update_user_public_key,
     update_user_salt, verify_user_password,
@@ -142,11 +142,11 @@ from peerpedia_core.storage.db.ingest import (
 
 # ── Pass-through (thin wrappers over storage/) ───────────────────────────────
 
-from peerpedia_core.storage.db.crud_article import create_article_from_orm, get_author_ids_batch
+from peerpedia_core.storage.db.crud_article import create_article_from_orm, list_author_ids_batch
 from peerpedia_core.storage.db.crud_alias import (
     list_aliases, remove_alias, resolve_username_or_alias, set_alias,
 )
-from peerpedia_core.storage.db.crud_user import get_users_by_ids
+from peerpedia_core.storage.db.crud_user import list_users_by_ids
 from peerpedia_core.storage.git import get_commit_history, get_head_hash, read_article_source
 from peerpedia_core.storage.peers import (
     add_peer, get_known_peers, merge_peers, record_peer_result,

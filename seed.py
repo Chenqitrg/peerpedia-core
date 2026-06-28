@@ -966,9 +966,9 @@ $$
     a_articles = session.query(Article).all()
     # Batch-resolve article authors from the join table
     all_article_ids = [a.id for a in a_articles]
-    from peerpedia_core.storage.db.crud_article import get_author_ids_batch
+    from peerpedia_core.storage.db.crud_article import list_author_ids_batch
 
-    author_id_map = get_author_ids_batch(session, all_article_ids)
+    author_id_map = list_author_ids_batch(session, all_article_ids)
     article_map = {}
     for a in a_articles:
         author_name = None

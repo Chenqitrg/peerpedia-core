@@ -10,7 +10,7 @@ from peerpedia_core.config.params import params
 from peerpedia_core.rules.articles import assert_can_submit_review, assert_not_folded
 from peerpedia_core.rules.reviews import assert_valid_review
 from peerpedia_core.storage.db.guards import require_article, require_invitation, require_user
-from peerpedia_core.storage.db.crud_article import get_author_ids
+from peerpedia_core.storage.db.crud_article import list_author_ids
 from peerpedia_core.storage.db.crud_review import (
     get_accepted_invitation, update_review_status, upsert_review,
 )
@@ -66,11 +66,11 @@ def submit_review(
 
     # ── Recompute scores ──
     reconcile_score(db, article_id)
-    for aid in get_author_ids(db, article_id):
+    for aid in list_author_ids(db, article_id):
         reconcile_reputation(db, aid)
 
     # ── Notify ──
-    author_ids = get_author_ids(db, article_id)
+    author_ids = list_author_ids(db, article_id)
     _notify_review_authors(db, article_id, reviewer_id, user.name, author_ids)
 
     return {"review_id": r.id, "scores": r.scores, "commit_hash": commit_hash}

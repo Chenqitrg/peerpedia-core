@@ -26,7 +26,7 @@ from peerpedia_core.core import (
     db_repl_setup, db_session, find_users, get_article,
     get_head_hash, get_notifications_for_user,
     get_reviews_for_article, get_top_users_by_followers,
-    get_user, get_user_by_name, get_users_by_ids, list_articles, list_users,
+    get_user, list_users_by_name, list_users_by_ids, list_articles, list_users,
     resolve_username_or_alias, search_articles,
 )
 # Re-export for REPL (arch rule: repl/ only imports from cli/).
@@ -401,7 +401,7 @@ def _resolve_author_names(db, author_ids: list[str]) -> list[str]:
     """
     if not author_ids:
         return []
-    users = {u.id: u for u in get_users_by_ids(db, set(author_ids))}
+    users = {u.id: u for u in list_users_by_ids(db, set(author_ids))}
     return [users[uid].name if uid in users else short_id(uid) for uid in author_ids]
 
 

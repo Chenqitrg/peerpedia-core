@@ -19,7 +19,7 @@ from peerpedia_core.storage.db import Session
 from peerpedia_core.storage.db.crud_review import (
     get_accepted_invitation, get_pending_invitation, get_reviews_for_article,
 )
-from peerpedia_core.storage.db.crud_user import get_users_by_ids, set_user_pubkey_tofu
+from peerpedia_core.storage.db.crud_user import list_users_by_ids, set_user_pubkey_tofu
 from peerpedia_core.storage.git import get_commit_history
 from peerpedia_core.storage.git.guards import (
     require_article_repo, require_commit_pubkey_signature,
@@ -113,7 +113,7 @@ def verify_new_commits(db: Session, repo_path: Path, *, since_hash: str) -> None
     commits = list(get_commit_history(repo_path, since_hash=since_hash))
     human_ids = {extract_user_id_from_email(c["author_email"])
                  for c in commits if not is_platform_commit(c["author_email"])}
-    users_by_id = {u.id: u for u in get_users_by_ids(db, human_ids)}
+    users_by_id = {u.id: u for u in list_users_by_ids(db, human_ids)}
     for c in commits:
         if not is_platform_commit(c["author_email"]):
             verify_commit_signature_and_tofu(db, repo_path, c, users_by_id)

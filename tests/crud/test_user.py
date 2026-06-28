@@ -61,20 +61,20 @@ class TestUserCRUD:
         session.close()
 
     def test_get_user_by_name_returns_list(self, engine):
-        from peerpedia_core.storage.db.crud_user import create_user, get_user_by_name
+        from peerpedia_core.storage.db.crud_user import create_user, list_users_by_name
 
         session = get_session(engine)
         create_user(session, name="alice",
                     public_key="0000000000000000000000000000000000000000000000000000000000000000")
-        result = get_user_by_name(session, "alice")
+        result = list_users_by_name(session, "alice")
         assert isinstance(result, list)
         assert len(result) == 1
         assert result[0].name == "alice"
-        assert get_user_by_name(session, "nonexistent") == []
+        assert list_users_by_name(session, "nonexistent") == []
         session.close()
 
     def test_duplicate_names_allowed(self, engine):
-        from peerpedia_core.storage.db.crud_user import create_user, get_user_by_name
+        from peerpedia_core.storage.db.crud_user import create_user, list_users_by_name
 
         session = get_session(engine)
         u1 = create_user(session, name="同名",
@@ -82,7 +82,7 @@ class TestUserCRUD:
         u2 = create_user(session, name="同名",
                          public_key="bbbb00000000000000000000000000000000000000000000000000000000000000")
         assert u1.id != u2.id
-        result = get_user_by_name(session, "同名")
+        result = list_users_by_name(session, "同名")
         assert len(result) == 2
         assert {u.id for u in result} == {u1.id, u2.id}
         session.close()
@@ -184,7 +184,7 @@ class TestFollowCRUD:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# User queries — get_user, get_user_by_name, list_users, search_users, get_users_by_ids
+# User queries — get_user, list_users_by_name, list_users, search_users, list_users_by_ids
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
@@ -220,29 +220,29 @@ class TestUserQueries:
         assert get_user(session, u.id).deleted_at is not None
         session.close()
 
-    # ── get_user_by_name ──────────────────────────────────────────────────
+    # ── list_users_by_name ──────────────────────────────────────────────────
 
     def test_get_user_by_name_exact_match(self, engine):
-        from peerpedia_core.storage.db.crud_user import create_user, get_user_by_name
+        from peerpedia_core.storage.db.crud_user import create_user, list_users_by_name
 
         session = get_session(engine)
         create_user(session, name="Charlie",
                     public_key="0000000000000000000000000000000000000000000000000000000000000000")
-        result = get_user_by_name(session, "Charlie")
+        result = list_users_by_name(session, "Charlie")
         assert len(result) == 1
         assert result[0].name == "Charlie"
         session.close()
 
     def test_get_user_by_name_no_match_returns_empty(self, engine):
-        from peerpedia_core.storage.db.crud_user import get_user_by_name
+        from peerpedia_core.storage.db.crud_user import list_users_by_name
 
         session = get_session(engine)
-        assert get_user_by_name(session, "Nobody") == []
+        assert list_users_by_name(session, "Nobody") == []
         session.close()
 
     def test_get_user_by_name_excludes_soft_deleted(self, engine):
         from peerpedia_core.storage.db.crud_user import (
-            create_user, get_user_by_name, soft_delete_user,
+            create_user, list_users_by_name, soft_delete_user,
         )
 
         session = get_session(engine)
@@ -250,18 +250,18 @@ class TestUserQueries:
                         public_key="0000000000000000000000000000000000000000000000000000000000000000")
         soft_delete_user(session, u.id)
         session.commit()
-        assert get_user_by_name(session, "Gone") == []
+        assert list_users_by_name(session, "Gone") == []
         session.close()
 
     def test_get_user_by_name_duplicates(self, engine):
-        from peerpedia_core.storage.db.crud_user import create_user, get_user_by_name
+        from peerpedia_core.storage.db.crud_user import create_user, list_users_by_name
 
         session = get_session(engine)
         create_user(session, name="Dup",
                     public_key="aaaa00000000000000000000000000000000000000000000000000000000000000")
         create_user(session, name="Dup",
                     public_key="bbbb00000000000000000000000000000000000000000000000000000000000000")
-        result = get_user_by_name(session, "Dup")
+        result = list_users_by_name(session, "Dup")
         assert len(result) == 2
         session.close()
 
@@ -398,36 +398,36 @@ class TestUserQueries:
         assert len(result) == 2
         session.close()
 
-    # ── get_users_by_ids ──────────────────────────────────────────────────
+    # ── list_users_by_ids ──────────────────────────────────────────────────
 
     def test_get_users_by_ids_batch(self, engine):
-        from peerpedia_core.storage.db.crud_user import create_user, get_users_by_ids
+        from peerpedia_core.storage.db.crud_user import create_user, list_users_by_ids
 
         session = get_session(engine)
         u1 = create_user(session, name="Batch1",
                          public_key="0000000000000000000000000000000000000000000000000000000000000000")
         u2 = create_user(session, name="Batch2",
                          public_key="1111111111111111111111111111111111111111111111111111111111111111")
-        result = get_users_by_ids(session, {u1.id, u2.id})
+        result = list_users_by_ids(session, {u1.id, u2.id})
         assert len(result) == 2
         assert {r.name for r in result} == {"Batch1", "Batch2"}
         session.close()
 
     def test_get_users_by_ids_empty_set(self, engine):
-        from peerpedia_core.storage.db.crud_user import get_users_by_ids
+        from peerpedia_core.storage.db.crud_user import list_users_by_ids
 
         session = get_session(engine)
-        assert get_users_by_ids(session, set()) == []
+        assert list_users_by_ids(session, set()) == []
         session.close()
 
     def test_get_users_by_ids_missing_raises(self, engine):
-        from peerpedia_core.storage.db.crud_user import create_user, get_users_by_ids
+        from peerpedia_core.storage.db.crud_user import create_user, list_users_by_ids
 
         session = get_session(engine)
         u = create_user(session, name="Exists",
                         public_key="0000000000000000000000000000000000000000000000000000000000000000")
         with pytest.raises(NotFoundError, match="USER_NOT_FOUND"):
-            get_users_by_ids(session, {u.id, "nonexistent-id"})
+            list_users_by_ids(session, {u.id, "nonexistent-id"})
         session.close()
 
     # ── get_top_users_by_followers ────────────────────────────────────────

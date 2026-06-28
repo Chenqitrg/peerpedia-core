@@ -14,7 +14,7 @@ response.  When the response shape changes, only this file changes.
 from __future__ import annotations
 
 from peerpedia_core.storage.db import Session
-from peerpedia_core.storage.db.crud_article import get_article, get_author_ids, get_author_ids_batch
+from peerpedia_core.storage.db.crud_article import get_article, list_author_ids, list_author_ids_batch
 from peerpedia_core.storage.db.crud_user import get_followers, get_following, get_user
 from peerpedia_core.core.articles import list_articles
 
@@ -24,7 +24,7 @@ def get_article_view(db: Session, article_id: str) -> dict[str, object] | None:
     article = get_article(db, article_id)
     if article is None:
         return None
-    return {**article.to_dict(), "authors": get_author_ids(db, article.id)}
+    return {**article.to_dict(), "authors": list_author_ids(db, article.id)}
 
 
 def list_article_views(
@@ -97,4 +97,4 @@ def list_user_article_views(
 
 def _batch_author_ids(db: Session, article_ids: list[str]) -> dict[str, list[str]]:
     """Return ``{article_id: [author_id, ...]}`` for a list of article IDs."""
-    return get_author_ids_batch(db, article_ids)
+    return list_author_ids_batch(db, article_ids)

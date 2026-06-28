@@ -8,11 +8,11 @@ from __future__ import annotations
 from peerpedia_core.storage.db import Session
 from peerpedia_core.config.params import params
 from peerpedia_core.storage.db.crud_article import (
-    get_author_ids, update_article_score,
+    list_author_ids, update_article_score,
 )
 from peerpedia_core.storage.db.crud_review import get_reviews_for_article
 from peerpedia_core.storage.db.crud_user import (
-    get_user, get_users_by_ids, list_users, update_user_reputation,
+    get_user, list_users_by_ids, list_users, update_user_reputation,
 )
 from peerpedia_core.types.scores import ReputationScores
 from peerpedia_core.compute.reputation import (
@@ -31,8 +31,8 @@ def reconcile_score(db: Session, article_id: str) -> dict[str, float] | None:
     if not all_reviews:
         return None
 
-    authors = get_author_ids(db, article_id)
-    reviewer_users = get_users_by_ids(db, {r.reviewer_id for r in all_reviews})
+    authors = list_author_ids(db, article_id)
+    reviewer_users = list_users_by_ids(db, {r.reviewer_id for r in all_reviews})
 
     # ── Build weights ──────────────────────────────────────────────────────
     user_weight_map = _build_reviewer_weight_map(reviewer_users)

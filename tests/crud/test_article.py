@@ -41,9 +41,9 @@ class TestArticleCRUD:
         article = create_article(session, title="", authors=[user.id], status="draft")
         assert article.id is not None
         assert article.status == "draft"
-        from peerpedia_core.storage.db.crud_article import get_author_ids
+        from peerpedia_core.storage.db.crud_article import list_author_ids
 
-        assert get_author_ids(session, article.id) == [user.id]
+        assert list_author_ids(session, article.id) == [user.id]
         session.close()
 
     def test_get_article(self, engine):

@@ -17,7 +17,7 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.theme import Theme
 
-from peerpedia_core.core import get_author_ids, get_users_by_ids, parse_frontmatter
+from peerpedia_core.core import list_author_ids, list_users_by_ids, parse_frontmatter
 from peerpedia_core.types import short_id
 from peerpedia_core.types.scores import SCORE_DIMENSIONS
 
@@ -202,12 +202,12 @@ def display_article_meta(db, article, *, author_ids: list[str] | None = None) ->
     """Resolve full article metadata from DB + source file, then display.
 
     If *author_ids* is passed, it is used directly (allows batch preloading
-    in list handlers).  Otherwise ``get_author_ids`` queries the DB.
+    in list handlers).  Otherwise ``list_author_ids`` queries the DB.
 
     Moved from ``helpers.py`` — the resolution logic is incidental to
     "getting information for display"; the Rich rendering is primary.
     """
-    author_ids_list = author_ids if author_ids is not None else get_author_ids(db, article.id)
+    author_ids_list = author_ids if author_ids is not None else list_author_ids(db, article.id)
     author_names = _resolve_author_names_display(db, author_ids_list)
 
     try:
@@ -234,7 +234,7 @@ def _resolve_author_names_display(db, author_ids: list[str]) -> list[str]:
     """Convert author UUIDs to display names for human-readable output."""
     if not author_ids:
         return []
-    users = {u.id: u for u in get_users_by_ids(db, set(author_ids))}
+    users = {u.id: u for u in list_users_by_ids(db, set(author_ids))}
     return [users[uid].name if uid in users else short_id(uid) for uid in author_ids]
 
 

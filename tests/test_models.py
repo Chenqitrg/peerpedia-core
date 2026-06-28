@@ -63,7 +63,7 @@ class TestArticle:
     """文章模型 — git 管内容，数据库管元数据"""
 
     def test_create_minimal(self, engine):
-        from peerpedia_core.storage.db.crud_article import get_author_ids
+        from peerpedia_core.storage.db.crud_article import list_author_ids
         from peerpedia_core.storage.db.models import ArticleAuthor
 
         session = get_session(engine)
@@ -76,7 +76,7 @@ class TestArticle:
 
         assert a.id is not None
         assert a.status == "draft"
-        assert get_author_ids(session, a.id) == [user.id]
+        assert list_author_ids(session, a.id) == [user.id]
         assert a.score is None
         assert a.compiled_format is None
         assert a.sink_start is None
@@ -247,9 +247,9 @@ class TestReview:
         )
         session.add(review)
         session.commit()
-        from peerpedia_core.storage.db.crud_article import get_author_ids
+        from peerpedia_core.storage.db.crud_article import list_author_ids
 
-        assert review.reviewer_id in get_author_ids(session, article.id)  # 这就是自评
+        assert review.reviewer_id in list_author_ids(session, article.id)  # 这就是自评
         session.close()
 
     def test_review_updated_at_updates_on_change(self, engine):

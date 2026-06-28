@@ -16,7 +16,7 @@ from peerpedia_core.app.context import read_session
 from peerpedia_core.core import (
     get_head_hash as _get_article_head_hash,
     get_reviews_for_article, get_top_users_by_followers,
-    get_user, get_users_by_ids, list_articles,
+    get_user, list_users_by_ids, list_articles,
 )
 
 def _get_session_user_id() -> str:
@@ -213,7 +213,7 @@ def _browse_reviews(db, article_id: str) -> str | None:
         return None
 
     reviewer_ids = {r.reviewer_id for r in reviews if hasattr(r, 'reviewer_id')}
-    users_by_id = {u.id: u for u in get_users_by_ids(db, reviewer_ids)} if reviewer_ids else {}
+    users_by_id = {u.id: u for u in list_users_by_ids(db, reviewer_ids)} if reviewer_ids else {}
 
     n = len(reviews)
     selected = [0]

@@ -11,9 +11,9 @@ reputation/scoring algorithms in ``workflow/``.
 from __future__ import annotations
 
 from peerpedia_core.storage.db import Session
-from peerpedia_core.storage.db.crud_article import get_articles_by_author, get_author_ids_batch
+from peerpedia_core.storage.db.crud_article import list_articles_by_author, list_author_ids_batch
 from peerpedia_core.storage.db.crud_review import get_reviews_for_article
-from peerpedia_core.storage.db.crud_user import get_users_by_ids
+from peerpedia_core.storage.db.crud_user import list_users_by_ids
 from peerpedia_core.storage.db.guards import require_user
 from peerpedia_core.compute.state import ReputationState
 from peerpedia_core.types.entities import ArticleMetaExchange, ReviewExchange, UserExchange
@@ -24,8 +24,8 @@ def extract_reputation_state(db: Session, user_id: str) -> ReputationState:
     # ── Setup ──────────────────────────────────────────────────────────────
     require_user(db, user_id)
 
-    articles = get_articles_by_author(db, user_id)
-    author_map = get_author_ids_batch(db, [a.id for a in articles])
+    articles = list_articles_by_author(db, user_id)
+    author_map = list_author_ids_batch(db, [a.id for a in articles])
 
     # ── Build article + review snapshots ────────────────────────────────────
     article_map, reviews_map = _build_article_review_maps(db, articles, author_map)
@@ -73,7 +73,7 @@ def _build_user_snapshot_map(
             reviewer_ids.add(r.reviewer_id)
 
     all_user_ids = {user_id} | reviewer_ids
-    user_rows = get_users_by_ids(db, all_user_ids)
+    user_rows = list_users_by_ids(db, all_user_ids)
     return {
         u.id: UserExchange(id=u.id, name=u.name, address=u.address or "",
                            reputation=u.reputation if u.reputation else None)

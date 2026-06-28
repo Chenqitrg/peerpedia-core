@@ -9,7 +9,7 @@ from peerpedia_core.app.context import AppContext
 from peerpedia_core.exceptions import ProtocolError
 from peerpedia_core.app.refs import require_user
 from peerpedia_core.app.result import AppNotice, AppResult
-from peerpedia_core.core import get_all_article_ids, list_articles, merge_article_meta
+from peerpedia_core.core import list_all_article_ids, list_articles, merge_article_meta
 from peerpedia_core.exceptions import ConflictError, ProtocolError, TransportError
 
 
@@ -32,7 +32,7 @@ def sync_pull(ctx: AppContext, *, server: str) -> AppResult:
     )
     from peerpedia_core.core.sync_article import pull_new_article
     if server_articles:
-        local_ids = set(get_all_article_ids(ctx.db))
+        local_ids = set(list_all_article_ids(ctx.db))
         for entry in server_articles:
             if entry["id"] not in local_ids:
                 merge_article_meta(ctx.db, [entry])
@@ -41,7 +41,7 @@ def sync_pull(ctx: AppContext, *, server: str) -> AppResult:
     from peerpedia_core.core.sync_article import sync_article
     synced: list[str] = []
     failed: list[str] = []
-    for aid in get_all_article_ids(ctx.db):
+    for aid in list_all_article_ids(ctx.db):
         try:
             result = sync_article(ctx.db, ctx.transport, server, aid)
             if result.get("synced"):

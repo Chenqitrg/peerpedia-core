@@ -22,7 +22,7 @@ from peerpedia_core.storage.db.crud_user import (
     get_followers as _get_followers,
     get_following as _get_following,
     get_top_users_by_followers as _get_top_users_by_followers,
-    get_user_by_name as _get_by_name,
+    list_users_by_name as _get_by_name,
     reset_failed_login as _reset_failed,
     search_users as _search_users,
     soft_delete_user as _soft_delete,
@@ -60,7 +60,7 @@ def get_user(db: Session, user_ref: str):
     return _get(db, user_ref)
 
 
-def get_user_by_name(db: Session, name: str) -> list[UserStorage]:
+def list_users_by_name(db: Session, name: str) -> list[UserStorage]:
     """Get users by exact name match. Returns empty list if none found."""
     return _get_by_name(db, name)
 

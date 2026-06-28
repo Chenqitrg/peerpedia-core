@@ -18,9 +18,9 @@ from peerpedia_core.core.articles.diff import diff_article
 from peerpedia_core.storage.db import Session
 from peerpedia_core.storage.db.crud_article import (
     count_articles as _count,
-    get_all_article_ids as _get_all_ids,
+    list_all_article_ids as _get_all_ids,
     get_article as _get_article,
-    get_author_ids as _get_author_ids,
+    list_author_ids as _get_author_ids,
     list_articles as _list,
 )
 from peerpedia_core.core.reconcile import reconcile_integrity
@@ -74,10 +74,10 @@ def _to_set(value: str | set[str] | None) -> set[str] | None:
     return value
 
 
-def get_all_article_ids(db: Session) -> list[str]:
+def list_all_article_ids(db: Session) -> list[str]:
     """Return every local article ID.  Lightweight — id column only."""
     return _get_all_ids(db)
 
-def get_author_ids(db: Session, article_id: str) -> list[str]:
+def list_author_ids(db: Session, article_id: str) -> list[str]:
     """Return ordered author IDs for an article."""
     return _get_author_ids(db, article_id)

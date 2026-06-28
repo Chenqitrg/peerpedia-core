@@ -10,7 +10,7 @@ from peerpedia_core.app.parsers import parse_bootstrap_json
 from peerpedia_core.app.refs import require_user
 from peerpedia_core.app.result import AppNotice, AppResult
 from peerpedia_core.core import (
-    create_user, create_user_stub, get_user, get_user_by_name, get_user_view,
+    create_user, create_user_stub, get_user, list_users_by_name, get_user_view,
     require_authenticable_user, soft_delete_user, verify_user_password,
 )
 from peerpedia_core.crypto import derive_key_pair, new_salt
@@ -31,9 +31,9 @@ def whoami(ctx: AppContext) -> AppResult:
 def register(ctx: AppContext, *, name: str, password: str) -> AppResult:
     """Register a new local user."""
     # ── Guard: unique name ──
-    if get_user_by_name(ctx.db, name):
+    if list_users_by_name(ctx.db, name):
         raise BadRequestError(code="DUPLICATE_NAME",
-            ids=", ".join(short_id(u.id) for u in get_user_by_name(ctx.db, name)),
+            ids=", ".join(short_id(u.id) for u in list_users_by_name(ctx.db, name)),
             name=name)
     # ── Execute ──
     salt_hex = new_salt()
@@ -141,7 +141,7 @@ def _resolve_user_id_by_name(db, name: str | None) -> str:
     """Resolve a display name to a canonical user ID.  Raises if ambiguous."""
     if not name:
         raise BadRequestError(code="AMBIGUOUS_ARGS")
-    users = get_user_by_name(db, name)
+    users = list_users_by_name(db, name)
     if len(users) == 0:
         raise NotFoundError(code="USER_NOT_FOUND", resource_type="user")
     if len(users) > 1:

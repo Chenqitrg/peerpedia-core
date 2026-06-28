@@ -11,7 +11,7 @@ from peerpedia_core.storage.db import Session
 from peerpedia_core.config.paths import article_repo_path
 from peerpedia_core.exceptions import BadRequestError
 from peerpedia_core.storage.db.crud_article import (
-    add_article_authors, get_author_ids, update_article_status, update_witnessed_at,
+    add_article_authors, list_author_ids, update_article_status, update_witnessed_at,
 )
 from peerpedia_core.core.reconcile.score import reconcile_score
 from peerpedia_core.storage.db.crud_review import upsert_review
@@ -39,7 +39,7 @@ def reconcile_authors(
     head_hash = get_head_hash(rp)
     new_ids = get_commit_authors(rp, since_hash=since_hash)
 
-    existing = set(get_author_ids(db, article_id))
+    existing = set(list_author_ids(db, article_id))
     new_only = [a for a in new_ids if a not in existing]
     if new_only:
         add_article_authors(db, article_id, new_only)
@@ -114,7 +114,7 @@ def _repair_db_cache(db: Session, article_id: str, repo_path) -> None:
         reconcile_score(db, article_id)
         return
 
-    db_authors = set(get_author_ids(db, article_id))
+    db_authors = set(list_author_ids(db, article_id))
     git_authors = get_commit_authors(repo_path)
     if db_authors != git_authors:
         reconcile_authors(db, article_id)

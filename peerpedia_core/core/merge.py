@@ -8,7 +8,7 @@ Call graph::
 
     accept_merge
       ├► crud_merge.get_merge_proposal        (validate proposal exists)
-      ├► crud_article.get_author_ids          (verify caller is author)
+      ├► crud_article.list_author_ids          (verify caller is author)
       ├► git_backend.merge_git_repos          (git merge fork into target)
       ├► commands.articles.rebuild_article_authors
       ├► crud_article.set_sink_start          (G2b: only if target was published)

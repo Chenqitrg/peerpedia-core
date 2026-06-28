@@ -69,7 +69,7 @@ class TestUserLifecycle:
     def test_soft_delete_excludes_from_queries(self, engine):
         """After soft-delete, the user MUST NOT appear in name search or listings."""
         from peerpedia_core.storage.db.crud_user import (
-            get_user_by_name, list_users, search_users, soft_delete_user,
+            list_users_by_name, list_users, search_users, soft_delete_user,
         )
 
         session = get_session(engine)
@@ -77,7 +77,7 @@ class TestUserLifecycle:
         soft_delete_user(session, u.id)
         session.commit()
 
-        assert get_user_by_name(session, "DeleteMe") == []
+        assert list_users_by_name(session, "DeleteMe") == []
         assert u.id not in {r.id for r in list_users(session)}
         assert search_users(session, query="DeleteMe") == []
         session.close()
@@ -215,7 +215,7 @@ class TestArticleAuthorLoop:
 
     def test_create_article_with_authors(self, engine):
         """An article created with authors MUST return them in order."""
-        from peerpedia_core.storage.db.crud_article import create_article, get_author_ids
+        from peerpedia_core.storage.db.crud_article import create_article, list_author_ids
 
         session = get_session(engine)
         lead = _create_user(session, name="Lead Author")
@@ -223,40 +223,40 @@ class TestArticleAuthorLoop:
 
         article = create_article(session, title="A Study", authors=[lead.id, second.id])
 
-        author_ids = get_author_ids(session, article.id)
+        author_ids = list_author_ids(session, article.id)
         assert author_ids == [lead.id, second.id], "author order must match creation order"
         session.close()
 
     def test_get_author_ids_empty_for_no_authors(self, engine):
         """An article with no author rows MUST return an empty list."""
-        from peerpedia_core.storage.db.crud_article import create_article, get_author_ids
+        from peerpedia_core.storage.db.crud_article import create_article, list_author_ids
 
         session = get_session(engine)
         article = create_article(session, title="Solo", authors=[])
-        assert get_author_ids(session, article.id) == []
+        assert list_author_ids(session, article.id) == []
         session.close()
 
     def test_replace_authors(self, engine):
         """Replacing all authors MUST produce exactly the new list in order."""
-        from peerpedia_core.storage.db.crud_article import get_author_ids, set_article_authors
+        from peerpedia_core.storage.db.crud_article import list_author_ids, set_article_authors
 
         session = get_session(engine)
         a1 = _create_user(session, name="A1")
         a2 = _create_user(session, name="A2")
         a3 = _create_user(session, name="A3")
 
-        # Create article with get_author_ids via create_article
+        # Create article with list_author_ids via create_article
         from peerpedia_core.storage.db.crud_article import create_article
         article = create_article(session, title="", authors=[a1.id])
 
         # Replace
         set_article_authors(session, article.id, [a2.id, a3.id])
-        assert get_author_ids(session, article.id) == [a2.id, a3.id]
+        assert list_author_ids(session, article.id) == [a2.id, a3.id]
         session.close()
 
     def test_append_author_preserves_position_order(self, engine):
         """Adding an author later MUST place them after existing authors."""
-        from peerpedia_core.storage.db.crud_article import add_article_authors, get_author_ids
+        from peerpedia_core.storage.db.crud_article import add_article_authors, list_author_ids
 
         session = get_session(engine)
         lead = _create_user(session, name="Lead")
@@ -269,7 +269,7 @@ class TestArticleAuthorLoop:
         # Later, add another author
         add_article_authors(session, article.id, [late.id])
 
-        authors = get_author_ids(session, article.id)
+        authors = list_author_ids(session, article.id)
         assert authors[0] == lead.id, "lead author must stay at position 0"
         assert authors[1] == late.id, "appended author must be at position 1"
         session.close()

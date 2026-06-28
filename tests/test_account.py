@@ -11,7 +11,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from peerpedia_core.cli.handlers.bootstrap import _validate_bootstrap_json
-from peerpedia_core.core import create_user_stub, get_user, get_user_by_name
+from peerpedia_core.core import create_user_stub, get_user, list_users_by_name
 from peerpedia_core.crypto import derive_key_pair, new_salt
 from peerpedia_core.storage.db.crud_user import create_user_stub as _crud_create_user_stub
 from peerpedia_core.storage.db.engine import get_session
@@ -209,7 +209,7 @@ class TestKeyDerivationRoundtrip:
         assert wrong_pubkey.hex() != u.public_key
 
 
-# ── get_user vs get_user_by_name ─────────────────────────────────────────
+# ── get_user vs list_users_by_name ─────────────────────────────────────────
 
 
 class TestUserLookupAfterBootstrap:
@@ -225,11 +225,11 @@ class TestUserLookupAfterBootstrap:
         assert u.name == "dave"
 
     def test_get_user_by_name_finds_bootstrapped_user(self, db):
-        """get_user_by_name finds a bootstrapped user by name."""
+        """list_users_by_name finds a bootstrapped user by name."""
         _crud_create_user_stub(db, user_id=_make_user_id(), name="eve",
                                 public_key=_make_pubkey(), salt=_make_salt())
         db.flush()
 
-        users = get_user_by_name(db, "eve")
+        users = list_users_by_name(db, "eve")
         assert len(users) == 1
         assert users[0].name == "eve"

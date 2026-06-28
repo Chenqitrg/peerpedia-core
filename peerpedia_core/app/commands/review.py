@@ -11,7 +11,7 @@ from peerpedia_core.app.refs import require_article, require_user, require_user_
 from peerpedia_core.app.result import AppNotice, AppResult
 from peerpedia_core.core import (
     accept_invitation, decline_invitation,
-    get_reviews_for_article, get_user, get_users_by_ids,
+    get_reviews_for_article, get_user, list_users_by_ids,
     invite_reviewer, rate_review_helpfulness,
     submit_reply, submit_review,
 )
@@ -42,7 +42,7 @@ def list_reviews(ctx: AppContext, *, article_ref: str) -> AppResult:
     # ── Execute ──
     reviews = get_reviews_for_article(ctx.db, article.id)
     reviewer_ids = {r.reviewer_id for r in reviews if hasattr(r, 'reviewer_id')}
-    users_by_id = {u.id: u for u in get_users_by_ids(ctx.db, reviewer_ids)} if reviewer_ids else {}
+    users_by_id = {u.id: u for u in list_users_by_ids(ctx.db, reviewer_ids)} if reviewer_ids else {}
     items = []
     for r in reviews:
         rid = r.reviewer_id if hasattr(r, 'reviewer_id') else ""

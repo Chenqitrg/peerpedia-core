@@ -12,9 +12,9 @@ Functions
 Author helpers (join table)
     add_article_authors       Insert ArticleAuthorStorage rows
     set_article_authors       Replace all authors (delete + re-insert)
-    get_author_ids            Ordered author list for one article
-    get_author_ids_batch      Batch version for multiple articles
-    get_articles_by_author    All articles where user is an author
+    list_author_ids           Ordered author list for one article
+    list_author_ids_batch     Batch version for multiple articles
+    list_articles_by_author   All articles where user is an author
 
 CRUD
     create_article            New article + author rows (flush only)
@@ -86,14 +86,14 @@ def set_article_authors(session: Session, article_id: str, author_ids: list[str]
     add_article_authors(session, article_id, author_ids)
 
 
-def get_author_ids(session: Session, article_id: str) -> list[str]:
-    """Get all author IDs for an article (ordered by position)."""
+def list_author_ids(session: Session, article_id: str) -> list[str]:
+    """List all author IDs for an article (ordered by position)."""
     rows = session.query(ArticleAuthorStorage).filter(ArticleAuthorStorage.article_id == article_id).order_by(ArticleAuthorStorage.position).all()
     return [r.author_id for r in rows]
 
 
-def get_author_ids_batch(session: Session, article_ids: list[str]) -> dict[str, list[str]]:
-    """Batch get author IDs for multiple articles.
+def list_author_ids_batch(session: Session, article_ids: list[str]) -> dict[str, list[str]]:
+    """Batch list author IDs for multiple articles.
 
     Returns dict mapping article_id → ordered list of author_ids.
     Articles with no authors get an empty list.
@@ -112,8 +112,8 @@ def get_author_ids_batch(session: Session, article_ids: list[str]) -> dict[str, 
     return result
 
 
-def get_articles_by_author(session: Session, author_id: str) -> list[ArticleMetaStorage]:
-    """Return all articles where *author_id* is an author."""
+def list_articles_by_author(session: Session, author_id: str) -> list[ArticleMetaStorage]:
+    """List all articles where *author_id* is an author."""
     return (
         session.query(ArticleMetaStorage)
         .join(ArticleAuthorStorage, ArticleMetaStorage.id == ArticleAuthorStorage.article_id)
@@ -233,8 +233,8 @@ def list_articles(
     return q.all()
 
 
-def get_all_article_ids(session: Session) -> list[str]:
-    """Return every article ID.  Lightweight — only fetches the ``id`` column."""
+def list_all_article_ids(session: Session) -> list[str]:
+    """List every article ID.  Lightweight — only fetches the ``id`` column."""
     return [row[0] for row in session.query(ArticleMetaStorage.id).all()]
 
 def count_articles(session: Session, statuses: set[str] | None = None, author_id: str | None = None) -> int:

@@ -12,7 +12,7 @@ from peerpedia_core.core import (
     add_bookmark, add_share,
     follow_user, get_follower_views, get_following_views,
     get_shares_for_user, get_feed_shares,
-    get_top_users_by_followers, get_user, get_users_by_ids,
+    get_top_users_by_followers, get_user, list_users_by_ids,
     remove_bookmark, remove_share,
     set_alias, list_aliases, remove_alias,
     unfollow_user,

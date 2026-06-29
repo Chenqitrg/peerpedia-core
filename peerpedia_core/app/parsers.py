@@ -20,6 +20,9 @@ def parse_scores(scores_str: str | None) -> dict[str, int] | None:
     Returns ``None`` for empty input.  Raises ``ValidationFailed`` on
     invalid input.
     """
+    if scores_str is None:
+        return None
+    scores_str = scores_str.strip()
     if not scores_str:
         return None
 

@@ -22,7 +22,7 @@ def add(ctx: AppContext, *, article_ref: str, target_ref: str) -> AppResult:
     article = require_article(ctx.db, article_ref)
     target = require_user_by_ref(ctx.db, target_ref)
     # ── Execute ──
-    add_maintainer_to_article(ctx.db, article.id, user_id, target.id)
+    add_maintainer_to_article(ctx.db, article.id, target.id, user_id)
     ctx.db.commit()
     return AppResult("OK", params={"msg": f"Added {target.name} as maintainer"})
 
@@ -34,7 +34,7 @@ def remove(ctx: AppContext, *, article_ref: str, target_ref: str) -> AppResult:
     article = require_article(ctx.db, article_ref)
     target = require_user_by_ref(ctx.db, target_ref)
     # ── Execute ──
-    remove_maintainer_from_article(ctx.db, article.id, user_id, target.id)
+    remove_maintainer_from_article(ctx.db, article.id, target.id, user_id)
     ctx.db.commit()
     return AppResult("OK", params={"msg": f"Removed {target.name} from maintainers"})
 

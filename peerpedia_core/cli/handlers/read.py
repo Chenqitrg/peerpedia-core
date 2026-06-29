@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from peerpedia_core.cli.display import display_empty_article_list, display_full_content
-from peerpedia_core.cli.handler import with_context
+from peerpedia_core.cli.decorators import with_context
 from peerpedia_core.core import list_author_ids_batch, list_articles
 import peerpedia_core.app.commands.article as _article
 
@@ -38,12 +38,19 @@ def _cmd_article_list(ctx, args):
     )
     items = result.data.get("items", [])
     if not items:
-        display_empty_article_list(args)
+        if getattr(args, "feed", False):
+            display_empty_article_list("N_NO_ARTICLES_FEED")
+            display_empty_article_list("N_NO_ARTICLES_FEED_HINT")
+        elif getattr(args, "mine", False):
+            display_empty_article_list("N_NO_ARTICLES_MINE")
+            display_empty_article_list("N_NO_ARTICLES_MINE_HINT")
+        else:
+            display_empty_article_list("N_NO_ARTICLES")
         return result
     author_map = list_author_ids_batch(ctx.db, [a["id"] for a in items])
     for a in list_articles(ctx.db, search_query=None, limit=20):
-        from peerpedia_core.cli.helpers import _resolve_and_display_article
-        _resolve_and_display_article(ctx.db, a, author_ids=author_map.get(a.id, []))
+        from peerpedia_core.cli.display import display_article_meta
+        display_article_meta(ctx.db, a, author_ids=author_map.get(a.id, []))
     return result
 
 

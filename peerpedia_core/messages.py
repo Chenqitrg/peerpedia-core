@@ -64,6 +64,8 @@ REGISTRY: dict[str, Msg] = {
         see_also=("review invite", "share add")),
     "ARTICLE_DELETED": Msg("Deleted [accent]{id_short}[/]",
         see_also=("article create", "article list")),
+    "N_COMPILED": Msg("Compiled to [accent]{fmt}[/]", kind=Kind.NOTIFY),
+    "N_COMPILED_PATH": Msg("  [dim]{path}[/]", kind=Kind.NOTIFY),
     "ARTICLE_SCANNED": Msg("Scan complete — [accent]{count}[/] article(s) auto-published",
         see_also=("article list", "review list")),
     "ARTICLE_SCANNED_EMPTY": Msg("[muted]Scan complete — 0 articles ready for publish.[/]",
@@ -111,6 +113,15 @@ REGISTRY: dict[str, Msg] = {
     "W_NO_KNOWN_PEERS": Msg("[dim]No known peers — auto-sync skipped. "
         "Set PEERPEDIA_SERVER or run 'sync discover'.[/]", kind=Kind.NOTIFY),
     "W_AUTO_SYNCING": Msg("[dim]Auto-syncing with {count} peer(s)...[/]", kind=Kind.NOTIFY),
+    "N_NO_ARTICLES_FEED": Msg("[muted]Your feed is empty — you're not following anyone yet.[/]", kind=Kind.NOTIFY),
+    "N_NO_ARTICLES_FEED_HINT": Msg("  [accent]peerpedia school[/]              ← discover users\n"
+                                    "  [accent]peerpedia follow @username[/]   ← follow someone", kind=Kind.NOTIFY),
+    "N_NO_ARTICLES_MINE": Msg("[muted]No articles yet.[/]", kind=Kind.NOTIFY),
+    "N_NO_ARTICLES_MINE_HINT": Msg("  [accent]peerpedia article create --title \"My Paper\"[/]", kind=Kind.NOTIFY),
+    "N_NO_ARTICLES": Msg("[muted]No articles.[/]", kind=Kind.NOTIFY),
+    "N_NO_EDIT_CHANGES": Msg("[muted]No changes — nothing to commit.[/]", kind=Kind.NOTIFY),
+    "N_SAME_REVISION": Msg("[muted]These are the same revision — no changes to show.[/]", kind=Kind.NOTIFY),
+    "N_NO_CONTENT": Msg("[muted]No content yet. Use [accent]peerpedia article edit {id_short}[/] to add content.[/]", kind=Kind.NOTIFY),
     "EMPTY_SEARCH": Msg("[muted]No users match '{query}'.[/]", kind=Kind.NOTIFY),
     "EMPTY_REVIEWS": Msg("[muted]No reviews yet.[/]", kind=Kind.NOTIFY),
     "EMPTY_NOTIFICATIONS": Msg("[muted]No notifications.[/]", kind=Kind.NOTIFY),
@@ -206,6 +217,12 @@ REGISTRY: dict[str, Msg] = {
         see_also=("account whoami --verbose", "account bootstrap")),
     "INVALID_PUBKEY_LEN": Msg("Invalid public_key length: {length} — must be 64 hex chars.", kind=Kind.ERROR,
         suggestion="Ed25519 public keys are exactly 32 bytes (64 hex characters)."),
+    "INVALID_PUBKEY_BYTES": Msg("Invalid public_key: {length} bytes decoded — must be exactly 32 bytes.", kind=Kind.ERROR,
+        suggestion="Ed25519 public keys decode to exactly 32 bytes."),
+    "INVALID_SIG_LEN": Msg("Invalid signature length: {length} — must be 128 hex chars.", kind=Kind.ERROR,
+        suggestion="Ed25519 signatures are exactly 64 bytes (128 hex characters)."),
+    "BODY_HASH_MISMATCH": Msg("Body hash mismatch.", kind=Kind.ERROR,
+        suggestion="The request body may have been tampered with or truncated during transit."),
     "INVALID_SALT": Msg("Invalid salt: not valid hex.", kind=Kind.ERROR,
         suggestion="Use 'account whoami --verbose --json' on the original device to get a valid salt.",
         see_also=("account whoami --verbose", "account bootstrap")),
@@ -214,6 +231,23 @@ REGISTRY: dict[str, Msg] = {
     "INVALID_SCORE": Msg("Score for '{key}' must be 1-5, got {value}", kind=Kind.ERROR,
         suggestion="Valid dimensions: orig, rigor, comp, ped, imp. Example: --scores orig=4,rigor=3",
         see_also=("article publish", "review submit")),
+    "COMPILE_UNKNOWN_FORMAT": Msg("Unknown article format: '{suffix}'.", kind=Kind.ERROR,
+        suggestion="Supported formats: .md, .markdown (Markdown), .typ, .typst (Typst)."),
+    "COMPILE_FORMAT_MISMATCH": Msg("Markdown articles only support HTML output (requested: {fmt}).", kind=Kind.ERROR,
+        suggestion="Use Typst (.typ) for PDF/SVG/PNG output, or compile Markdown to HTML.",
+        see_also=("article create --format typst",)),
+    "COMPILE_TYPST_NOT_FOUND": Msg("Typst CLI not found.", kind=Kind.ERROR,
+        suggestion="Install from https://github.com/typst/typst, or use Markdown format instead.",
+        see_also=("article create --format markdown",)),
+    "COMPILE_TYPST_ERROR": Msg("Typst compilation error: {stderr}", kind=Kind.ERROR,
+        suggestion="Check the Typst source for syntax errors.",
+        see_also=("article show --show full",)),
+    "COMPILE_TIMEOUT": Msg("Typst compilation timed out (30s).", kind=Kind.ERROR,
+        suggestion="The Typst source may be too complex. Try simplifying diagrams or splitting into multiple files."),
+    "INTERNAL_ERROR": Msg("Internal error: {error}", kind=Kind.ERROR,
+        suggestion="This is a bug. Please report it with the traceback above."),
+    "CLOCK_SKEW": Msg("Clock skew with {server}: {error}.", kind=Kind.ERROR,
+        suggestion="Fix your system clock before syncing — peer-to-peer sync requires accurate timestamps."),
     "COMPILE_FAILED": Msg("Compilation failed: {error}", kind=Kind.ERROR,
         suggestion="Check the article source for syntax errors.",
         see_also=("article show --show full",)),
@@ -341,10 +375,14 @@ REGISTRY: dict[str, Msg] = {
 
 
 def lookup(code: str) -> tuple[str, Msg]:
-    """Return (code, msg) for *code*, or a generic fallback."""
+    """Return (code, msg) for *code*.
+
+    Unregistered codes get an ERROR-kind Msg with the code as text,
+    so they never silently pass as success or get ignored.
+    """
     m = REGISTRY.get(code)
     if m is None:
-        return code, Msg(code)
+        return code, Msg(code, kind=Kind.ERROR)
     return code, m
 
 

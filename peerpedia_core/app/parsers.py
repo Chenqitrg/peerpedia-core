@@ -70,7 +70,7 @@ def _parse_score_part(
     return k, score
 
 
-def parse_bootstrap_json(json_str: str) -> dict:
+def parse_bootstrap_json(json_str: str) -> dict[str, str]:
     """Parse and validate a bootstrap JSON blob.  Raises ``ValidationFailed``."""
     import json as _json
     import uuid as _uuid

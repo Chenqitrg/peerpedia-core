@@ -7,10 +7,10 @@ from __future__ import annotations
 
 import sys
 
-from peerpedia_core.cli.display import console, display_diff
-from peerpedia_core.cli.handler import with_context
-from peerpedia_core.cli.helpers import _open_editor, _prompt_commit_message
-from peerpedia_core.cli.output import _out
+from peerpedia_core.cli.display import display_diff
+from peerpedia_core.cli.decorators import with_context
+from peerpedia_core.editor import open_editor as _open_editor, prompt_commit_message as _prompt_commit_message
+from peerpedia_core.cli.info import _out
 import peerpedia_core.app.commands.article as _article
 
 
@@ -46,7 +46,7 @@ def _cmd_article_edit(ctx, args):
     title_changed = args.title is not None
 
     if not content_changed and not title_changed:
-        console.print("[muted]No changes — nothing to commit.[/]")
+        _out(None, "N_NO_EDIT_CHANGES")
         return
 
     message = _prompt_commit_message(
@@ -80,7 +80,7 @@ def _cmd_article_diff(ctx, args):
         hash1=args.hash1, hash2=args.hash2)
     diff_text = result.data.get("diff_text", "")
     if not diff_text.strip():
-        console.print("[muted]These are the same revision — no changes to show.[/]")
+        _out(None, "N_SAME_REVISION")
     else:
         display_diff(diff_text, result.data.get("stats", {}))
     return result

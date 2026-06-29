@@ -23,6 +23,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Generator
 
+from peerpedia_core.exceptions import BadRequestError
+
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ed25519
@@ -33,6 +35,23 @@ _SCRYPT_R = 8
 _SCRYPT_P = 1
 _SCRYPT_DKLEN = 32
 
+# Ed25519 constants
+_SSH_ALGO = "ssh-ed25519"
+_SSH_ALGO_BYTES = b"ssh-ed25519"
+_SSH_ALGO_LEN = 11
+_PUBKEY_HEX_LEN = 64
+_PUBKEY_BYTES = 32
+_SIG_HEX_LEN = 128
+
+# File I/O
+_KEYFILE_SUFFIX = "_peerpedia_ed25519"
+_SIGNERS_SUFFIX = "_allowed_signers"
+_KEYFILE_PERMS = 0o600
+_SALT_BYTES = 16
+
+# Wire format
+_STRUCT_FMT = ">I"
+
 
 def derive_key_pair(password: str, salt_hex: str) -> tuple[bytes, bytes]:
     """Derive an Ed25519 key pair from a password and salt.
@@ -42,7 +61,7 @@ def derive_key_pair(password: str, salt_hex: str) -> tuple[bytes, bytes]:
     """
     salt = bytes.fromhex(salt_hex)
     seed = hashlib.scrypt(
-        password.encode("utf-8"),
+        password.encode(),
         salt=salt,
         n=_SCRYPT_N,
         r=_SCRYPT_R,
@@ -64,25 +83,19 @@ def derive_pubkey_hex(password: str, salt_hex: str) -> str:
 
 
 def validate_pubkey_hex(pubkey_hex: str) -> bytes:
-    """Return raw 32-byte public key, or raise ValueError.
-
-    Checks that *pubkey_hex* is 64 hex chars decoding to exactly 32 bytes.
-    """
-    if len(pubkey_hex) != 64:
-        raise ValueError(f"Ed25519 public key must be 64 hex chars, got {len(pubkey_hex)}")
+    """Return raw 32-byte public key, or raise BadRequestError."""
+    if len(pubkey_hex) != _PUBKEY_HEX_LEN:
+        raise BadRequestError(code="INVALID_PUBKEY_LEN", length=len(pubkey_hex))
     raw = bytes.fromhex(pubkey_hex)
-    if len(raw) != 32:
-        raise ValueError(f"Ed25519 public key must be 32 bytes, got {len(raw)}")
+    if len(raw) != _PUBKEY_BYTES:
+        raise BadRequestError(code="INVALID_PUBKEY_BYTES", length=len(raw))
     return raw
 
 
 def validate_sig_hex(sig_hex: str) -> bytes:
-    """Return raw 64-byte signature, or raise ValueError.
-
-    Checks that *sig_hex* is 128 hex chars decoding to exactly 64 bytes.
-    """
-    if len(sig_hex) != 128:
-        raise ValueError(f"Ed25519 signature must be 128 hex chars, got {len(sig_hex)}")
+    """Return raw 64-byte signature, or raise BadRequestError."""
+    if len(sig_hex) != _SIG_HEX_LEN:
+        raise BadRequestError(code="INVALID_SIG_LEN", length=len(sig_hex))
     return bytes.fromhex(sig_hex)
 
 
@@ -94,13 +107,10 @@ def sha256_hex(data: bytes) -> str:
 
 
 def verify_body_hash(body: bytes, claimed_hash: str) -> None:
-    """Raise ValueError if SHA-256 of *body* doesn't match *claimed_hash*."""
+    """Raise BadRequestError if SHA-256 of *body* doesn't match *claimed_hash*."""
     actual = sha256_hex(body)
     if claimed_hash != actual:
-        raise ValueError(
-            f"Body hash mismatch (expected {actual[:16]}..., "
-            f"got {claimed_hash[:16]}...)"
-        )
+        raise BadRequestError(code="BODY_HASH_MISMATCH")
 
 
 def pubkey_hex_to_ssh_line(pubkey_hex: str) -> str:
@@ -112,9 +122,11 @@ def pubkey_hex_to_ssh_line(pubkey_hex: str) -> str:
     Raises ValueError if the key is not valid.
     """
     raw = validate_pubkey_hex(pubkey_hex)
-    # SSH wire format: string "ssh-ed25519" + string <key>
-    wire = struct.pack(">I", 11) + b"ssh-ed25519" + struct.pack(">I", 32) + raw
-    return "ssh-ed25519 " + base64.b64encode(wire).decode("ascii")
+    wire = (
+        struct.pack(_STRUCT_FMT, _SSH_ALGO_LEN) + _SSH_ALGO_BYTES
+        + struct.pack(_STRUCT_FMT, _PUBKEY_BYTES) + raw
+    )
+    return _SSH_ALGO + " " + base64.b64encode(wire).decode()
 
 
 def _private_key_to_bytes(key: ed25519.Ed25519PrivateKey) -> bytes:
@@ -161,11 +173,11 @@ def write_key_to_tempfile(private_key_bytes: bytes) -> Path:
     Prefer ``temp_signing_key`` — the context manager that handles cleanup.
     """
     priv_pem = serialize_private_key_pem(private_key_bytes)
-    fd, path = tempfile.mkstemp(suffix="_peerpedia_ed25519")
+    fd, path = tempfile.mkstemp(suffix=_KEYFILE_SUFFIX)
     try:
         with os.fdopen(fd, "wb") as f:
             f.write(priv_pem)
-        os.chmod(path, 0o600)
+        os.chmod(path, _KEYFILE_PERMS)
     except Exception:
         Path(path).unlink(missing_ok=True)
         raise
@@ -197,7 +209,7 @@ def write_allowed_signers_file(email: str, pubkey_ssh_line: str) -> Path:
     *pubkey_ssh_line* is a full SSH public key line
     (``"ssh-ed25519 AAAAC3NzaC1..."``).
     """
-    fd, path = tempfile.mkstemp(suffix="_allowed_signers")
+    fd, path = tempfile.mkstemp(suffix=_SIGNERS_SUFFIX)
     with os.fdopen(fd, "w") as f:
         f.write(f"{email} {pubkey_ssh_line}\n")
     return Path(path)
@@ -205,7 +217,7 @@ def write_allowed_signers_file(email: str, pubkey_ssh_line: str) -> Path:
 
 def new_salt() -> str:
     """Generate a new random 16-byte salt, hex-encoded."""
-    return secrets.token_bytes(16).hex()
+    return secrets.token_bytes(_SALT_BYTES).hex()
 
 
 def sign_detached(private_key_bytes: bytes, message: bytes) -> bytes:

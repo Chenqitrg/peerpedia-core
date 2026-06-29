@@ -10,7 +10,7 @@ import threading
 import time
 
 from peerpedia_core.cli.bundle_utils import _TRANSPORT
-from peerpedia_core.cli.helpers import _log
+from peerpedia_core.cli.info import _log
 from peerpedia_core.config.params import params
 from peerpedia_core.storage.peers import get_known_peers, merge_peers
 

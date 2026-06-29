@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from peerpedia_core.cli.bundle_utils import _resolve_server_url
-from peerpedia_core.cli.handler import with_context
+from peerpedia_core.cli.decorators import with_context
 import peerpedia_core.app.commands.social as _social
 
 

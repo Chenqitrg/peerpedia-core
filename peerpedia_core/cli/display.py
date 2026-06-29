@@ -9,29 +9,14 @@ on any other PeerPedia module.
 
 from __future__ import annotations
 
-import os
-import subprocess
-
-from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
-from rich.theme import Theme
 
-from peerpedia_core.core import list_author_ids, list_users_by_ids, parse_frontmatter
+from peerpedia_core.cli.info import console, _page
+from peerpedia_core.cli.resolve import _resolve_author_names
+from peerpedia_core.core import list_author_ids, parse_frontmatter
 from peerpedia_core.types import short_id
 from peerpedia_core.types.scores import SCORE_DIMENSIONS
-
-# ── Rich console with theme ──────────────────────────────────────────────
-
-theme = Theme({
-    "success": "#777C5C bold",    # olive
-    "error": "#B84040 bold",      # brick red
-    "warning": "#D4893C bold",    # amber
-    "info": "#A85F3B bold",       # primary terracotta
-    "accent": "#B08A57 bold",     # gold-brown
-    "muted": "#6F665E dim",       # warm gray
-})
-console = Console(theme=theme)
 
 
 # ── Output formatting — shared display helpers for all commands ───────────
@@ -156,15 +141,6 @@ def _stars(score: dict | None, dims: list[str] | None = None) -> str:
 # ── Pager ───────────────────────────────────────────────────────────────
 
 
-def _page(text: str) -> None:
-    """Display text through a pager (``$PAGER`` or ``less -R``)."""
-    pager = os.environ.get("PAGER", "less -R")
-    try:
-        subprocess.run(pager.split(), input=text, text=True, timeout=120)
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        console.print(text)
-
-
 def display_full_content(raw: str, article_id: str = "") -> None:
     """Render the full article source with optional empty-state guidance.
 
@@ -175,27 +151,19 @@ def display_full_content(raw: str, article_id: str = "") -> None:
         console.print("\n[bold]── Content ──[/]")
         _page(raw)
     elif article_id:
-        console.print(
-            f"[muted]No content yet. Use [accent]peerpedia article edit "
-            f"{article_id[:8]}[/] to add content.[/]"
-        )
+        display_empty_article_list("N_NO_CONTENT", id_short=article_id[:8])
 
 
-def display_empty_article_list(args) -> None:
+def display_empty_article_list(code: str, **fmt) -> None:
     """Show context-sensitive guidance when an article list is empty.
 
-    Pure Rich display — moved from ``read.py`` to live with its siblings
-    ``display_article``, ``display_diff``, ``display_full_content``.
+    *code* is a message code from ``messages.py`` (N_NO_ARTICLES_*).
+    Caller decides which code to show based on args context.
     """
-    if getattr(args, "feed", False):
-        console.print("[muted]Your feed is empty — you're not following anyone yet.[/]")
-        console.print("\n  [accent]peerpedia school[/]              ← discover users")
-        console.print("  [accent]peerpedia follow @username[/]   ← follow someone")
-    elif getattr(args, "mine", False):
-        console.print("[muted]No articles yet.[/]")
-        console.print(f"\n  [accent]peerpedia article create --title \"My Paper\"[/]")
-    else:
-        console.print("[muted]No articles.[/]")
+    from peerpedia_core.messages import lookup as _lookup
+    _, m = _lookup(code)
+    if m.text:
+        console.print(m.text.format(**fmt) if fmt else m.text)
 
 
 def display_article_meta(db, article, *, author_ids: list[str] | None = None) -> None:
@@ -207,12 +175,15 @@ def display_article_meta(db, article, *, author_ids: list[str] | None = None) ->
     Moved from ``helpers.py`` — the resolution logic is incidental to
     "getting information for display"; the Rich rendering is primary.
     """
-    author_ids_list = author_ids if author_ids is not None else list_author_ids(db, article.id)
-    author_names = _resolve_author_names_display(db, author_ids_list)
+    ids = author_ids or list_author_ids(db, article.id)
+    author_names = _resolve_author_names(db, ids)
 
-    try:
-        raw = _find_source_file(article.id, db=db).read_text()
-    except SystemExit:
+    from peerpedia_core.core import article_source_path
+    f = article_source_path(article.id)
+    if f is not None:
+        raw = f.read_text()
+    else:
+        raw = ""
         display_article(
             title=article.title, status=article.status,
             authors=author_names, score=article.score,
@@ -227,18 +198,3 @@ def display_article_meta(db, article, *, author_ids: list[str] | None = None) ->
     )
 
 
-# ── Internal helpers for display_article_meta ────────────────────────────
-
-
-def _resolve_author_names_display(db, author_ids: list[str]) -> list[str]:
-    """Convert author UUIDs to display names for human-readable output."""
-    if not author_ids:
-        return []
-    users = {u.id: u for u in list_users_by_ids(db, set(author_ids))}
-    return [users[uid].name if uid in users else short_id(uid) for uid in author_ids]
-
-
-def _find_source_file(article_id: str, db=None):
-    """Find the source file for an article.  Delegates to helpers._find_article_file."""
-    from peerpedia_core.cli.helpers import _find_article_file
-    return _find_article_file(article_id, db=db)

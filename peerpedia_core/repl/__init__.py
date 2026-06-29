@@ -34,12 +34,12 @@ from rich.text import Text
 
 import peerpedia_core.repl.state as _st
 from peerpedia_core.cli import build_parser
-from peerpedia_core.cli.display import console, theme
+from peerpedia_core.cli.info import console, theme
 from peerpedia_core.app.context import read_session as _read_session
 from peerpedia_core.core import count_articles, publish_ready_articles
 from peerpedia_core.repl.state import close_db as _close_db, ensure_db as _ensure_db
 from peerpedia_core.types import short_id
-from peerpedia_core.cli.parser import get_cmd_map
+from peerpedia_core.cli.dispatch import get_cmd_map_for_parser as get_cmd_map
 from peerpedia_core.config.params import params
 from peerpedia_core.config.paths import REPL_HISTORY_FILE
 

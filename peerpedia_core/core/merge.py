@@ -54,6 +54,7 @@ from peerpedia_core.storage.db.crud_merge import (
     accept_merge_proposal, get_merge_proposal, withdraw_merge_proposal as _withdraw,
 )
 from peerpedia_core.storage.db.crud_merge import create_merge_proposal as _create
+from peerpedia_core.storage.db.models import MergeProposalStorage
 from peerpedia_core.core.articles._helpers import reset_sink
 from peerpedia_core.storage.git.guards import require_article_repo
 from peerpedia_core.storage.db.crud_maintainer import get_maintainer_ids
@@ -118,7 +119,7 @@ def accept_merge(db: Session, article_id: str, proposal_id: str, user_id: str) -
 # ── Propose / Withdraw ────────────────────────────────────────────────────
 
 
-def create_merge_proposal(db: Session, fork_id: str, target_id: str, proposer_id: str):
+def create_merge_proposal(db: Session, fork_id: str, target_id: str, proposer_id: str) -> MergeProposalStorage:
     """Create a merge proposal and notify target article maintainers."""
     proposer = require_user(db, proposer_id)
     mp = _create(db, fork_id, target_id, proposer_id)

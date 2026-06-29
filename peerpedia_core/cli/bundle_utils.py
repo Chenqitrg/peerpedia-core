@@ -10,8 +10,9 @@ from __future__ import annotations
 
 import os
 
-from peerpedia_core.cli.helpers import _get_session_user
-from peerpedia_core.cli.output import _die, _out
+from peerpedia_core.cli.session import _get_session_user
+from peerpedia_core.cli.info import _out
+from peerpedia_core.config.params import PEERPEDIA_SERVER_ENV, params
 from peerpedia_core.config.paths import SERVER_DEFAULT_FILE
 from peerpedia_core.app.commands.sync import sync_all as _core_sync_all, sync_all_peers as _core_sync_all_peers
 from peerpedia_core.exceptions import ConflictError, ProtocolError, TransportError
@@ -37,14 +38,8 @@ def _require_online_server(args) -> str:
     skew = _TRANSPORT.check_clock_skew(server)
     err = validate_clock_skew(skew)
     if err:
-        _die_clockskew(err, server)
+        _out(args, "CLOCK_SKEW", server=server, error=err)
     return server
-
-
-def _die_clockskew(err: str, server: str):
-    _die(f"{err} with {server}. Fix your system clock before syncing — "
-         "commit timestamps would be unreliable for priority claims.",
-         code="BAD_REQUEST")
 
 
 # ── Error → message mapping ──────────────────────────────────────────────────
@@ -66,7 +61,7 @@ def _map_sync_error(e: Exception) -> str:
 
 def _resolve_or_skip(server: str | None = None) -> str | None:
     """Resolve server URL.  Return None if offline — caller should skip."""
-    srv = server or os.environ.get("PEERPEDIA_SERVER")
+    srv = server or os.environ.get(PEERPEDIA_SERVER_ENV)
     if not srv:
         _warn_no_server()
         return None
@@ -110,7 +105,7 @@ def _try_sync_all(db) -> None:
 
 def _resolve_server_url(args) -> str:
     """Resolve peer URL: --server flag → env var → saved default → die."""
-    srv = getattr(args, "server", None) or os.environ.get("PEERPEDIA_SERVER")
+    srv = getattr(args, "server", None) or os.environ.get(PEERPEDIA_SERVER_ENV)
     if not srv:
         srv = _read_saved_server()
     if not srv:
@@ -140,7 +135,7 @@ def _check_stale_server(url: str) -> None:
         _stale_counter.pop(url, None)
         return
     _stale_counter[url] = _stale_counter.get(url, 0) + 1
-    if _stale_counter[url] == 3:
+    if _stale_counter[url] >= params.server.stale_server_warn_after:
         _out(None, "S_STALE_SERVER", server=url)
         _out(None, "S_STALE_SERVER_HINT", path=str(SERVER_DEFAULT_FILE))
 

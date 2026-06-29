@@ -26,9 +26,9 @@ warnings.filterwarnings("ignore", category=Warning, module="sqlalchemy")
 
 from peerpedia_core.cli.parser import build_parser
 from peerpedia_core.config.paths import DB_PATH, DB_URL
-from peerpedia_core.cli.display import console
+from peerpedia_core.cli.info import console
 from peerpedia_core.core import db_session, count_articles, get_user, list_users, publish_ready_articles
-from peerpedia_core.cli.helpers import _read_session
+from peerpedia_core.cli.session import _read_session
 from peerpedia_core.types import short_id
 def _count_users() -> int:
     """Return the number of users in the local DB.  Returns 0 on fresh install."""

@@ -5,9 +5,9 @@
 
 from __future__ import annotations
 
-from peerpedia_core.cli.handler import with_context
-from peerpedia_core.cli.helpers import _open_editor
-from peerpedia_core.cli.output import _out
+from peerpedia_core.cli.decorators import with_context
+from peerpedia_core.editor import open_editor as _open_editor
+from peerpedia_core.cli.info import _out
 import peerpedia_core.app.commands.review as _review
 
 

@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from peerpedia_core.storage.db import Session
+from peerpedia_core.storage.db.models import UserStorage
 from peerpedia_core.config.params import params
 from peerpedia_core.storage.db.crud_article import (
     list_author_ids, update_article_score,
@@ -70,7 +71,7 @@ def _build_reviewer_weight_map(reviewer_users) -> dict[str, float]:
     return weight_map
 
 
-def reconcile_reputation(db: Session, user_id: str, *, user=None) -> ReputationScores:
+def reconcile_reputation(db: Session, user_id: str, *, user: UserStorage | None = None) -> ReputationScores:
     """Compute and persist a blended reputation for *user_id*."""
     if user is None:
         user = get_user(db, user_id)

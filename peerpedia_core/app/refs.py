@@ -19,9 +19,10 @@ from peerpedia_core.core import (
     resolve_username_or_alias, search_articles,
 )
 from peerpedia_core.exceptions import BadRequestError, NotFoundError, NotAuthorizedError
+from peerpedia_core.storage.db import Session
 from peerpedia_core.storage.db.guards import require_article as _lower_require_article
 from peerpedia_core.storage.db.guards import require_user as _lower_require_user
-from peerpedia_core.storage.db.models import NotificationStorage
+from peerpedia_core.storage.db.models import ArticleMetaStorage, NotificationStorage, UserStorage
 from peerpedia_core.types import short_id
 
 
@@ -32,15 +33,15 @@ def require_user(ctx: AppContext) -> str:
     return ctx.current_user_id
 
 
-def require_article(db, ref: str):
+def require_article(db: Session, ref: str) -> ArticleMetaStorage:
     """Resolve a fuzzy article reference → ORM object via lower guard."""
     return _resolve_ref(
         db, search_articles(db, ref), ref,
-        _lower_require_article, _format_article_candidates,
+        _lower_require_article, format_article_candidates,
     )
 
 
-def require_user_by_ref(db, ref: str):
+def require_user_by_ref(db: Session, ref: str) -> UserStorage:
     """Resolve a user reference → ORM object via lower guard.
 
     ``@name`` → username/alias → canonical ID → lower guard.
@@ -50,15 +51,15 @@ def require_user_by_ref(db, ref: str):
         name = ref[1:]
         return _resolve_ref(
             db, resolve_username_or_alias(db, "", name), name,
-            _lower_require_user, _format_user_candidates_multiline,
+            _lower_require_user, format_user_candidates_multiline,
         )
     return _resolve_ref(
         db, find_users(db, ref), ref,
-        _lower_require_user, _format_user_candidates,
+        _lower_require_user, format_user_candidates,
     )
 
 
-def require_notification(db, notification_id: str, user_id: str):
+def require_notification(db: Session, notification_id: str, user_id: str) -> NotificationStorage:
     """Load a notification, verify it belongs to *user_id*.
 
     Raises NotFoundError if missing, NotAuthorizedError if not owned.
@@ -72,18 +73,18 @@ def require_notification(db, notification_id: str, user_id: str):
     return notif
 
 
-def guard_name_available(db, name: str) -> None:
+def guard_name_available(db: Session, name: str) -> None:
     """Raise BadRequestError if *name* is already taken."""
     existing = list_users_by_name(db, name)
     if existing:
         raise BadRequestError(
             code="DUPLICATE_NAME",
-            ids=_format_user_candidates(existing),
+            ids=format_user_candidates(existing),
             name=name,
         )
 
 
-def guard_user_id_available(db, user_id: str) -> None:
+def guard_user_id_available(db: Session, user_id: str) -> None:
     """Raise BadRequestError if *user_id* already exists (bootstrap dedup)."""
     existing = _get_user(db, user_id)
     if existing is not None:
@@ -91,7 +92,7 @@ def guard_user_id_available(db, user_id: str) -> None:
             name=existing.name, id_short=short_id(user_id))
 
 
-def require_user_by_name(db, name: str | None):
+def require_user_by_name(db: Session, name: str | None) -> UserStorage:
     """Resolve a display name → ORM object.  Raises if missing/ambiguous."""
     if not name:
         raise BadRequestError(code="AMBIGUOUS_ARGS")
@@ -124,17 +125,17 @@ def _ambiguous(ids: str, **extra) -> BadRequestError:
     raise BadRequestError(code="AMBIGUOUS_NAME", ids=ids, **extra)
 
 
-def _format_article_candidates(articles) -> str:
+def format_article_candidates(articles: list[ArticleMetaStorage]) -> str:
     return ", ".join(f"{short_id(a.id)} ({a.title})" for a in articles)
 
 
-def _format_user_candidates(users) -> str:
+def format_user_candidates(users: list[UserStorage]) -> str:
     return ", ".join(f"{short_id(u.id)} ({u.name})" for u in users)
 
 
-def _format_user_id_candidates(users) -> str:
+def _format_user_id_candidates(users: list[UserStorage]) -> str:
     return ", ".join(short_id(u.id) for u in users)
 
 
-def _format_user_candidates_multiline(users) -> str:
+def format_user_candidates_multiline(users: list[UserStorage]) -> str:
     return "\n".join(f"  {u.id}  {u.name}" for u in users)

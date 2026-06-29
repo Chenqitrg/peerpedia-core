@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from peerpedia_core.storage.db import Session
 from peerpedia_core.core.notifications import create_notification
-from peerpedia_core.storage.db.models import UserStorage
+from peerpedia_core.storage.db.models import FollowStorage, UserStorage
 from peerpedia_core.storage.db.crud_user import (
     create_user as _create,
     create_user_stub as _create_stub,
@@ -36,12 +36,12 @@ from datetime import datetime, timezone
 from peerpedia_core.crypto import derive_key_pair
 
 
-def create_user(db: Session, *, name: str, public_key: str, affiliation: str = ""):
+def create_user(db: Session, *, name: str, public_key: str, affiliation: str = "") -> UserStorage:
     """Create a new user."""
     return _create(db, name=name, public_key=public_key, affiliation=affiliation)
 
 
-def create_user_stub(db: Session, *, user_id: str, name: str, public_key: str, salt: str):
+def create_user_stub(db: Session, *, user_id: str, name: str, public_key: str, salt: str) -> UserStorage:
     """Create a minimal UserStorage record with all fields set — for device bootstrap.
 
     Used when setting up a new device: the user copies their user_id, name,
@@ -55,7 +55,7 @@ def create_user_stub(db: Session, *, user_id: str, name: str, public_key: str, s
     return _create_stub(db, user_id=user_id, name=name, public_key=public_key, salt=salt)
 
 
-def get_user(db: Session, user_ref: str):
+def get_user(db: Session, user_ref: str) -> UserStorage | None:
     """Get a user by ID or name. Returns None if not found."""
     return _get(db, user_ref)
 
@@ -65,7 +65,7 @@ def list_users_by_name(db: Session, name: str) -> list[UserStorage]:
     return _get_by_name(db, name)
 
 
-def update_user_public_key(db: Session, user_id: str, pubkey_hex: str):
+def update_user_public_key(db: Session, user_id: str, pubkey_hex: str) -> None:
     """Set the public key for a user."""
     # TODO(social-recovery): Implement key recovery via trusted contacts.
     # When a user loses their private key (new device, lost password), they
@@ -79,12 +79,12 @@ def update_user_public_key(db: Session, user_id: str, pubkey_hex: str):
     return _update_pubkey(db, user_id, pubkey_hex)
 
 
-def update_user_salt(db: Session, user_id: str, salt_hex: str):
+def update_user_salt(db: Session, user_id: str, salt_hex: str) -> None:
     """Set the scrypt salt for a user."""
     return _update_salt(db, user_id, salt_hex)
 
 
-def follow_user(db: Session, follower_id: str, followed_id: str):
+def follow_user(db: Session, follower_id: str, followed_id: str) -> FollowStorage:
     """Follow a user. Notifies followed user. Raises ValueError if self-follow."""
     result = _follow(db, follower_id, followed_id)
 
@@ -102,7 +102,7 @@ def follow_user(db: Session, follower_id: str, followed_id: str):
     return result
 
 
-def unfollow_user(db: Session, follower_id: str, followed_id: str):
+def unfollow_user(db: Session, follower_id: str, followed_id: str) -> None:
     """Unfollow a user. Idempotent."""
     _unfollow(db, follower_id, followed_id)
 
@@ -158,7 +158,7 @@ def soft_delete_user(db: Session, user_id: str) -> None:
 # ── Composite auth guards ────────────────────────────────────────────────
 
 
-def require_authenticable_user(user) -> None:
+def require_authenticable_user(user: UserStorage) -> None:
     """Raise if *user* cannot authenticate (no salt, or locked out)."""
     if user.salt is None:
         raise BadRequestError(code="VALIDATION_FAILED")
@@ -170,7 +170,7 @@ def require_authenticable_user(user) -> None:
                                   minutes=max(1, remaining // 60))
 
 
-def verify_user_password(db: Session, user, password: str) -> None:
+def verify_user_password(db: Session, user: UserStorage, password: str) -> None:
     """Raise if password does not match.  Tracks failed-login attempts."""
     _, pubkey_bytes = derive_key_pair(password, user.salt)
     if pubkey_bytes.hex() != user.public_key:

@@ -162,7 +162,15 @@ import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from peerpedia_core.config.params import (
+    _ARTICLE_EXT_TO_FMT,
+    FMT_HTML, FMT_MARKDOWN, FMT_PDF, FMT_PNG, FMT_SVG, FMT_TYPST,
+    MD_ARITHMATEX_KEY, MD_EXTENSIONS, MD_OUTPUT_DIR,
+    TYPST_BIN, TYPST_COMPILE_CMD, TYPST_FORMAT_FLAG,
+    TYPST_TIMEOUT, TYPST_VALID_FMTS, TYPST_WARNING_PREFIX,
+)
 from peerpedia_core.frontmatter import strip_frontmatter
+
 # ── Result types ───────────────────────────────────────────────────────────────
 
 
@@ -175,6 +183,7 @@ class CompileResult:
     output_path: str | None = None  # Path to compiled file (PDF, HTML)
     html_content: str | None = None  # Inline HTML (for Markdown rendering)
     error: str | None = None
+    error_code: str | None = None   # Machine-readable code (see messages.py)
     warnings: list[str] = field(default_factory=list)
 
 
@@ -191,22 +200,18 @@ def compile_article(source_path: Path, fmt: str | None = None) -> CompileResult:
 
     # Markdown backend only supports HTML output.  Validate upfront so the
     # user gets a clear error instead of silent HTML output.
-    if actual_format == "markdown" and fmt and fmt != "html":
+    if actual_format == FMT_MARKDOWN and fmt and fmt != FMT_HTML:
         return CompileResult(
-            success=False,
-            format=fmt,
-            error=(
-                f"Markdown articles only support HTML output "
-                f"(requested: {fmt}). Use Typst for PDF/SVG/PNG."
-            ),
+            success=False, format=fmt,
+            error_code="COMPILE_FORMAT_MISMATCH",
         )
 
     detected = fmt or actual_format
-    out_dir = source_path.parent / "compiled"
+    out_dir = source_path.parent / MD_OUTPUT_DIR
     out_dir.mkdir(exist_ok=True)
 
-    if detected == "typst":
-        return TypstBackend().compile(source_path, out_dir, fmt=fmt or "pdf")
+    if detected == FMT_TYPST:
+        return TypstBackend().compile(source_path, out_dir, fmt=fmt or FMT_PDF)
     else:
         return MarkdownBackend().compile(source_path, out_dir)
 
@@ -214,18 +219,24 @@ def compile_article(source_path: Path, fmt: str | None = None) -> CompileResult:
 def detect_format(file_path: Path) -> str:
     """Detect article format from file extension. Returns "markdown" or "typst".
 
-    Raises ValueError if the file extension is not recognised.
+    Raises BadRequestError if the file extension is not recognised.
     """
     suffix = file_path.suffix.lower()
-    if suffix in (".typ", ".typst"):
-        return "typst"
-    if suffix in (".md", ".markdown"):
-        return "markdown"
-    raise ValueError(f"Unknown article format: {suffix}")
+    fmt = _ARTICLE_EXT_TO_FMT.get(suffix)
+    if fmt is not None:
+        return fmt
+    from peerpedia_core.exceptions import BadRequestError
+    raise BadRequestError(code="COMPILE_UNKNOWN_FORMAT", suffix=suffix)
 
 
-def _fail(format: str, error: str) -> CompileResult:
-    return CompileResult(success=False, format=format, error=error)
+def _output_path(source_path: Path, output_dir: Path, ext: str) -> Path:
+    """Build output file path: ``output_dir / stem.ext``."""
+    return output_dir / f"{source_path.stem}.{ext}"
+
+
+def _typst_format_label(fmt: str) -> str:
+    """Build Typst result format label: ``typst-pdf``, ``typst-svg``, etc."""
+    return f"typst-{fmt}"
 
 
 # ── Typst backend ──────────────────────────────────────────────────────────────
@@ -234,30 +245,33 @@ def _fail(format: str, error: str) -> CompileResult:
 class TypstBackend:
     """Compile Typst source via subprocess `typst compile`."""
 
-    def compile(self, source_path: Path, output_dir: Path, fmt: str = "pdf") -> CompileResult:
+    def compile(self, source_path: Path, output_dir: Path, fmt: str = FMT_PDF) -> CompileResult:
         """Run ``typst compile --format <fmt> <source> <output>``."""
-        typst_bin = shutil.which("typst")
+        typst_bin = shutil.which(TYPST_BIN)
         if typst_bin is None:
-            return _fail("typst", "typst CLI not found. Install from https://github.com/typst/typst")
+            return CompileResult(success=False, format=FMT_TYPST, error_code="COMPILE_TYPST_NOT_FOUND")
 
-        fmt = fmt if fmt in ("pdf", "svg", "png") else "pdf"
-        output_file = output_dir / f"{source_path.stem}.{fmt}"
+        fmt = fmt if fmt in TYPST_VALID_FMTS else FMT_PDF
+        output_file = _output_path(source_path, output_dir, fmt)
         try:
             result = subprocess.run(
-                [typst_bin, "compile", "--format", fmt, str(source_path), str(output_file)],
-                capture_output=True, text=True, timeout=30,
+                [typst_bin, TYPST_COMPILE_CMD, TYPST_FORMAT_FLAG, fmt,
+                 str(source_path), str(output_file)],
+                capture_output=True, text=True, timeout=TYPST_TIMEOUT,
             )
         except subprocess.TimeoutExpired:
-            return _fail("typst", "typst compilation timed out (30s)")
+            return CompileResult(success=False, format=FMT_TYPST, error_code="COMPILE_TIMEOUT")
 
         if result.returncode != 0:
-            return _fail("typst", result.stderr.strip() or "Unknown typst error")
+            return CompileResult(success=False, format=FMT_TYPST,
+                                error=result.stderr.strip(),
+                                error_code="COMPILE_TYPST_ERROR")
 
         return CompileResult(
             success=True,
-            format=f"typst-{fmt}",
+            format=_typst_format_label(fmt),
             output_path=str(output_file),
-            html_content=output_file.read_text() if fmt == "svg" else None,
+            html_content=output_file.read_text() if fmt == FMT_SVG else None,
             warnings=_parse_typst_warnings(result.stderr),
         )
 
@@ -266,8 +280,8 @@ def _parse_typst_warnings(stderr: str) -> list[str]:
     """Parse warning lines from typst stderr output."""
     return [
         line.strip()
-        for line in stderr.split("\n")
-        if line.strip().startswith("warning:")
+        for line in stderr.splitlines()
+        if line.strip().startswith(TYPST_WARNING_PREFIX)
     ]
 
 
@@ -282,25 +296,23 @@ class MarkdownBackend:
         try:
             source = source_path.read_text()
         except Exception as e:
-            return _fail("markdown", str(e))
+            return CompileResult(success=False, format=FMT_MARKDOWN, error=str(e))
 
         try:
             body = strip_frontmatter(source)
             html_body = _render_markdown(body)
-            # Math is protected by pymdownx.arithmatex.  The front-end
-            # is responsible for loading KaTeX and calling renderMathInElement.
 
-            output_path = output_dir / f"{source_path.stem}.html"
+            output_path = _output_path(source_path, output_dir, FMT_HTML)
             output_path.write_text(html_body)
 
             return CompileResult(
                 success=True,
-                format="markdown",
+                format=FMT_MARKDOWN,
                 output_path=str(output_path),
                 html_content=html_body,
             )
         except Exception as e:
-            return _fail("markdown", str(e))
+            return CompileResult(success=False, format=FMT_MARKDOWN, error=str(e))
 
 
 def _render_markdown(md_text: str) -> str:
@@ -309,11 +321,8 @@ def _render_markdown(md_text: str) -> str:
 
     return markdown.markdown(
         md_text,
-        extensions=[
-            "fenced_code", "tables", "codehilite",
-            "pymdownx.arithmatex",
-        ],
+        extensions=list(MD_EXTENSIONS),
         extension_configs={
-            "pymdownx.arithmatex": {"generic": True},
+            MD_ARITHMATEX_KEY: {"generic": True},
         },
     )

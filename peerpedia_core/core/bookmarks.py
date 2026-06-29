@@ -15,18 +15,19 @@ from peerpedia_core.storage.db.crud_bookmark import (
     get_bookmarks_for_user as _get,
     remove_bookmark as _rm,
 )
+from peerpedia_core.storage.db.models import BookmarkStorage
 
 
-def add_bookmark(db: Session, user_id: str, article_id: str):
+def add_bookmark(db: Session, user_id: str, article_id: str) -> BookmarkStorage:
     """Add a bookmark. Returns the BookmarkStorage row."""
     return _add(db, user_id, article_id)
 
 
-def get_bookmarks_for_user(db: Session, user_id: str):
+def get_bookmarks_for_user(db: Session, user_id: str) -> list[BookmarkStorage]:
     """Return all bookmarks for a user."""
     return _get(db, user_id)
 
 
-def remove_bookmark(db: Session, user_id: str, article_id: str):
+def remove_bookmark(db: Session, user_id: str, article_id: str) -> None:
     """Remove a bookmark. Idempotent."""
     _rm(db, user_id, article_id)

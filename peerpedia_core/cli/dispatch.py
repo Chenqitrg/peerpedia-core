@@ -14,7 +14,8 @@ no longer pulls in sync, transport, storage, or server.
 from __future__ import annotations
 
 import importlib
-from typing import Any, Callable
+from collections import defaultdict
+from typing import Callable
 
 # command_id → (module_path, function_name)
 _HANDLER_MAP: dict[str, tuple[str, str]] = {
@@ -111,18 +112,14 @@ def get_cmd_map_for_parser() -> dict[str, list[str]]:
 
     Derives from ``_HANDLER_MAP`` so there is a single source of truth.
     """
-    from collections import defaultdict
-
     result: dict[str, list[str]] = {}
     sub_name_groups: dict[str, list[str]] = defaultdict(list)
 
-    # First pass: collect which groups share each sub-name
     for cmd_id in _HANDLER_MAP:
         parts = cmd_id.split(".")
         if len(parts) == 2:
             sub_name_groups[parts[1]].append(parts[0])
 
-    # Second pass: register compound + short names
     for cmd_id in _HANDLER_MAP:
         parts = cmd_id.split(".")
         if len(parts) == 2:

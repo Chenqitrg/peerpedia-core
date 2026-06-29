@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from peerpedia_core.exceptions import BadRequestError
 from peerpedia_core.crypto import (
     validate_pubkey_hex, validate_sig_hex, verify_body_hash, verify_signature,
 )
@@ -37,7 +38,7 @@ def _parse_auth_header(header_value: str) -> _ParsedHeader | AuthResult:
                 reason=f"Expected {_FIELD_COUNT} colon-separated fields, got {len(parts)}")
         return _ParsedHeader(user_id=parts[0], pubkey_hex=parts[1],
                               ts=parts[2], body_hash=parts[3], sig_hex=parts[4])
-    except ValueError as e:
+    except (BadRequestError, ValueError) as e:
         return AuthResult(ok=False, reason=f"Malformed header: {e}")
 
 
@@ -52,7 +53,7 @@ def verify_auth_header(
     # ── Validate pubkey ──────────────────────────────────────────────────────
     try:
         pubkey_bytes = validate_pubkey_hex(parsed.pubkey_hex)
-    except ValueError as e:
+    except (BadRequestError, ValueError) as e:
         return AuthResult(ok=False, reason=str(e))
 
     ts = validate_timestamp(parsed.ts)
@@ -61,13 +62,13 @@ def verify_auth_header(
 
     try:
         sig_bytes = validate_sig_hex(parsed.sig_hex)
-    except ValueError as e:
+    except (BadRequestError, ValueError) as e:
         return AuthResult(ok=False, reason=str(e))
 
     # ── Body hash ────────────────────────────────────────────────────────────
     try:
         verify_body_hash(body, parsed.body_hash)
-    except ValueError as e:
+    except (BadRequestError, ValueError) as e:
         return AuthResult(ok=False, reason=str(e))
 
     # ── Verify signature ─────────────────────────────────────────────────────

@@ -13,7 +13,7 @@ import sys
 
 from rich.panel import Panel
 
-from peerpedia_core.cli.parser import get_cmd_map
+from peerpedia_core.cli.dispatch import get_cmd_map_for_parser as get_cmd_map
 from peerpedia_core.repl.help import _show_topic_help
 from peerpedia_core.repl.state import console
 

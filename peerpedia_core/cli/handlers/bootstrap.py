@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from peerpedia_core.cli.handler import with_context
+from peerpedia_core.cli.decorators import with_context
 import peerpedia_core.app.commands.account as _account
 
 

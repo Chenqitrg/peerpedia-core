@@ -5,8 +5,8 @@
 
 from __future__ import annotations
 
-from peerpedia_core.cli.handler import with_context
-from peerpedia_core.cli.helpers import _get_password
+from peerpedia_core.cli.decorators import with_context
+from peerpedia_core.editor import get_password as _get_password
 import peerpedia_core.app.commands.account as _account
 
 

@@ -15,7 +15,6 @@ from peerpedia_core.compiler import (
     CompileResult,
     MarkdownBackend,
     TypstBackend,
-    _fail,
     _parse_typst_warnings,
     _render_markdown,
     compile_article,
@@ -41,22 +40,23 @@ class TestDetectFormat:
         assert detect_format(Path("test.typst")) == "typst"
 
     def test_unknown_extension_raises(self):
-        with pytest.raises(ValueError, match="Unknown article format"):
+        from peerpedia_core.exceptions import BadRequestError
+        with pytest.raises(BadRequestError, match="COMPILE_UNKNOWN_FORMAT"):
             detect_format(Path("test.tex"))
 
     def test_no_extension_raises(self):
-        with pytest.raises(ValueError, match="Unknown article format"):
+        from peerpedia_core.exceptions import BadRequestError
+        with pytest.raises(BadRequestError, match="COMPILE_UNKNOWN_FORMAT"):
             detect_format(Path("test"))
 
 
-# ── _fail ───────────────────────────────────────────────────────────────────
-
-
-def test_fail_returns_error_result():
-    result = _fail("markdown", "Something went wrong")
+def test_compile_result_error():
+    """CompileResult with success=False carries error details."""
+    result = CompileResult(success=False, format="markdown", error="Something went wrong")
     assert result.success is False
     assert result.format == "markdown"
     assert result.error == "Something went wrong"
+    assert result.error_code is None
     assert result.output_path is None
 
 
@@ -223,7 +223,7 @@ class TestTypstBackend:
                 result = backend.compile(src, out)
 
             assert result.success is False
-            assert "not found" in result.error.lower()
+            assert result.error_code == "COMPILE_TYPST_NOT_FOUND"
 
     def test_typst_compilation_error(self):
         """Typst fails with non-zero return code."""
@@ -262,7 +262,7 @@ class TestTypstBackend:
                     result = backend.compile(src, out)
 
             assert result.success is False
-            assert "timed out" in result.error.lower()
+            assert result.error_code == "COMPILE_TIMEOUT"
 
     def test_typst_svg_output_stores_html_content(self):
         """SVG output from Typst is stored in html_content."""
@@ -324,7 +324,7 @@ class TestCompileArticle:
                 result = compile_article(src)
 
             assert result.success is False
-            assert "not found" in result.error.lower()
+            assert result.error_code == "COMPILE_TYPST_NOT_FOUND"
 
     def test_compile_markdown_rejects_non_html_format(self):
         """--format pdf on a Markdown article should error, not silently produce HTML."""
@@ -335,7 +335,7 @@ class TestCompileArticle:
             result = compile_article(src, fmt="pdf")
 
             assert result.success is False
-            assert "only support html" in result.error.lower()
+            assert result.error_code == "COMPILE_FORMAT_MISMATCH"
             assert result.format == "pdf"
 
     def test_compile_markdown_accepts_html_format(self):

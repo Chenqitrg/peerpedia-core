@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from rich.panel import Panel
 
-from peerpedia_core.cli.display import console
+from peerpedia_core.cli.info import console
 
 
 def _cmd_mother(_args):

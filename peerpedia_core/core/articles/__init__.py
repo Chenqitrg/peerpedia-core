@@ -16,6 +16,7 @@ from peerpedia_core.core.articles.diff import diff_article
 # ── Read wrappers — thin pass-through to crud ────────────────────────────
 
 from peerpedia_core.storage.db import Session
+from peerpedia_core.storage.db.models import ArticleMetaStorage
 from peerpedia_core.storage.db.crud_article import (
     count_articles as _count,
     list_all_article_ids as _get_all_ids,
@@ -26,7 +27,7 @@ from peerpedia_core.storage.db.crud_article import (
 from peerpedia_core.core.reconcile import reconcile_integrity
 
 
-def get_article(db: Session, article_id: str):
+def get_article(db: Session, article_id: str) -> ArticleMetaStorage | None:
     """Return an article by ID, or None.
 
     Runs a lightweight integrity check (latest commit signature) before

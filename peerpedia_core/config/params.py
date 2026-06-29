@@ -39,11 +39,35 @@ def extract_user_id_from_email(email: str) -> str:
     return email.split("@")[0]
 
 
-# ── ArticleMetaStorage format constants ────────────────────────────────────────────────
+# ── Article format constants ─────────────────────────────────────────────────
 
-_ARTICLE_EXT_TO_FMT = {".md": "markdown", ".typ": "typst"}
-_ARTICLE_FMT_TO_EXT = {"markdown": ".md", "typst": ".typ"}
+FMT_MARKDOWN = "markdown"
+FMT_TYPST = "typst"
+FMT_HTML = "html"
+FMT_PDF = "pdf"
+FMT_SVG = "svg"
+FMT_PNG = "png"
+
+_ARTICLE_EXT_TO_FMT = {
+    ".md": FMT_MARKDOWN, ".markdown": FMT_MARKDOWN,
+    ".typ": FMT_TYPST, ".typst": FMT_TYPST,
+}
+_ARTICLE_FMT_TO_EXT = {FMT_MARKDOWN: ".md", FMT_TYPST: ".typ"}
 ARTICLE_EXTENSIONS = (".md", ".typ")
+PEERPEDIA_SERVER_ENV = "PEERPEDIA_SERVER"
+
+# ── Compiler constants ──────────────────────────────────────────────────────
+
+TYPST_BIN = "typst"
+TYPST_VALID_FMTS = (FMT_PDF, FMT_SVG, FMT_PNG)
+TYPST_TIMEOUT = 30
+TYPST_COMPILE_CMD = "compile"
+TYPST_FORMAT_FLAG = "--format"
+TYPST_WARNING_PREFIX = "warning:"
+
+MD_EXTENSIONS = ("fenced_code", "tables", "codehilite", "pymdownx.arithmatex")
+MD_ARITHMATEX_KEY = "pymdownx.arithmatex"
+MD_OUTPUT_DIR = "compiled"
 
 
 def article_format_to_ext(fmt: str) -> str:
@@ -167,6 +191,9 @@ class ServerParams:
 
     # DB session — paths that don't need a DB connection (git-only)
     db_skip_prefixes: tuple[str, ...] = ("/health",)
+
+    # Client
+    stale_server_warn_after: int = 3  # consecutive offline checks before warning
     db_skip_suffixes: tuple[str, ...] = ("/head", "/bundle", "/repo")
     db_skip_contains: tuple[str, ...] = ("/ancestor/",)
 

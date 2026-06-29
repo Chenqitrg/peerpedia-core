@@ -54,12 +54,12 @@ from peerpedia_core.core.articles import (
 )
 
 
-def search_articles(db, query: str) -> list:
+def search_articles(db: Session, query: str) -> list:
     """Fuzzy-search articles by partial title, author, or ID prefix."""
     return list_articles(db, search_query=query)
 
 
-def merge_article_meta(db, entries: list[dict]) -> int:
+def merge_article_meta(db: Session, entries: list[dict]) -> int:
     """Merge article metadata from a peer into the local DB."""
     from peerpedia_core.storage.db.ingest import ingest_articles
     from peerpedia_core.types.entities import ArticleMetaExchange
@@ -146,7 +146,10 @@ from peerpedia_core.storage.db.crud_alias import (
     list_aliases, remove_alias, resolve_username_or_alias, set_alias,
 )
 from peerpedia_core.storage.db.crud_user import list_users_by_ids
-from peerpedia_core.storage.git import get_commit_history, get_head_hash, read_article_source
+from peerpedia_core.storage.git import (
+    get_commit_history, get_head_hash, read_article_source,
+)
+from peerpedia_core.storage.git.read import article_source_path
 from peerpedia_core.storage.peers import (
     add_peer, get_known_peers, merge_peers, record_peer_result,
 )

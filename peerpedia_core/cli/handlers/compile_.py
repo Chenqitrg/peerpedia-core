@@ -5,9 +5,8 @@
 
 from __future__ import annotations
 
-from peerpedia_core.cli.display import console
-from peerpedia_core.cli.handler import with_context
-from peerpedia_core.cli.output import _ok, _open_file, _out, _page
+from peerpedia_core.cli.decorators import with_context
+from peerpedia_core.cli.info import _open_file, _out, _page, console
 from peerpedia_core.compiler import compile_article
 import peerpedia_core.app.commands.article as _article
 
@@ -24,11 +23,15 @@ def _cmd_compile(ctx, args):
         result = compile_article(Path(source_path), args.format)
 
     if not result.success:
-        _out(args, "COMPILE_FAILED", error=result.error or "Compilation failed")
+        code = result.error_code or "COMPILE_FAILED"
+        _out(args, code, error=result.error or "", fmt=result.format)
 
     if result.output_path:
-        _ok(f"Compiled to [accent]{result.format.upper()}[/]")
-        console.print(f"  [dim]{result.output_path}[/]")
+        _out(None, "N_COMPILED", fmt=result.format.upper())
+        _out(None, "N_COMPILED_PATH", path=str(result.output_path))
         _open_file(str(result.output_path))
     if result.html_content:
-        _page(result.html_content) if len(result.html_content) > 500 else console.print(result.html_content)
+        if len(result.html_content) > 500:
+            _page(result.html_content)
+        else:
+            console.print(result.html_content)

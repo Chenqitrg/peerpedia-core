@@ -13,6 +13,7 @@ import logging
 import os
 from typing import TYPE_CHECKING
 
+from peerpedia_core.config.params import PEERPEDIA_SERVER_ENV
 from peerpedia_core.storage.db import Session
 
 from peerpedia_core.storage.db.crawler import _bfs_walk
@@ -66,7 +67,7 @@ def _ingest_follow_data(db, server, user_id, data, *, sync_fn, ingest_fn) -> int
     users = [UserExchange.from_json(e) for e in data]
     follows = [FollowExchange.from_json(e) for e in data]
     ingest_users(db, users)
-    home_server = os.environ.get("PEERPEDIA_SERVER")
+    home_server = os.environ.get(PEERPEDIA_SERVER_ENV)
     if home_server is not None and server == home_server:
         return sync_fn(db, user_id, follows)
     return ingest_fn(db, user_id, follows)

@@ -233,6 +233,17 @@ def resolve_article_format(repo_path: Path) -> str:
     return "markdown"
 
 
+def article_source_path(article_id: str) -> Path | None:
+    """Return the path to an article's source file, or None."""
+    from peerpedia_core.config.paths import article_repo_path
+    rp = article_repo_path(article_id)
+    fmt = resolve_article_format(rp)
+    f = rp / article_filename(article_format_to_ext(fmt))
+    return f if f.is_file() else None
+
+
+
+
 def is_ancestor(repo_path: Path, maybe_ancestor: str, *, repo: git.Repo | None = None) -> bool:
     """Check if *maybe_ancestor* is an ancestor of HEAD."""
     if repo is None:

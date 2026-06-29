@@ -1,0 +1,189 @@
+# SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
+# SPDX-License-Identifier: CC-BY-NC-SA-4.0
+
+r"""Structured output formatting — the single exit point for all CLI output.
+
+Every user-facing message goes through ``_out()``, which dispatches on
+message kind (SUCCESS / ERROR / NOTIFY) and output mode (--json / --rich).
+There are exactly two other public functions:
+
+* ``_render_result(args, result)`` — render an ``AppResult``
+* ``_render_error(args, error)``   — render a ``PeerpediaError``
+
+Both delegate to ``_out()`` as the single terminal.
+"""
+
+from __future__ import annotations
+
+import json
+import logging as _logging
+import os
+import subprocess
+import sys
+from rich.console import Console
+from rich.text import Text
+from rich.theme import Theme
+
+from peerpedia_core.messages import Kind, log_text as _log_text, lookup as _lookup
+
+# ── Rich console (singleton) ──────────────────────────────────────────────
+# Only output.py owns the Console instance — all other CLI modules go through
+# the wrapper functions below.
+
+theme = Theme({
+    "success": "#777C5C bold",    # olive
+    "error": "#B84040 bold",      # brick red
+    "warning": "#D4893C bold",    # amber
+    "info": "#A85F3B bold",       # primary terracotta
+    "accent": "#B08A57 bold",     # gold-brown
+    "muted": "#6F665E dim",       # warm gray
+})
+
+console = Console(theme=theme)
+
+
+# ── Terminal / OS helpers ─────────────────────────────────────────────────
+
+
+def _open_file(path: str) -> None:
+    """Open a file with the system default application."""
+    if sys.platform == "darwin":
+        subprocess.run(["open", path])
+    elif sys.platform == "win32":
+        os.startfile(path)  # noqa: S606 — intentional user-facing file open
+    else:
+        subprocess.run(["xdg-open", path])
+
+
+def _page(text: str) -> None:
+    """Display text through a pager (``$PAGER`` or ``less -R``)."""
+    pager = os.environ.get("PAGER", "less -R")
+    try:
+        subprocess.run(pager.split(), input=text, text=True, timeout=120)
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        console.print(text)
+
+
+# ── Low-level output primitives ──────────────────────────────────────────
+
+
+def _ok(what: str) -> None:
+    """Success message with green checkmark (raw — prefer ``_out()``)."""
+    console.print(f"✓ [{theme.styles['success']}]{what}[/]")
+
+
+def _json_out(data: dict | list) -> None:
+    """Machine-readable output, used when --json is passed."""
+    print(json.dumps(data, indent=2, default=str))
+
+
+# ── Core dispatch ────────────────────────────────────────────────────────
+
+
+def _out(args, code: str, data=None, /, **fmt):
+    """Single output entry point.  Dispatches on message kind.
+
+    ``_out(args, "REGISTERED", {"id": uid}, name="Alice")``  → success
+    ``_out(args, "AUTH_FAILED")``                              → error (die)
+    ``_out(None, "W_NO_KNOWN_PEERS")``                         → notify (display only)
+    ``_out(args, "UNKNOWN_CODE")``                             → error (unregistered → ERROR fallback)
+    """
+    code, m = _lookup(code)
+    use_json = args is not None and getattr(args, "json", False)
+
+    # ── Error ──
+    if m.kind == Kind.ERROR:
+        _render_error_out(m, use_json, fmt)
+        sys.exit(1)
+
+    # ── Notify ──
+    if m.kind == Kind.NOTIFY:
+        if not use_json and m.text:
+            console.print(_format(m.text, fmt))
+        return
+
+    # ── Success ──
+    if use_json:
+        payload: dict = {"code": m.code}
+        if isinstance(data, dict):
+            payload.update(data)
+        elif isinstance(data, list):
+            payload["items"] = data
+        elif data is not None:
+            payload["value"] = data
+        _json_out(payload)
+        sys.exit(0)
+    if m.text:
+        _ok(_format(m.text, fmt))
+
+
+def _render_error_out(m, use_json: bool, fmt: dict) -> None:
+    """Render an ERROR message — shared by ``_out()`` and ``_render_error()``."""
+    msg = _format(m.text, fmt)
+    suggestion = _format(m.suggestion, fmt) if m.suggestion else ""
+    see_also = m.see_also
+
+    if use_json:
+        payload: dict = {"error": m.code, "message": msg}
+        if suggestion:
+            payload["suggestion"] = suggestion
+        if see_also:
+            payload["see_also"] = list(see_also)
+        print(json.dumps(payload, indent=2, default=str))
+        return
+
+    console.print(Text(f"✗ {msg}", style=theme.styles["error"]))
+    if suggestion:
+        console.print()
+        console.print(f"  [dim]→ {suggestion}[/]")
+    if see_also:
+        console.print(f"  [muted]See also: {' · '.join(see_also)}[/]")
+
+
+# ── AppResult / AppError renderers ───────────────────────────────────────
+
+
+def _render_result(args, result) -> None:
+    """Render an ``AppResult`` to stdout via ``_out()``.
+
+    Notices are rendered first (Rich only), then the main result.
+    """
+    use_json = args is not None and getattr(args, "json", False)
+    if not use_json:
+        for notice in getattr(result, "notices", []):
+            _out(None, notice.code, notice.data, **notice.params)
+    _out(args, result.code, result.data, **result.params)
+
+
+def _render_error(args, error) -> None:
+    """Render a ``PeerpediaError`` to stdout.
+
+    Delegates to ``_render_error_out`` — the single error renderer.
+    ``error.context`` becomes format parameters for the message template.
+    """
+    _, m = _lookup(error.code)
+    use_json = args is not None and getattr(args, "json", False)
+    _render_error_out(m, use_json, getattr(error, "context", {}))
+
+
+# ── Logging (no args, no exit) ───────────────────────────────────────────
+
+
+def _log(code: str, *, level: str = "info", **fmt):
+    """Log a structured message by code.  For background/daemon code.
+
+    ``_log("L_SYNC_FAILED", server=srv, error=e)``
+    """
+    text = _log_text(code, **fmt)
+    getattr(_logging.getLogger("peerpedia_core.cli"), level)(text)
+
+
+# ── Internal ─────────────────────────────────────────────────────────────
+
+
+def _format(template: str, fmt: dict) -> str:
+    """Format a template string with *fmt* parameters.
+
+    Returns the raw template when *fmt* is empty.
+    """
+    return template.format(**fmt) if fmt else template

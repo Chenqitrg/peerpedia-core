@@ -14,7 +14,10 @@ Ownership checks (is this your notification? your session?) also live here
 from __future__ import annotations
 
 from peerpedia_core.app.context import AppContext
-from peerpedia_core.core import find_users, resolve_username_or_alias, search_articles
+from peerpedia_core.core import (
+    find_users, get_user as _get_user, list_users_by_name,
+    resolve_username_or_alias, search_articles,
+)
 from peerpedia_core.exceptions import BadRequestError, NotFoundError, NotAuthorizedError
 from peerpedia_core.storage.db.guards import require_article as _lower_require_article
 from peerpedia_core.storage.db.guards import require_user as _lower_require_user
@@ -30,19 +33,11 @@ def require_user(ctx: AppContext) -> str:
 
 
 def require_article(db, ref: str):
-    """Resolve a fuzzy article reference → ORM object via lower guard.
-
-    Delegates existence check to ``storage/db/guards.require_article``.
-    Raises ``ValidationFailed`` on ambiguous input (the one app-only error).
-    """
-    results = search_articles(db, ref)
-    if len(results) == 1:
-        return _lower_require_article(db, results[0].id)
-    if len(results) > 1:
-        names = ", ".join(f"{short_id(a.id)} ({a.title})" for a in results)
-        raise BadRequestError(code="AMBIGUOUS_NAME", ids=names)
-    # Zero results — let lower guard produce the proper NotFoundError
-    return _lower_require_article(db, ref)
+    """Resolve a fuzzy article reference → ORM object via lower guard."""
+    return _resolve_ref(
+        db, search_articles(db, ref), ref,
+        _lower_require_article, _format_article_candidates,
+    )
 
 
 def require_user_by_ref(db, ref: str):
@@ -50,18 +45,17 @@ def require_user_by_ref(db, ref: str):
 
     ``@name`` → username/alias → canonical ID → lower guard.
     Plain string → prefix/name search → canonical ID → lower guard.
-
-    Delegates existence check to ``storage/db/guards.require_user``.
     """
     if ref.startswith("@"):
-        return _resolve_by_atname(db, ref[1:])
-    results = find_users(db, ref)
-    if len(results) == 1:
-        return _lower_require_user(db, results[0].id)
-    if len(results) > 1:
-        names = ", ".join(f"{short_id(u.id)} ({u.name})" for u in results)
-        raise BadRequestError(code="AMBIGUOUS_NAME", ids=names)
-    return _lower_require_user(db, ref)
+        name = ref[1:]
+        return _resolve_ref(
+            db, resolve_username_or_alias(db, "", name), name,
+            _lower_require_user, _format_user_candidates_multiline,
+        )
+    return _resolve_ref(
+        db, find_users(db, ref), ref,
+        _lower_require_user, _format_user_candidates,
+    )
 
 
 def require_notification(db, notification_id: str, user_id: str):
@@ -78,12 +72,69 @@ def require_notification(db, notification_id: str, user_id: str):
     return notif
 
 
-def _resolve_by_atname(db, name: str):
-    """Resolve ``@name`` → canonical ID → lower guard."""
-    users = resolve_username_or_alias(db, "", name)
-    if len(users) == 1:
-        return _lower_require_user(db, users[0].id)
+def guard_name_available(db, name: str) -> None:
+    """Raise BadRequestError if *name* is already taken."""
+    existing = list_users_by_name(db, name)
+    if existing:
+        raise BadRequestError(
+            code="DUPLICATE_NAME",
+            ids=_format_user_candidates(existing),
+            name=name,
+        )
+
+
+def guard_user_id_available(db, user_id: str) -> None:
+    """Raise BadRequestError if *user_id* already exists (bootstrap dedup)."""
+    existing = _get_user(db, user_id)
+    if existing is not None:
+        raise BadRequestError(code="DUPLICATE_USER_LOCAL",
+            name=existing.name, id_short=short_id(user_id))
+
+
+def require_user_by_name(db, name: str | None):
+    """Resolve a display name → ORM object.  Raises if missing/ambiguous."""
+    if not name:
+        raise BadRequestError(code="AMBIGUOUS_ARGS")
+    users = list_users_by_name(db, name)
+    if len(users) == 0:
+        raise NotFoundError(code="USER_NOT_FOUND", resource_type="user")
     if len(users) > 1:
-        candidates = "\n".join(f"  {u.id}  {u.name}" for u in users)
-        raise BadRequestError(code="AMBIGUOUS_NAME", ids=candidates)
-    return _lower_require_user(db, name)
+        raise _ambiguous(_format_user_id_candidates(users), name=name)
+    return users[0]
+
+
+# ── Internal ─────────────────────────────────────────────────────────────
+
+def _resolve_ref(db, results, ref, lower_guard, format_fn):
+    """Shared fuzzy resolution: 1 → return, >1 → ambiguous, 0 → try exact ID.
+
+    *results* are pre-fetched ORM objects from a fuzzy search.
+    When empty, ``lower_guard(db, ref)`` tries *ref* as an exact ID.
+    When exactly one match, returns it directly — no redundant re-fetch.
+    """
+    if len(results) == 1:
+        return results[0]
+    if len(results) > 1:
+        raise _ambiguous(format_fn(results))
+    return lower_guard(db, ref)
+
+
+def _ambiguous(ids: str, **extra) -> BadRequestError:
+    """Raise AMBIGUOUS_NAME with formatted candidate list."""
+    raise BadRequestError(code="AMBIGUOUS_NAME", ids=ids, **extra)
+
+
+def _format_article_candidates(articles) -> str:
+    return ", ".join(f"{short_id(a.id)} ({a.title})" for a in articles)
+
+
+def _format_user_candidates(users) -> str:
+    return ", ".join(f"{short_id(u.id)} ({u.name})" for u in users)
+
+
+def _format_user_id_candidates(users) -> str:
+    return ", ".join(short_id(u.id) for u in users)
+
+
+def _format_user_candidates_multiline(users) -> str:
+    return "\n".join(f"  {u.id}  {u.name}" for u in users)

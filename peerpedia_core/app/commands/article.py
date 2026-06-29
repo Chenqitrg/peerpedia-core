@@ -14,7 +14,8 @@ from peerpedia_core.app.context import AppContext
 from peerpedia_core.app.parsers import parse_scores
 from peerpedia_core.app.refs import require_article, require_user, require_user_by_ref
 from peerpedia_core.app.result import AppResult
-from peerpedia_core.config.paths import ARTICLES_DIR
+from peerpedia_core.config.params import ARTICLE_EXTENSIONS, article_filename
+from peerpedia_core.config.paths import article_repo_path
 from peerpedia_core.core import (
     create_article_with_content,
     delete_article,
@@ -184,9 +185,9 @@ def diff(ctx: AppContext, *, article_ref: str, hash1: str | None = None,
 def get_source_path(ctx: AppContext, *, article_ref: str) -> AppResult:
     """Return the source file path for an article (for full-content display)."""
     article = require_article(ctx.db, article_ref)
-    rp = ARTICLES_DIR / article.id
-    for ext in [".md", ".typ"]:
-        f = rp / f"article{ext}"
+    rp = article_repo_path(article.id)
+    for ext in ARTICLE_EXTENSIONS:
+        f = rp / article_filename(ext)
         if f.exists():
             return AppResult("", data={"id": article.id, "path": str(f), "content": f.read_text()})
     return AppResult("", data={"id": article.id, "path": "", "content": ""})

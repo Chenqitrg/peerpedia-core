@@ -45,8 +45,7 @@ def list_article_maintainers(ctx: AppContext, *, article_ref: str) -> AppResult:
     article = require_article(ctx.db, article_ref)
     # ── Execute ──
     maintainers = list_maintainers(ctx.db, article.id)
-    items = [{"user_id": m.user_id, "consented": m.consented} for m in maintainers]
-    return AppResult("", data={"items": items})
+    return AppResult("", data={"maintainers": maintainers})
 
 
 def consent(ctx: AppContext, *, article_ref: str) -> AppResult:

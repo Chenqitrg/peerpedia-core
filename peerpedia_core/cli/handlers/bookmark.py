@@ -10,12 +10,12 @@ import peerpedia_core.app.commands.social as _social
 
 
 @with_context
-def _cmd_bookmark_add(ctx, args):
+def _cmd_bookmark(ctx, args):
     """Bookmark an article."""
-    return _social.bookmark_add(ctx, article_ref=args.article_id)
+    return _social.bookmark(ctx, article_ref=args.article_id)
 
 
 @with_context
-def _cmd_bookmark_remove(ctx, args):
+def _cmd_unbookmark(ctx, args):
     """Remove a bookmark."""
-    return _social.bookmark_remove(ctx, article_ref=args.article_id)
+    return _social.unbookmark(ctx, article_ref=args.article_id)

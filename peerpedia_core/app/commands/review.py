@@ -12,7 +12,7 @@ from peerpedia_core.app.result import AppNotice, AppResult
 from peerpedia_core.core import (
     accept_invitation, decline_invitation,
     get_reviews_for_article, get_user, list_users_by_ids,
-    invite_reviewer, rate_review_helpfulness,
+    invite_reviewer as _invite_reviewer, rate_review_helpfulness,
     submit_reply, submit_review,
 )
 
@@ -83,7 +83,7 @@ def invite_reviewer(ctx: AppContext, *, article_ref: str, user_ref: str) -> AppR
     article = require_article(ctx.db, article_ref)
     target = require_user_by_ref(ctx.db, user_ref)
     # ── Execute ──
-    result = invite_reviewer(ctx.db, article.id, user_id, target.id)
+    result = _invite_reviewer(ctx.db, article.id, user_id, target.id)
     ctx.db.commit()
     return AppResult("REVIEW_INVITED", data=result,
         params={"name": target.name, "id_short": article.id[:8]})

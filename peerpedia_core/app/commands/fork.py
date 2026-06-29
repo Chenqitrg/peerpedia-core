@@ -23,7 +23,7 @@ def fork(ctx: AppContext, *, article_ref: str) -> AppResult:
     result = fork_article(ctx.db, article.id, user_id)
     ctx.db.commit()
     return AppResult("FORKED", data=result,
-        params={"id_short": short_id(result["id"]), "title": result["title"]})
+        params={"id_short": short_id(result["id"]), "title": result.get("title", "")})
 
 
 def merge_propose(ctx: AppContext, *, fork_ref: str, target_ref: str) -> AppResult:

@@ -9,7 +9,7 @@ from peerpedia_core.app.context import AppContext
 from peerpedia_core.app.refs import require_article, require_user, require_user_by_ref
 from peerpedia_core.app.result import AppNotice, AppResult
 from peerpedia_core.core import (
-    add_bookmark, add_share,
+    add_bookmark, add_share, create_user_stub,
     follow_user, get_follower_views, get_following_views,
     get_shares_for_user, get_feed_shares,
     get_top_users_by_followers, get_user, list_users_by_ids,
@@ -68,7 +68,7 @@ def list_followers(ctx: AppContext, *, user_ref: str) -> AppResult:
 # ── Bookmark ─────────────────────────────────────────────────────────────
 
 
-def bookmark_add(ctx: AppContext, *, article_ref: str) -> AppResult:
+def bookmark(ctx: AppContext, *, article_ref: str) -> AppResult:
     """Bookmark an article."""
     # ── Resolve ──
     user_id = require_user(ctx)
@@ -79,7 +79,7 @@ def bookmark_add(ctx: AppContext, *, article_ref: str) -> AppResult:
     return AppResult("BOOKMARKED", params={"name": article.title})
 
 
-def bookmark_remove(ctx: AppContext, *, article_ref: str) -> AppResult:
+def unbookmark(ctx: AppContext, *, article_ref: str) -> AppResult:
     """Remove a bookmark."""
     # ── Resolve ──
     user_id = require_user(ctx)
@@ -93,7 +93,7 @@ def bookmark_remove(ctx: AppContext, *, article_ref: str) -> AppResult:
 # ── Share ────────────────────────────────────────────────────────────────
 
 
-def share_add(ctx: AppContext, *, article_ref: str, to_ref: str | None = None,
+def share(ctx: AppContext, *, article_ref: str, to_ref: str | None = None,
               comment: str | None = None) -> AppResult:
     """Share an article — public recommendation visible to followers."""
     # ── Resolve ──
@@ -117,7 +117,7 @@ def share_list(ctx: AppContext, *, mine: bool = False) -> AppResult:
     return AppResult("", data={"items": shares})
 
 
-def share_remove(ctx: AppContext, *, article_ref: str) -> AppResult:
+def unshare(ctx: AppContext, *, article_ref: str) -> AppResult:
     """Remove a share (un-share an article)."""
     # ── Resolve ──
     user_id = require_user(ctx)
@@ -131,7 +131,7 @@ def share_remove(ctx: AppContext, *, article_ref: str) -> AppResult:
 # ── Alias ────────────────────────────────────────────────────────────────
 
 
-def alias_set(ctx: AppContext, *, user_ref: str, alias: str) -> AppResult:
+def alias(ctx: AppContext, *, user_ref: str, alias: str) -> AppResult:
     """Set an alias for a followed user."""
     # ── Resolve ──
     user_id = require_user(ctx)
@@ -148,10 +148,10 @@ def alias_list(ctx: AppContext) -> AppResult:
     user_id = require_user(ctx)
     # ── Execute ──
     aliases = list_aliases(ctx.db, user_id)
-    return AppResult("", data={"items": [{"user_id": a.user_id, "alias": a.alias} for a in aliases]})
+    return AppResult("", data={"items": [{"user_id": a.target_id, "alias": a.alias} for a in aliases]})
 
 
-def alias_remove(ctx: AppContext, *, user_ref: str) -> AppResult:
+def unalias(ctx: AppContext, *, user_ref: str) -> AppResult:
     """Remove an alias for a user."""
     # ── Resolve ──
     user_id = require_user(ctx)
@@ -177,7 +177,6 @@ def school(ctx: AppContext, *, limit: int = 20, local: bool = False,
         users = get_top_users_by_followers(ctx.db, limit=limit)
         return AppResult("", data={"items": users})
     # ── Remote path ──
-    from peerpedia_core.core import create_user_stub, get_user
     try:
         users = ctx.transport.fetch_school(server, limit=limit)
         for u in users:

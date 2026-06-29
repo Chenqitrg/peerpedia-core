@@ -1,23 +1,24 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-r"""Fuzzy reference resolution — turn ambiguous user input into canonical IDs.
+r"""App-level reference resolution and ownership guards.
 
-This module is the ONLY place that resolves fuzzy input (short IDs, @names,
-title keywords).  Once a canonical ID is found, existence checks are
-delegated to the lower-level guards in ``storage/db/guards.py``.
+Fuzzy input (short IDs, @names, title keywords) is resolved here because
+only the app layer knows about ambiguity.  Once a canonical ID is found,
+existence checks delegate to ``storage/db/guards.py``.
 
-Ambiguity (N > 1 matches) is the one genuinely app-level error — lower
-layers can't tell you "your query matched 3 users, be more specific."
+Ownership checks (is this your notification? your session?) also live here
+— they are app-level concerns, not storage-layer business rules.
 """
 
 from __future__ import annotations
 
 from peerpedia_core.app.context import AppContext
 from peerpedia_core.core import find_users, resolve_username_or_alias, search_articles
-from peerpedia_core.exceptions import BadRequestError, NotAuthorizedError
+from peerpedia_core.exceptions import BadRequestError, NotFoundError, NotAuthorizedError
 from peerpedia_core.storage.db.guards import require_article as _lower_require_article
 from peerpedia_core.storage.db.guards import require_user as _lower_require_user
+from peerpedia_core.storage.db.models import NotificationStorage
 from peerpedia_core.types import short_id
 
 
@@ -61,6 +62,20 @@ def require_user_by_ref(db, ref: str):
         names = ", ".join(f"{short_id(u.id)} ({u.name})" for u in results)
         raise BadRequestError(code="AMBIGUOUS_NAME", ids=names)
     return _lower_require_user(db, ref)
+
+
+def require_notification(db, notification_id: str, user_id: str):
+    """Load a notification, verify it belongs to *user_id*.
+
+    Raises NotFoundError if missing, NotAuthorizedError if not owned.
+    """
+    notif = db.get(NotificationStorage, notification_id)
+    if notif is None:
+        raise NotFoundError(code="NOTIFICATION_NOT_FOUND",
+                            resource_type="notification", resource_id=notification_id)
+    if notif.user_id != user_id:
+        raise NotAuthorizedError(code="NOT_YOUR_NOTIFICATION")
+    return notif
 
 
 def _resolve_by_atname(db, name: str):

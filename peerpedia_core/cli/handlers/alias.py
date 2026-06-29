@@ -10,15 +10,15 @@ import peerpedia_core.app.commands.social as _social
 
 
 @with_context
-def _cmd_alias_set(ctx, args):
+def _cmd_alias(ctx, args):
     """Set an alias for a followed user."""
-    return _social.alias_set(ctx, user_ref=args.user_identifier, alias=args.alias)
+    return _social.alias(ctx, user_ref=args.user_identifier, alias=args.alias)
 
 
 @with_context
-def _cmd_alias_remove(ctx, args):
+def _cmd_unalias(ctx, args):
     """Remove an alias for a user."""
-    return _social.alias_remove(ctx, user_ref=args.user_identifier)
+    return _social.unalias(ctx, user_ref=args.user_identifier)
 
 
 @with_context

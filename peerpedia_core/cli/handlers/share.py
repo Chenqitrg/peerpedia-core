@@ -10,9 +10,9 @@ import peerpedia_core.app.commands.social as _social
 
 
 @with_context
-def _cmd_share_add(ctx, args):
+def _cmd_share(ctx, args):
     """Share an article — public recommendation visible to followers."""
-    return _social.share_add(ctx, article_ref=args.article_id,
+    return _social.share(ctx, article_ref=args.article_id,
         to_ref=getattr(args, "to", None),
         comment=getattr(args, "comment", None))
 
@@ -24,6 +24,6 @@ def _cmd_share_list(ctx, args):
 
 
 @with_context
-def _cmd_share_remove(ctx, args):
+def _cmd_unshare(ctx, args):
     """Remove a share (un-share an article)."""
-    return _social.share_remove(ctx, article_ref=args.article_id)
+    return _social.unshare(ctx, article_ref=args.article_id)

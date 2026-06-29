@@ -19,11 +19,15 @@ import json
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from peerpedia_core.config.params import ServerParams
 from peerpedia_core.config.paths import SESSION_FILE
 from peerpedia_core.crypto import _public_key_to_bytes, load_private_key
 from peerpedia_core.transport import Transport
+
+if TYPE_CHECKING:
+    from peerpedia_core.storage.db import Session
 
 _log = logging.getLogger(__name__)
 
@@ -36,7 +40,7 @@ class AppContext:
     Identity fields (``current_user_id``, ``signing_key_bytes``,
     ``pubkey_hex``) are ``None``/``""`` when not logged in.
     """
-    db: object  # SQLAlchemy Session — typed loosely to avoid storage import
+    db: Session
     transport: Transport  # always set by build_context() — non-optional
     current_user_id: str | None = None
     signing_key_bytes: bytes | None = None
@@ -45,7 +49,7 @@ class AppContext:
     experimental: bool = False
 
 
-def build_context(db: object) -> AppContext:
+def build_context(db: Session) -> AppContext:
     """Build an ``AppContext`` from the current environment.
 
     Reads the session file for user identity and signing key, initialises

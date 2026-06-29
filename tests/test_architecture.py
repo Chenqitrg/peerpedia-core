@@ -102,7 +102,7 @@ def test_no_internal_peerpedia_imports():
     # (file_rel, module) → why the lazy import is necessary
     _LAZY_IMPORT_OK: dict[tuple[str, str], str] = {
         # ── Heavy optional deps (avoid loading on every CLI invocation) ──
-        ("peerpedia_core/cli/handlers/server.py",
+        ("peerpedia_core/cli/cmds/server.py",
          "peerpedia_core.transport.http_server"):
             "heavy: imports Starlette/uvicorn — only needed for `server start`",
         # ── Circular dependency breaks ──────────────────────────────────
@@ -112,9 +112,9 @@ def test_no_internal_peerpedia_imports():
         ("peerpedia_core/commands/integrity.py",
          "peerpedia_core.core.bundle"):
             "circular: integrity.py → bundle.sync_reviews_from_worktree → bundle.py → integrity.assert_article_integrity",
-        ("peerpedia_core/cli/handlers/schema.py",
+        ("peerpedia_core/cli/schema_build.py",
          "peerpedia_core.cli.parser"):
-            "circular: parser imports from handlers (→ schema), schema needs COMMAND_GROUPS from parser",
+            "circular: parser defines commands, schema_build reads them; lazy to avoid import at CLI load",
         ("peerpedia_core/cli/helpers.py",
          "peerpedia_core.bundle"):
             "heavy optional: lazy pull of article content from peer server; only needed when source file is missing",
@@ -682,7 +682,7 @@ def test_bundle_server_no_tarfile_imports():
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# N. View layer — no .to_dict() in transport/ or cli/handlers/
+# N. View layer — no .to_dict() in transport/ or cli/cmds/
 # ═══════════════════════════════════════════════════════════════════════════════
 
 _TO_DICT_ALLOWED = frozenset({
@@ -693,7 +693,7 @@ _TO_DICT_ALLOWED = frozenset({
 
 
 def test_no_to_dict_in_transport_or_cli():
-    """transport/ and cli/handlers/ must not call ``.to_dict()`` on models.
+    """transport/ and cli/cmds/ must not call ``.to_dict()`` on models.
 
     ``commands/views.py`` is the canonical serialization layer.  If any
     transport route handler or CLI command calls ``.to_dict()`` directly,
@@ -705,7 +705,7 @@ def test_no_to_dict_in_transport_or_cli():
         if rel in _TO_DICT_ALLOWED:
             continue
         if not (rel.startswith("peerpedia_core/transport/") or
-                rel.startswith("peerpedia_core/cli/handlers/")):
+                rel.startswith("peerpedia_core/cli/cmds/")):
             continue
         tree = ast.parse(f.read_text())
         for node in ast.walk(tree):
@@ -754,7 +754,7 @@ def test_no_inline_db_filtering():
     for f in _all_modules():
         rel = _rel(f)
         if not (rel.startswith("peerpedia_core/commands/") or
-                rel.startswith("peerpedia_core/cli/handlers/") or
+                rel.startswith("peerpedia_core/cli/cmds/") or
                 rel.startswith("peerpedia_core/transport/routes/")):
             continue
         source = f.read_text()
@@ -856,7 +856,7 @@ def test_repl_does_not_import_cli_helpers():
 
 
 def test_cli_parser_does_not_import_handlers():
-    """``cli/parser.py`` must not import from ``cli.handlers``.
+    """``cli/parser.py`` must not import from ``cli.cmds``.
 
     Parser sets ``command_id`` and delegates to ``cli/dispatch.py`` for
     lazy handler loading.
@@ -865,7 +865,7 @@ def test_cli_parser_does_not_import_handlers():
     if not f.exists():
         return
     for m, _name, _internal in _imports(f):
-        if m.startswith("peerpedia_core.cli.handlers"):
+        if m.startswith("peerpedia_core.cli.cmds"):
             raise AssertionError(
                 f"cli/parser.py: imports {m} — "
                 "parser must not import handlers; use command_id + dispatch"

@@ -466,7 +466,7 @@ class TestPendingQueuePreservation:
             return {"synced": True, "head": "abc123"}
 
         monkeypatch.setattr(
-            "peerpedia_core.cli.handlers.bundle.sync_article", fake_sync
+            "peerpedia_core.cli.cmds.sync.sync_article", fake_sync
         )
 
         # Run with the FIXED pattern: commit before pop_pending.

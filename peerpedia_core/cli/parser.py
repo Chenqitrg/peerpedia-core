@@ -284,7 +284,7 @@ COMMANDS: list[CommandGroup | Command] = [
     Command("unfollow", "unfollow", [
         ArgSpec(("user_identifier",), {"help": "User ID, @name, or UUID prefix"}),
     ], help_file="unfollow"),
-    Command("mother", "mother", []),
+    Command("mother", "mother", [], help_file="mother"),
     Command("school", "school", [
         ArgSpec(("--limit",), {"type": int, "default": 20, "help": "Max users to show"}),
         ArgSpec(("--server",), {"help": "Peer server URL (or set PEERPEDIA_SERVER env var)"}),

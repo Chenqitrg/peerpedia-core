@@ -21,7 +21,7 @@ def _cmd_meta_help(args):
     topic = getattr(args, "topic", None)
     if topic:
         # Delegate to the command's own --help.
-        import subprocess, sys
+        import subprocess
         subprocess.run(["peerpedia", topic, "--help"])
         return
 

@@ -13,12 +13,13 @@ from __future__ import annotations
 
 from typing import Callable, TYPE_CHECKING
 
+from peerpedia_core.config.params import params
 from peerpedia_core.config.paths import ARTICLES_DIR
 from peerpedia_core.core.sync_article import sync_article
 from peerpedia_core.core.sync_social import discover_articles
 from peerpedia_core.exceptions import ConflictError, ProtocolError, TransportError
 from peerpedia_core.storage.db import Session
-from peerpedia_core.storage.peers import get_known_peers, record_peer_result
+from peerpedia_core.storage.peers import get_known_peers, merge_peers, record_peer_result
 from peerpedia_core.time import validate_clock_skew
 
 if TYPE_CHECKING:
@@ -121,3 +122,33 @@ def sync_all_peers(db: Session, transport: Transport, *,
             if on_peer_error:
                 on_peer_error(e)
             record_peer_result(server, success=False)
+
+
+# ── Server bootstrap ─────────────────────────────────────────────────────
+
+
+def announce_to_peers(transport: Transport, public_url: str) -> tuple[int, int]:
+    """Announce *public_url* to seed and known peers.  Best-effort.
+
+    Merges seed peers from ``params.discovery.seed_peers``, then
+    registers *public_url* with every known peer so they can
+    discover this server.  Returns ``(seeds_merged, peers_announced)``.
+    Individual failures are silent — callers log if needed.
+    """
+    seeds_merged = 0
+    for seed in params.discovery.seed_peers:
+        try:
+            merge_peers(transport, seed)
+            seeds_merged += 1
+        except Exception:
+            pass
+
+    peers_announced = 0
+    for peer in get_known_peers():
+        try:
+            transport.push_peer_registration(peer, public_url)
+            peers_announced += 1
+        except Exception:
+            pass
+
+    return seeds_merged, peers_announced

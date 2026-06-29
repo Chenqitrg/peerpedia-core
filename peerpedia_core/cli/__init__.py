@@ -4,15 +4,15 @@
 r"""PeerPedia CLI — terminal-based frontend for the PeerPedia backend.
 
 **Hard constraint**: CLI never imports from ``storage/`` directly.  All
-data access goes through ``commands/`` facade.  Handlers import from
-``cli.handlers`` (facade), not from individual handler modules.
+data access goes through ``app/commands/``.  Command modules in ``cmds/``
+are thin adapters; ``dispatch.py`` lazy-loads them via ``_HANDLER_MAP``.
 
 Sub-packages:
-  ``display``     — Rich terminal formatting (Layer 0)
-  ``helpers``     — DB, editor, user resolution, messaging (Layer 1)
+  ``display``       — Rich terminal formatting (Layer 0)
+  ``helpers``       — DB, editor, user resolution, messaging (Layer 1)
   ``bundle_utils``  — auto-push helpers (Layer 1)
-  ``handlers/``   — command implementations (Layer 2)
-  ``parser``      — argparse registration (Layer 3)
+  ``cmds/``         — command implementations (Layer 2)
+  ``parser``        — argparse registration (Layer 3)
 """
 
 from __future__ import annotations

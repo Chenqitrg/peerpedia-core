@@ -3,7 +3,7 @@
 
 r"""``with_context`` — decorator for every CLI command handler.
 
-Each ``_cmd_*`` function in ``cli/handlers/`` is decorated with
+Each ``_cmd_*`` function in ``cli/cmds/`` is decorated with
 ``@with_context``.  The decorator provides:
 
 1. **DB session** — opened, auto-committed on success, rolled back on error

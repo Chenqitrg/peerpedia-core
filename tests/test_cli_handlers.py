@@ -14,18 +14,18 @@ from peerpedia_core.config.paths import DB_PATH
 DB_PATH.parent.mkdir(parents=True, exist_ok=True)
 from peerpedia_core.storage.db.models import Article, User
 from peerpedia_core.crypto import derive_key_pair, new_salt
-from peerpedia_core.cli.handlers.account import (
-    _cmd_whoami, _cmd_recover, _validate_bootstrap_json,
+from peerpedia_core.cli.cmds.account import (
+    _cmd_account_whoami, _cmd_account_recover,
 )
-from peerpedia_core.cli.handlers.maintainers import (
+from peerpedia_core.cli.cmds.maintainers import (
     _cmd_maintainer_consent, _cmd_maintainer_revoke,
 )
-from peerpedia_core.cli.handlers.notifications import (
+from peerpedia_core.cli.cmds.notifications import (
     _cmd_notifications, _cmd_notification_read,
 )
-from peerpedia_core.cli.handlers.social import (
+from peerpedia_core.cli.cmds.social import (
     _cmd_bookmark_add, _cmd_bookmark_remove,
-    _cmd_follow_user, _cmd_unfollow_user,
+    _cmd_follow, _cmd_unfollow,
     _cmd_alias_set, _cmd_alias_remove, _cmd_alias_list,
     _cmd_share_add, _cmd_share_list, _cmd_share_remove,
 )
@@ -99,7 +99,7 @@ class TestWhoami:
             SESSION_FILE.unlink()
 
         args = Namespace(json=False, verbose=False)
-        _cmd_whoami(args)
+        _cmd_account_whoami(args)
         out = capsys.readouterr().out
         assert "Not logged in" in out
 
@@ -109,7 +109,7 @@ class TestWhoami:
             SESSION_FILE.unlink()
 
         args = Namespace(json=True, verbose=False)
-        _cmd_whoami(args)
+        _cmd_account_whoami(args)
         out = capsys.readouterr().out
         data = json.loads(out)
         assert data["status"] == "not logged in"
@@ -119,7 +119,7 @@ class TestWhoami:
         _write_session_dict({"user_id": uid, "name": name, "private_key_hex": privkey_hex})
 
         args = Namespace(json=False, verbose=False)
-        _cmd_whoami(args)
+        _cmd_account_whoami(args)
         out = capsys.readouterr().out
         assert name in out
 
@@ -128,7 +128,7 @@ class TestWhoami:
         _write_session_dict({"user_id": uid, "name": name, "private_key_hex": privkey_hex})
 
         args = Namespace(json=False, verbose=True)
-        _cmd_whoami(args)
+        _cmd_account_whoami(args)
         out = capsys.readouterr().out
         assert "Public key" in out or pubkey_hex[:8] in out
 
@@ -137,7 +137,7 @@ class TestWhoami:
         _write_session_dict({"user_id": uid, "name": name, "private_key_hex": privkey_hex})
 
         args = Namespace(json=True, verbose=True)
-        _cmd_whoami(args)
+        _cmd_account_whoami(args)
         out = capsys.readouterr().out
         data = json.loads(out)
         assert data["user_id"] == uid
@@ -153,14 +153,14 @@ class TestRecover:
 
         args = Namespace(name="NobodyHere", user_id=None, json=False)
         with pytest.raises(SystemExit):
-            _cmd_recover(args)
+            _cmd_account_recover(args)
         out = capsys.readouterr().out
         assert "not found" in out
 
     def test_recover_neither_name_nor_user_id(self, capsys):
         args = Namespace(name=None, user_id=None, json=False)
         with pytest.raises(SystemExit):
-            _cmd_recover(args)
+            _cmd_account_recover(args)
         out = capsys.readouterr().out
         assert "Specify either" in out
 
@@ -297,8 +297,8 @@ class TestSocialHandlers:
         _write_session_dict({"user_id": uid, "name": name, "private_key_hex": privkey_hex})
 
         # These succeed (output goes to Rich console — check no exceptions)
-        _cmd_follow_user(Namespace(user_identifier=tid, json=False))
-        _cmd_unfollow_user(Namespace(user_identifier=tid, json=False))
+        _cmd_follow(Namespace(user_identifier=tid, json=False))
+        _cmd_unfollow(Namespace(user_identifier=tid, json=False))
 
     def test_bookmark_add_remove(self, capsys):
         uid, name, privkey_hex, *_ = _make_user("Bookmarker")
@@ -318,7 +318,7 @@ class TestSocialHandlers:
         tid, tname, *_ = _make_user("AliasTarget")
         _write_session_dict({"user_id": uid, "name": name, "private_key_hex": privkey_hex})
 
-        _cmd_follow_user(Namespace(user_identifier=tid, json=False))
+        _cmd_follow(Namespace(user_identifier=tid, json=False))
         _cmd_alias_set(Namespace(user_identifier=tid, alias="my-nick", json=False))
         out = capsys.readouterr().out
         assert "my-nick" in out

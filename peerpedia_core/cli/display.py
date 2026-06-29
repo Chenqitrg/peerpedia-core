@@ -1,10 +1,10 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""Rich-powered terminal display helpers — inline use in handler code.
+"""Rich-powered terminal display helpers.
 
-Layer 0 of the CLI package.  Only imports from ``rich`` — no dependency
-on any other PeerPedia module.
+Imports from ``app/commands/display.py`` for data lookups — never
+from ``core/`` directly.
 """
 
 from __future__ import annotations
@@ -12,14 +12,18 @@ from __future__ import annotations
 from rich.panel import Panel
 from rich.table import Table
 
+from peerpedia_core.app.commands.display import (
+    list_author_ids,
+    read_frontmatter,
+    resolve_author_names,
+    source_path,
+)
 from peerpedia_core.cli.info import console, _page
-from peerpedia_core.cli.resolve import _resolve_author_names
-from peerpedia_core.core import list_author_ids, parse_frontmatter
 from peerpedia_core.types import short_id
 from peerpedia_core.types.scores import SCORE_DIMENSIONS
 
 
-# ── Output formatting — shared display helpers for all commands ───────────
+# ── Output formatting — shared display helpers for all commands ────────────
 
 
 def _print_panel(title: str, content: str, style: str = "info") -> None:
@@ -43,7 +47,8 @@ def _status_badge(status: str) -> str:
     return f"[{colors.get(status, 'white')}]{status}[/]"
 
 
-def display_article(title: str, status: str, authors: list[str], score: dict | None, abstract: str | None) -> None:
+def display_article(title: str, status: str, authors: list[str],
+                    score: dict | None, abstract: str | None) -> None:
     """Render article metadata panel — pure display, zero side effects."""
     scores_str = _stars(score) if score else "[muted]no scores[/]"
     body = (
@@ -56,7 +61,8 @@ def display_article(title: str, status: str, authors: list[str], score: dict | N
     _print_panel("Article", body)
 
 
-def display_user(name: str, affiliation: str, expertise: list[str], reputation: dict | None, user_id: str) -> None:
+def display_user(name: str, affiliation: str, expertise: list[str],
+                 reputation: dict | None, user_id: str) -> None:
     """Render user metadata panel — pure display, zero side effects."""
     body = f"[bold info]{name}[/]"
     if affiliation:
@@ -103,17 +109,13 @@ def display_diff(diff_text: str, stats: dict) -> None:
     console.print()
 
 
-# ── Score display component ─────────────────────────────────────────────
+# ── Score display component ──────────────────────────────────────────────
 
 SCORE_DIM_NAMES: list[str] = list(SCORE_DIMENSIONS.values())
 
 
 def _score_lines(score: dict | None, dims: list[str] | None = None) -> list[str]:
-    """Return one plain-text line per dimension, e.g. ``'originality    ★★★☆☆  3/5'``.
-
-    Pure data → text.  No Rich markup.  Reusable in FormattedTextControl
-    and anywhere else that needs plain stars.
-    """
+    """Return one plain-text line per dimension, e.g. ``'originality    ★★★☆☆  3/5'``."""
     if not score:
         return ["—"]
     if dims is None:
@@ -138,14 +140,11 @@ def _stars(score: dict | None, dims: list[str] | None = None) -> str:
     )
 
 
-# ── Pager ───────────────────────────────────────────────────────────────
+# ── Pager ────────────────────────────────────────────────────────────────
 
 
 def display_full_content(raw: str, article_id: str = "") -> None:
-    """Render the full article source with optional empty-state guidance.
-
-    Extracted from ``read.py`` — pure Rich display, no file IO.
-    """
+    """Render the full article source with optional empty-state guidance."""
     body = raw.split("---\n", 2)[-1].strip() if raw.count("---") >= 2 else raw
     if body:
         console.print("\n[bold]── Content ──[/]")
@@ -155,46 +154,38 @@ def display_full_content(raw: str, article_id: str = "") -> None:
 
 
 def display_empty_article_list(code: str, **fmt) -> None:
-    """Show context-sensitive guidance when an article list is empty.
-
-    *code* is a message code from ``messages.py`` (N_NO_ARTICLES_*).
-    Caller decides which code to show based on args context.
-    """
+    """Show context-sensitive guidance when an article list is empty."""
     from peerpedia_core.messages import lookup as _lookup
     _, m = _lookup(code)
     if m.text:
         console.print(m.text.format(**fmt) if fmt else m.text)
 
 
-def display_article_meta(db, article, *, author_ids: list[str] | None = None) -> None:
+# ── Article meta ─────────────────────────────────────────────────────────
+
+
+def display_article_meta(db, article, *,
+                         author_ids: list[str] | None = None) -> None:
     """Resolve full article metadata from DB + source file, then display.
 
-    If *author_ids* is passed, it is used directly (allows batch preloading
-    in list handlers).  Otherwise ``list_author_ids`` queries the DB.
-
-    Moved from ``helpers.py`` — the resolution logic is incidental to
-    "getting information for display"; the Rich rendering is primary.
+    If *author_ids* is passed, it is used directly (allows batch
+    preloading in list handlers).  Otherwise queries via the app layer.
     """
     ids = author_ids or list_author_ids(db, article.id)
-    author_names = _resolve_author_names(db, ids)
+    names = resolve_author_names(db, ids)
 
-    from peerpedia_core.core import article_source_path
-    f = article_source_path(article.id)
+    f = source_path(article.id)
     if f is not None:
         raw = f.read_text()
+        fm = read_frontmatter(raw)
+        display_article(
+            title=fm.get("title", article.title), status=article.status,
+            authors=names, score=article.score,
+            abstract=fm.get("abstract", article.abstract),
+        )
     else:
-        raw = ""
         display_article(
             title=article.title, status=article.status,
-            authors=author_names, score=article.score,
+            authors=names, score=article.score,
             abstract=article.abstract,
         )
-        return
-    fm = parse_frontmatter(raw)
-    display_article(
-        title=fm.get("title", article.title), status=article.status,
-        authors=author_names, score=article.score,
-        abstract=fm.get("abstract", article.abstract),
-    )
-
-

@@ -74,7 +74,7 @@ def update_user_public_key(db: Session, user_id: str, pubkey_hex: str) -> None:
     #   2. Recovery contacts store encrypted shards of the user's salt.
     #   3. On recovery, user contacts M-of-N contacts to reassemble the salt.
     #   4. Then re-derives key from password + reassembled salt.
-    # Files: commands/users.py, cli/handlers/account.py, storage/db/models.py
+    # Files: commands/users.py, cli/cmds/account.py, storage/db/models.py
     # Design: docs/social-recovery-design.md
     return _update_pubkey(db, user_id, pubkey_hex)
 

@@ -28,7 +28,7 @@ Invoke when the user expresses dissatisfaction with code quality:
 
 ---
 
-## Iron Rules (8)
+## Iron Rules (9)
 
 ```
 NO MOVING CODE WITHOUT UNDERSTANDING ITS SIBLINGS FIRST
@@ -38,7 +38,8 @@ NO FALLBACK — every step fails LOUD with an actionable error message
 NO REFACTORING WITHOUT THREE PASSES — Map, Intent, Diagnose
 NO AWKWARD FUNCTION AS ARCHITECTURE CENTER — find natural behaviors
 NO INCONSISTENT NAMES IN THE SAME DOMAIN — siblings share a verb convention
-NO SINGLE-PASS DIAGNOSIS — six lenses, one question each, every lens reports
+NO SINGLE-PASS DIAGNOSIS — 7 lenses, one question each, every lens reports
+NO INLINE VALUES — string building goes to dedicated formatters, magic literals go to constants
 ```
 
 ---
@@ -91,7 +92,7 @@ NO SINGLE-PASS DIAGNOSIS — six lenses, one question each, every lens reports
 
 ---
 
-### Pass 3 — Diagnose (6 Parallel Subagents)
+### Pass 3 — Diagnose (7 Parallel Subagents)
 
 **Question**: What is wrong, specifically?
 
@@ -147,10 +148,23 @@ Look for: bare dict/list/tuple, str | set[str] on parameters,
 Deliverable: type violation list, or "no findings"
 ```
 
+#### Lens G — Inline Values Lens
+```
+Question: Any inline string building? Any magic literals?
+Look for: f"prefix_{id}_suffix" or "path/" + name + ".ext" inside functions,
+          bare numbers like timeout=30, max_retries=5, max_size=10000,
+          repeated string literals that should be constants,
+          format strings embedded in business logic
+Deliverable: inline value violation list, or "no findings"
+```
+
+Every inline string builder → extract to a dedicated formatter function.
+Every magic literal → extract to a named constant (config/params.py or module-level).
+
 **Rules**:
 - Each subagent is independent — contexts don't contaminate
 - Each MUST produce output or explicitly declare "no findings"
-- Main agent merges 6 reports → deduplicates → sorts by severity → produces unified violation list
+- Main agent merges 7 reports → deduplicates → sorts by severity → produces unified violation list
 - Lens F (Type Safety) findings are annotation-level fixes — resolve them inline during Steps 1-3, no separate step needed
 
 **Why parallel subagents**: AI attention is linear — with 6 questions competing in one context, the model notices the most salient and ignores the rest. Six independent subagents each carry one question through the full code, ensuring nothing is missed.
@@ -164,10 +178,11 @@ Single-agent multi-pass: A done → B done → C done → ...
 
 Parallel subagents:      A ─┐
                          B ─┤
-                         C ─┼─ run simultaneously → merge
-                         D ─┤
+                         C ─┤
+                         D ─┼─ run simultaneously → merge
                          E ─┤
-                         F ─┘
+                         F ─┤
+                         G ─┘
                          ↑ independent contexts, truly parallel
 ```
 
@@ -185,6 +200,7 @@ Parallel subagents:      A ─┐
 | Does 2+ unrelated things | Pass 2 behavior description contains "and also" |
 | Name can't summarize behavior | "What does this function do?" → need 2+ sentences |
 | Mixes guard and action | Checks conditions AND transforms data — violates aesthetics principle |
+| Contains inline string building or magic literals | f-strings, concatenation, bare numbers belong in formatters/constants — violates iron rule #9 |
 | Awkward function | Pass 2 marked it as "awkward" |
 
 **Skip if**: The function is a naturally complete behavior. Even if long, it doesn't need splitting — hand to Step 4 for phase comments.
@@ -347,6 +363,8 @@ No generic error messages. "It didn't work" is not acceptable.
 | "This fallback is harmless" | Silent fallback is never harmless — it hides bugs. |
 | "I skimmed the file, I have a good sense of it" | AI attention is linear. You noticed one thing. Run all 6 lenses. |
 | "This function is only 5 lines, no need to check" | A 5-line function doing 2 unrelated things is worse than a 30-line function doing 1. |
+| "It's just one magic number, everyone knows what 30 means" | Nobody knows. Name it. Next person changes it to 60 and breaks everything. |
+| "This string is only used once, no need to extract it" | A format string embedded in business logic is a bug waiting to happen. Dedicated formatter, always. |
 
 ---
 
@@ -362,6 +380,8 @@ These thoughts mean STOP — you're about to violate an iron rule:
 - "This function is weird but it works" → Iron rule #6. Awkward functions must not be architecture centers.
 - "I found the main issues, no need to run all 6 lenses" → Iron rule #8. Every lens reports.
 - "This name is different but it's clear enough" → Iron rule #7. Siblings share a verb convention.
+- "It's just a string concatenation, it's fine here" → Iron rule #9. String building goes to dedicated formatters.
+- "This number is obvious, I don't need a constant" → Iron rule #9. Every magic literal becomes a named constant.
 
 ---
 

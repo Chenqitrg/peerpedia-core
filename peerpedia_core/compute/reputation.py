@@ -26,7 +26,7 @@ Isolation boundary
 Input: ``ReputationState`` (immutable snapshot, no DB handles).
 Output: ``ReputationScores`` (dataclass).
 
-The orchestrator in ``commands/workflow.py`` calls ``extract_state`` to
+The orchestrator calls ``extract_state`` to
 build a State from the DB, then passes it here.  Tests construct State
 directly.  To swap the algorithm: replace the function bodies, keep the
 signatures.  To run MULTIPLE algorithms simultaneously: instantiate a
@@ -132,8 +132,8 @@ Dimension mapping (5 article dims → 4 reputation dims, PLACEHOLDER)
 #   (reviews/{reviewer_id}/threads/).  Commit trailers are parsed from
 #   existing git history via ``iter_commits()``.
 #
-# • The scan function belongs in ``commands/`` (orchestrator).  It calls
-#   a pure function in ``workflow/`` that takes (reviewer_id, commits, diff_stats)
+# • The scan function belongs in the orchestrator layer.  It calls
+#   a pure function that takes (reviewer_id, commits, diff_stats)
 #   and returns pedagogy deltas.  State stays clean.
 #
 # • Trigger: ``accept_merge``, ``publish_article``, and periodic integrity

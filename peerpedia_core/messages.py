@@ -8,7 +8,7 @@ Every user-facing message has a **code** (machine-readable identifier),
 and optional **suggestion** + **see_also** links.
 
 All layers reference codes from this module — guards pass ``code=…`` to
-exceptions, ``@with_context`` renders via ``cli/output.py``, and the REPL
+exceptions, ``@with_context`` renders via ``cli/info.py``, and the REPL
 displays the same messages.
 """
 
@@ -341,7 +341,8 @@ REGISTRY: dict[str, Msg] = {
     "COMMIT_NOT_FOUND": Msg("No commit found matching that reference.", kind=Kind.ERROR),
     "MERGE_PROPOSAL_NOT_FOUND": Msg("Merge proposal not found.", kind=Kind.ERROR),
     "NOT_MAINTAINER_REMOVE": Msg("User is not a maintainer of this article.", kind=Kind.ERROR),
-    "CANNOT_SELF_ACTION": Msg("Cannot perform this action on yourself.", kind=Kind.ERROR),
+    "CANNOT_SELF_ACTION": Msg("Cannot perform this action on yourself.", kind=Kind.ERROR,
+        suggestion="Invite another user, or ask a co-author to invite you."),
     "ALIAS_EMPTY": Msg("Alias must not be empty.", kind=Kind.ERROR),
     "TITLE_REQUIRED": Msg("Title is required.", kind=Kind.ERROR),
     "HELPFULNESS_RANGE": Msg("Helpfulness score must be between 1 and 5.", kind=Kind.ERROR),

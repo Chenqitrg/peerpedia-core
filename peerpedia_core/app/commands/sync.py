@@ -11,6 +11,7 @@ domain action.
 
 from __future__ import annotations
 
+import logging
 from typing import Callable, TYPE_CHECKING
 
 from peerpedia_core.config.params import params
@@ -135,13 +136,14 @@ def announce_to_peers(transport: Transport, public_url: str) -> tuple[int, int]:
     discover this server.  Returns ``(seeds_merged, peers_announced)``.
     Individual failures are silent — callers log if needed.
     """
+    _log = logging.getLogger(__name__)
     seeds_merged = 0
     for seed in params.discovery.seed_peers:
         try:
             merge_peers(transport, seed)
             seeds_merged += 1
         except Exception:
-            pass
+            _log.debug("Seed peer unreachable: %s", seed, exc_info=True)
 
     peers_announced = 0
     for peer in get_known_peers():
@@ -149,6 +151,6 @@ def announce_to_peers(transport: Transport, public_url: str) -> tuple[int, int]:
             transport.push_peer_registration(peer, public_url)
             peers_announced += 1
         except Exception:
-            pass
+            _log.debug("Peer registration failed: %s", peer, exc_info=True)
 
     return seeds_merged, peers_announced

@@ -3,7 +3,7 @@
 
 """Pure-logic validation functions — zero DB, zero git, zero I/O.
 
-Importable by both ``storage/db/guards.py`` and ``storage/db/crud_*.py``
+Importable by both ``storage/db/guards.py`` and the CRUD modules
 without circular-dependency risk because this module imports nothing from
 ``storage/db/``.
 """

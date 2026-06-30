@@ -72,10 +72,12 @@ def resolve_username_or_alias(
     if by_name:
         return by_name
 
-    # AliasStorage match
-    return (
+    # Alias match — if owner_id is empty, search all users' aliases
+    q = (
         session.query(UserStorage)
         .join(AliasStorage, UserStorage.id == AliasStorage.target_id)
-        .filter(AliasStorage.owner_id == owner_id, AliasStorage.alias == name)
-        .all()
+        .filter(AliasStorage.alias == name)
     )
+    if owner_id:
+        q = q.filter(AliasStorage.owner_id == owner_id)
+    return q.all()

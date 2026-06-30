@@ -90,6 +90,7 @@ def reconcile_integrity(db: Session, article_id: str, *, level: str = "light") -
         rp = require_article_repo(article_id)
         require_article(db, article_id)
     except Exception:
+        _log.debug("Integrity check skipped: article %s unavailable", article_id, exc_info=True)
         return
 
     require_integrity_level(level)

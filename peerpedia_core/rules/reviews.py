@@ -5,8 +5,9 @@
 
 from __future__ import annotations
 
-from peerpedia_core.exceptions import BadRequestError
-from peerpedia_core.types.scores import normalize_score_keys
+from peerpedia_core.config.params import params
+from peerpedia_core.exceptions import BadRequestError, NotAuthorizedError
+from peerpedia_core.types.scores import SCORE_DIMENSIONS, normalize_score_keys
 
 
 def assert_valid_review(scores: dict, comment: str | None = None, *, check_comment: bool = True) -> None:
@@ -46,8 +47,6 @@ def _validate_review_scores(scores: dict, errors: list[str]) -> None:
 
 def _check_score_dimensions(scores: dict, errors: list[str]) -> None:
     """Append dimension completeness errors to *errors* list."""
-    from peerpedia_core.types.scores import SCORE_DIMENSIONS
-
     abbr_dims = set(SCORE_DIMENSIONS.keys())
     full_dims = set(SCORE_DIMENSIONS.values())
     keys = set(scores.keys())
@@ -69,7 +68,6 @@ def _check_score_values(scores: dict, errors: list[str]) -> None:
 
 def _validate_review_comment(comment: str | None, errors: list[str]) -> None:
     """Append comment validation errors to *errors* list."""
-    from peerpedia_core.config.params import params
 
     min_len = params.comment.min_length
     if not comment or not isinstance(comment, str):
@@ -88,7 +86,6 @@ def _validate_review_comment(comment: str | None, errors: list[str]) -> None:
 
 def guard_proposal_owner(mp, user_id: str) -> None:
     """Raise NotAuthorizedError if *user_id* is not the proposal owner."""
-    from peerpedia_core.exceptions import NotAuthorizedError
     if mp.proposer_id != user_id:
         raise NotAuthorizedError(code="NOT_PROPOSAL_CREATOR")
 

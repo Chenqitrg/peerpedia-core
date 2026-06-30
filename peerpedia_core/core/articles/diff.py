@@ -46,7 +46,7 @@ def resolve_commit_ref(repo_path: Path, ref: str) -> str:
 
     Raises ValueError if the ref cannot be resolved.
     """
-    if ref.upper() == "HEAD":
+    if ref is None or ref.upper() == "HEAD":
         return _resolve_head(repo_path)
     if ref.startswith("~"):
         return _resolve_offset(repo_path, ref)

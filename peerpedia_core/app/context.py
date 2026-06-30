@@ -25,6 +25,7 @@ from peerpedia_core.config.params import ServerParams
 from peerpedia_core.config.paths import SESSION_FILE
 from peerpedia_core.crypto import _public_key_to_bytes, load_private_key
 from peerpedia_core.transport import Transport
+from peerpedia_core.transport.http.factory import from_http
 
 if TYPE_CHECKING:
     from peerpedia_core.storage.db import Session
@@ -72,7 +73,7 @@ def build_context(db: Session) -> AppContext:
             except Exception:
                 _log.warning("Failed to derive public key from session key")
 
-    transport = Transport.from_http()
+    transport = from_http()
 
     return AppContext(
         db=db,

@@ -14,7 +14,8 @@ from peerpedia_core.app.refs import (
 from peerpedia_core.app.result import AppNotice, AppResult
 from peerpedia_core.core import (
     create_user, create_user_stub, find_users, get_user_view,
-    require_authenticable_user, soft_delete_user, verify_user_password,
+    require_authenticable_user, soft_delete_user, update_user_salt, verify_user_password,
+    merge_peers,
 )
 from peerpedia_core.crypto import derive_key_pair, new_salt
 
@@ -37,13 +38,12 @@ def register(ctx: AppContext, *, name: str, password: str) -> AppResult:
     private_key_bytes, pubkey_bytes = derive_key_pair(password, salt_hex)
     pubkey_hex = pubkey_bytes.hex()
     user = create_user(ctx.db, name=name, public_key=pubkey_hex)
-    from peerpedia_core.core import update_user_salt
     update_user_salt(ctx.db, user.id, salt_hex)
     ctx.db.commit()
     # ── Session ──
     write_session(user.id, user.name, private_key_bytes.hex())
     return AppResult("REGISTERED",
-        data={"id": user.id, "name": user.name, "pubkey": pubkey_hex},
+        data={"user_id": user.id, "name": user.name, "pubkey": pubkey_hex},
         params={"name": user.name, "id": user.id})
 
 
@@ -73,7 +73,7 @@ def recover(ctx: AppContext, *, name: str | None = None, user_id: str | None = N
     private_key_bytes, _ = derive_key_pair(password, user.salt)
     write_session(user.id, user.name, private_key_bytes.hex())
     return AppResult("RECOVERED",
-        data={"id": user.id, "name": user.name},
+        data={"user_id": user.id, "name": user.name},
         params={"name": user.name, "id": user.id})
 
 
@@ -100,11 +100,10 @@ def bootstrap(ctx: AppContext, *, from_json: str, peer: str | None = None) -> Ap
     # ── Peer ──
     notices: list[AppNotice] = []
     if peer:
-        from peerpedia_core.core import merge_peers
         merge_peers(ctx.transport, peer)
         notices.append(AppNotice("W_AUTO_SYNCING", params={"count": 1}))
     return AppResult("BOOTSTRAPPED",
-        data={"id": user_id, "name": name},
+        data={"user_id": user_id, "name": name},
         params={"name": name, "id": user_id},
         notices=notices)
 
@@ -116,7 +115,7 @@ def search_users(ctx: AppContext, *, query: str = "") -> AppResult:
         return AppResult("", data={"items": []})
     # ── Execute ──
     results = find_users(ctx.db, query)
-    return AppResult("", data={"items": [{"id": u.id, "name": u.name} for u in results]})
+    return AppResult("", data={"items": [{"user_id": u.id, "name": u.name} for u in results]})
 
 
 # ── Internal ─────────────────────────────────────────────────────────────
@@ -127,7 +126,7 @@ def _write_login_session(user, password: str) -> AppResult:
     private_key_bytes, _ = derive_key_pair(password, user.salt)
     write_session(user.id, user.name, private_key_bytes.hex())
     return AppResult("LOGGED_IN",
-        data={"id": user.id, "name": user.name},
+        data={"user_id": user.id, "name": user.name},
         params={"name": user.name, "id": user.id})
 
 

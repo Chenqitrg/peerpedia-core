@@ -17,8 +17,9 @@ from peerpedia_core.config.paths import SERVER_DEFAULT_FILE
 from peerpedia_core.app.commands.sync import sync_all as _core_sync_all, sync_all_peers as _core_sync_all_peers
 from peerpedia_core.exceptions import ConflictError, ProtocolError, TransportError
 from peerpedia_core.transport import Transport
+from peerpedia_core.transport.http.factory import from_http as _from_http
 
-_TRANSPORT = Transport.from_http()
+_TRANSPORT = _from_http()
 _no_server_warned = False
 
 

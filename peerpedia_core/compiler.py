@@ -162,6 +162,8 @@ import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from peerpedia_core.exceptions import BadRequestError
+
 from peerpedia_core.config.params import (
     _ARTICLE_EXT_TO_FMT,
     FMT_HTML, FMT_MARKDOWN, FMT_PDF, FMT_PNG, FMT_SVG, FMT_TYPST,
@@ -225,7 +227,6 @@ def detect_format(file_path: Path) -> str:
     fmt = _ARTICLE_EXT_TO_FMT.get(suffix)
     if fmt is not None:
         return fmt
-    from peerpedia_core.exceptions import BadRequestError
     raise BadRequestError(code="COMPILE_UNKNOWN_FORMAT", suffix=suffix)
 
 

@@ -7,7 +7,7 @@ r"""Structured result types returned by app commands.
 data, and optional format parameters.  ``AppNotice`` is a side notification
 (e.g. "discovered 3 new articles during sync").
 
-The CLI/REPL renderers map ``code`` to the message registry in ``cli/msgs.py``.
+The CLI/REPL renderers map ``code`` to the message registry in ``messages.py``.
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ class AppNotice:
 class AppResult:
     """The structured result of an app command.
 
-    ``code`` matches a key in the message registry (``cli/msgs.py``).
+    ``code`` matches a key in the message registry (``messages.py``).
     ``data`` is included in JSON output.
     ``params`` are format parameters for the message template.
     ``notices`` are side notifications (sync results, warnings, etc.).

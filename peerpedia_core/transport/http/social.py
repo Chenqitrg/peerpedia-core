@@ -4,7 +4,7 @@
 """HTTP implementations of the social transport protocol.
 
 Each function here is a callback that can be wired into the corresponding
-protocol function in ``transport/social.py`` via ``functools.partial``.
+protocol function via ``functools.partial``.
 """
 
 import json

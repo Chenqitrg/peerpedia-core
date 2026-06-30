@@ -104,9 +104,10 @@ def test_bundle_article_not_found(client):
 
 
 def test_ancestor_article_not_found(client):
-    """Ancestor check for non-existent article → 404 (FileNotFoundError)."""
+    """Ancestor check for non-existent article → 200 {ancestor: false}."""
     resp = client.get("/api/v1/articles/00000000-0000-0000-0000-000000000001/ancestor/abc123")
-    assert resp.status_code == 404
+    assert resp.status_code == 200
+    assert resp.json() == {"ancestor": False}
 
 
 def test_push_article_repo_handler_missing_id(client):
@@ -222,7 +223,8 @@ def test_article_ancestor_not_found(client):
         "/api/v1/articles/00000000-0000-0000-0000-000000000001/ancestor/"
         + "a" * 40
     )
-    assert resp.status_code == 404
+    assert resp.status_code == 200
+    assert resp.json() == {"ancestor": False}
 
 def test_bundle_not_found(client):
     resp = client.get(
@@ -231,18 +233,15 @@ def test_bundle_not_found(client):
     assert resp.status_code == 404
 
 def test_article_history_not_found(client):
-    try:
-        resp = client.get("/api/v1/articles/00000000-0000-0000-0000-000000000001/history")
-        assert resp.status_code in (404, 500)
-    except Exception:
-        pass  # May throw git.NoSuchPathError — route exercises the code path
+    """History for non-existent article → 200 with empty list (design choice)."""
+    resp = client.get("/api/v1/articles/00000000-0000-0000-0000-000000000001/history")
+    assert resp.status_code == 200
+    assert resp.json() == []
 
 def test_article_source_not_found(client):
-    try:
-        resp = client.get("/api/v1/articles/00000000-0000-0000-0000-000000000001/source")
-        assert resp.status_code in (404, 500)
-    except Exception:
-        pass  # May throw git exception if repo dir doesn't exist
+    """Source for non-existent article → 404 (was 500 before NoSuchPathError fix)."""
+    resp = client.get("/api/v1/articles/00000000-0000-0000-0000-000000000001/source")
+    assert resp.status_code == 404
 
 def test_search_articles(client):
     resp = client.get("/api/v1/search?q=test")
@@ -305,5 +304,79 @@ def test_peers_post_duplicate_is_idempotent(client):
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Error handlers — verify JSON error shape
+# Git routes — all return 404 for non-existent articles (not 500)
 # ═══════════════════════════════════════════════════════════════════════════════
+
+_NONEXISTENT = "00000000-0000-0000-0000-000000000001"
+
+
+def test_repo_not_found_returns_404(client):
+    """GET /articles/{id}/repo → 404 for non-existent article."""
+    resp = client.get(f"/api/v1/articles/{_NONEXISTENT}/repo")
+    assert resp.status_code == 404
+
+
+def test_bundle_with_since_not_found_returns_404(client):
+    """GET /articles/{id}/bundle?since= → 404 for non-existent article."""
+    resp = client.get(
+        f"/api/v1/articles/{_NONEXISTENT}/bundle?since={'0' * 40}"
+    )
+    assert resp.status_code == 404
+
+
+def test_head_not_found_returns_404(client):
+    """GET /articles/{id}/head → 404 for non-existent article."""
+    resp = client.get(f"/api/v1/articles/{_NONEXISTENT}/head")
+    assert resp.status_code == 404
+
+
+def test_ancestor_not_found_returns_false(client):
+    """GET /articles/{id}/ancestor/{hash} → 200 {ancestor: false} for non-existent article."""
+    resp = client.get(
+        f"/api/v1/articles/{_NONEXISTENT}/ancestor/{'a' * 40}"
+    )
+    assert resp.status_code == 200
+    assert resp.json() == {"ancestor": False}
+
+
+def test_history_not_found_returns_empty_list(client):
+    """GET /articles/{id}/history → 200 [] for non-existent article."""
+    resp = client.get(f"/api/v1/articles/{_NONEXISTENT}/history")
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+def test_source_not_found_returns_404(client):
+    """GET /articles/{id}/source → 404 for non-existent article."""
+    resp = client.get(f"/api/v1/articles/{_NONEXISTENT}/source")
+    assert resp.status_code == 404
+
+
+def test_article_not_found_returns_404(client):
+    """GET /articles/{id} → 404 for non-existent article."""
+    resp = client.get(f"/api/v1/articles/{_NONEXISTENT}")
+    assert resp.status_code == 404
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Error response shape — all 404s have consistent JSON
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def test_not_found_response_has_error_and_status(client):
+    """Every 404 response includes 'error' string and 'status' int."""
+    routes = [
+        f"/api/v1/articles/{_NONEXISTENT}",
+        f"/api/v1/articles/{_NONEXISTENT}/head",
+        f"/api/v1/articles/{_NONEXISTENT}/repo",
+        f"/api/v1/articles/{_NONEXISTENT}/source",
+    ]
+    for route in routes:
+        resp = client.get(route)
+        assert resp.status_code == 404, f"{route} → {resp.status_code}"
+        body = resp.json()
+        assert "error" in body, f"{route}: missing 'error' key"
+        assert "status" in body, f"{route}: missing 'status' key"
+        assert body["status"] == 404, f"{route}: status={body['status']}"
+        assert isinstance(body["error"], str) and len(body["error"]) > 0, \
+            f"{route}: empty error message"

@@ -17,7 +17,7 @@ from rich.table import Table
 from rich.text import Text
 
 import peerpedia_core.repl.state as _st
-from peerpedia_core.cli.parser import COMMANDS
+from peerpedia_core.cli.parser import COMMANDS, CommandGroup
 from peerpedia_core.cli.dispatch import get_cmd_map_for_parser as get_cmd_map
 from peerpedia_core.repl.state import console
 
@@ -147,7 +147,6 @@ def _cli_help_path(mapping: list[str]) -> Path | None:
 
 def _find_subcommands_for_group(group: str) -> list[str]:
     """Return subcommand names that belong to *group*."""
-    from peerpedia_core.cli.parser import CommandGroup
     for item in COMMANDS:
         if isinstance(item, CommandGroup) and item.name == group:
             return [c.name for c in item.commands if c.name]

@@ -4,7 +4,7 @@
 """HTTP implementations of the article transport protocol.
 
 Each function here is a callback that can be wired into the corresponding
-protocol function in ``transport/articles.py`` via ``functools.partial``.
+protocol function via ``functools.partial``.
 
 All HTTP details — status codes, paths, methods, serialization — are
 confined to this module.

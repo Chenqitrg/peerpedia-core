@@ -15,6 +15,7 @@ from peerpedia_core.config.params import (
     ARTICLE_EXTENSIONS, article_ext_to_format, article_filename, article_format_to_ext,
     extract_user_id_from_email,
 )
+from peerpedia_core.config.paths import article_repo_path
 from peerpedia_core.types.status import parse_status_tag
 
 
@@ -71,7 +72,10 @@ def get_commit_history(
 
     Raises ValueError if the repo has no commits.
     """
-    repo = git.Repo(repo_path)
+    try:
+        repo = git.Repo(repo_path)
+    except git.exc.NoSuchPathError:
+        raise ValueError("REPO_NO_COMMITS") from None
     assert_on_main(repo)
     if not repo.head.is_valid():
         raise ValueError("REPO_NO_COMMITS")
@@ -212,10 +216,10 @@ def get_head_hash(repo_path: Path) -> str:
 
 
 def get_head_or_none(repo_path: Path) -> str | None:
-    """Return HEAD hash, or None if the repo has no commits."""
+    """Return HEAD hash, or None if the repo has no commits or doesn't exist."""
     try:
         return get_head_commit(repo_path)["hash"]
-    except ValueError:
+    except (ValueError, git.exc.NoSuchPathError):
         return None
 
 
@@ -235,7 +239,6 @@ def resolve_article_format(repo_path: Path) -> str:
 
 def article_source_path(article_id: str) -> Path | None:
     """Return the path to an article's source file, or None."""
-    from peerpedia_core.config.paths import article_repo_path
     rp = article_repo_path(article_id)
     fmt = resolve_article_format(rp)
     f = rp / article_filename(article_format_to_ext(fmt))
@@ -246,12 +249,12 @@ def article_source_path(article_id: str) -> Path | None:
 
 def is_ancestor(repo_path: Path, maybe_ancestor: str, *, repo: git.Repo | None = None) -> bool:
     """Check if *maybe_ancestor* is an ancestor of HEAD."""
-    if repo is None:
-        repo = git.Repo(repo_path)
     try:
+        if repo is None:
+            repo = git.Repo(repo_path)
         repo.git.merge_base("--is-ancestor", maybe_ancestor, "HEAD")
         return True
-    except git.GitCommandError:
+    except (git.GitCommandError, git.exc.NoSuchPathError):
         return False
 
 

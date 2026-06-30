@@ -19,6 +19,7 @@ from peerpedia_core.app.commands.display import (
     source_path,
 )
 from peerpedia_core.cli.info import console, _page
+from peerpedia_core.messages import lookup as _lookup
 from peerpedia_core.types.scores import SCORE_DIMENSIONS
 
 
@@ -154,7 +155,6 @@ def display_full_content(raw: str, article_id: str = "") -> None:
 
 def display_empty_article_list(code: str, **fmt) -> None:
     """Show context-sensitive guidance when an article list is empty."""
-    from peerpedia_core.messages import lookup as _lookup
     _, m = _lookup(code)
     if m.text:
         console.print(m.text.format(**fmt) if fmt else m.text)

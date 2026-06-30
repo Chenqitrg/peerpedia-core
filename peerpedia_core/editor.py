@@ -4,8 +4,8 @@
 """Terminal input utilities — editor prompts, password input.
 
 Pure infrastructure — no ``_out()``, no ``sys.exit()``.  Raises exceptions
-for the caller to handle.  CLI wrappers in ``cli/editor.py`` convert these
-to ``_out()`` calls.
+for the caller to handle.  CLI handlers import and wrap these for
+``_out()`` calls.
 """
 
 from __future__ import annotations

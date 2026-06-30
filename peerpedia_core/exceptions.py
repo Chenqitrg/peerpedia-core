@@ -23,7 +23,7 @@ PeerpediaError (base)       ``code: str``  ``detail: str``  ``context: dict``
 
 Usage pattern
 -------------
-All policy functions (``policies/articles.py``) and orchestration functions
+All policy functions (``rules/articles.py``) and orchestration functions
 (``commands/``) raise these.  The CLI catches them in command handlers and
 calls ``_die(msg)`` to print the error and exit.  The REPL catches them in
 ``_dispatch`` and prints without exiting.

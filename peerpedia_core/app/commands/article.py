@@ -30,6 +30,7 @@ from peerpedia_core.core import (
 )
 from peerpedia_core.core.sync_social import discover_articles
 from peerpedia_core.exceptions import BadRequestError
+from peerpedia_core.rules.articles import visible_statuses_for_user
 from peerpedia_core.storage.db._validators import require_draft_status
 
 
@@ -226,7 +227,6 @@ def _article_list_filters(
     elif status_arg:
         status = status_arg
     else:
-        from peerpedia_core.rules.articles import visible_statuses_for_user
         user_obj = get_user(ctx.db, me) if me else None
         status = visible_statuses_for_user(user_obj)
 

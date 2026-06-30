@@ -3,7 +3,7 @@
 
 r"""Sedimentation pool — pure computation, zero storage dependencies.
 
-Two pure functions used by ``commands/workflow.py``:
+Two pure functions used by the article publish/scan orchestrator:
 
     is_ready_to_publish(eta) → bool
         Compare sink ETA against current UTC time.  Handles timezone-naive

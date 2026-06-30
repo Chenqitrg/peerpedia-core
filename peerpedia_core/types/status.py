@@ -5,8 +5,8 @@
 
 Import from here instead of hardcoding status sets in individual modules.
 The ``parse_status_tag`` function is the single parser for ``[status]``
-markers in platform commit messages — used by both ``commands/bundle.py``
-and ``commands/integrity.py`` without creating a circular import.
+markers in platform commit messages — used by both ``app/commands/bundle.py``
+and integrity checking without creating a circular import.
 """
 
 from __future__ import annotations

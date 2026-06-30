@@ -3,16 +3,16 @@
 
 """Rich-powered terminal display helpers.
 
-Imports from ``app/commands/display.py`` for data lookups — never
+Imports from ``app/readmodels/articles.py`` for data lookups — never
 from ``core/`` directly.
 """
 
 from __future__ import annotations
 
 from rich.panel import Panel
-from rich.table import Table
+from rich.text import Text
 
-from peerpedia_core.app.commands.display import (
+from peerpedia_core.app.readmodels.articles import (
     list_author_ids,
     read_frontmatter,
     resolve_author_names,
@@ -20,44 +20,49 @@ from peerpedia_core.app.commands.display import (
 )
 from peerpedia_core.cli.info import console, _page
 from peerpedia_core.messages import lookup as _lookup
-from peerpedia_core.types.scores import SCORE_DIMENSIONS
+from peerpedia_core.presentation.rich.components import (
+    SCORE_DIM_NAMES,
+    display_user as _shared_display_user,
+    print_panel as _shared_print_panel,
+    print_table as _shared_print_table,
+    score_lines as _shared_score_lines,
+    score_stars as _shared_score_stars,
+    status_badge as _shared_status_badge,
+)
 
 
 # ── Output formatting — shared display helpers for all commands ────────────
 
 
-def _print_panel(title: str, content: str, style: str = "info") -> None:
+def _print_panel(title: str, content: str | Text) -> None:
     """Show a single item's details in a bordered panel."""
-    console.print(Panel(content, title=title, border_style="muted", title_align="left"))
+    _shared_print_panel(console, title, content)
 
 
 def _print_table(headers: list[str], rows: list[list[str]], title: str | None = None) -> None:
     """Show a list as a table."""
-    table = Table(title=title, border_style="muted")
-    for i, h in enumerate(headers):
-        table.add_column(h, style="bold" if i == 0 else "")
-    for row in rows:
-        table.add_row(*row)
-    console.print(table)
+    _shared_print_table(console, headers, rows, title=title)
 
 
 def _status_badge(status: str) -> str:
     """Colored status label: draft=white, sedimentation=yellow, published=green."""
-    colors = {"draft": "white", "sedimentation": "yellow", "published": "green"}
-    return f"[{colors.get(status, 'white')}]{status}[/]"
+    return _shared_status_badge(status)
 
 
 def display_article(title: str, status: str, authors: list[str],
                     score: dict | None, abstract: str | None) -> None:
     """Render article metadata panel — pure display, zero side effects."""
-    scores_str = _stars(score) if score else "[muted]no scores[/]"
-    body = (
-        f"[bold info]{title}[/]      {_status_badge(status)}\n"
-        f"Authors: {', '.join(authors)}\n"
-        f"Score:\n{scores_str}"
-    )
+    body = Text()
+    body.append(str(title), style="bold info")
+    body.append(f"      {_status_badge(status)}\n")
+    body.append(f"Authors: {', '.join(str(a) for a in authors)}\n")
+    body.append("Score:\n")
+    if score:
+        body.append(Text.from_markup(_stars(score)))
+    else:
+        body.append("no scores", style="muted")
     if abstract:
-        body += f"\nAbstract: {abstract}"
+        body.append(f"\nAbstract: {str(abstract)}")
     _print_panel("Article", body)
 
 
@@ -68,25 +73,11 @@ def display_user(name: str, user_id: str, *,
                  follower_count: int | None = None,
                  public_key: str | None = None,
                  created_at: str | None = None) -> None:
-    """Render user metadata panel — pure display, zero side effects.
-
-    Callers pass whatever fields are available; only non-empty ones render.
-    """
-    body = f"[bold info]{name}[/]"
-    if follower_count is not None:
-        body += f"      [muted]{follower_count} follower(s)[/]"
-    body += f"\n[accent]{user_id}[/]"
-    if public_key:
-        body += f"\nPublic key: [dim]{public_key[:16]}…[/]"
-    if affiliation:
-        body += f"\nAffiliation: [info]{affiliation}[/]"
-    if expertise:
-        body += f"\nExpertise: {', '.join(expertise)}"
-    if reputation:
-        body += f"\nReputation:\n{_stars(reputation)}"
-    if created_at:
-        body += f"\nCreated: [dim]{created_at}[/]"
-    _print_panel("User", body)
+    """Render user metadata panel — pure display, zero side effects."""
+    _shared_display_user(console, name, user_id,
+                         affiliation=affiliation, expertise=expertise,
+                         reputation=reputation, follower_count=follower_count,
+                         public_key=public_key, created_at=created_at)
 
 
 def display_diff(diff_text: str, stats: dict) -> None:
@@ -100,58 +91,44 @@ def display_diff(diff_text: str, stats: dict) -> None:
     dels = totals.get("deletions", 0)
     files = stats.get("files", [])
 
-    header = f"[bold]{', '.join(files)}[/]  " if files else ""
-    header += f"[success]+{ins}[/]  [error]-{dels}[/]"
+    header = Text()
+    if files:
+        header.append(", ".join(files), style="bold")
+        header.append("  ")
+    header.append(f"+{ins}", style="success")
+    header.append("  ")
+    header.append(f"-{dels}", style="error")
     console.print()
     console.print(Panel(header, title="Diff", border_style="muted", title_align="left"))
     console.print()
 
     for line in diff_text.split("\n"):
         if line.startswith("@@") and line.rstrip().endswith("@@"):
-            console.print(f"[bold cyan]{line}[/]")
+            console.print(Text(line, style="bold cyan"))
         elif line.startswith("+++") or line.startswith("---"):
-            console.print(f"[bold]{line}[/]")
+            console.print(Text(line, style="bold"))
         elif line.startswith("diff --git") or line.startswith("index "):
-            console.print(f"[bold]{line}[/]")
+            console.print(Text(line, style="bold"))
         elif line.startswith("+") and not line.startswith("+++"):
-            console.print(f"[green]{line}[/]")
+            console.print(Text(line, style="green"))
         elif line.startswith("-") and not line.startswith("---"):
-            console.print(f"[red]{line}[/]")
+            console.print(Text(line, style="red"))
         else:
-            console.print(line, style="dim")
+            console.print(Text(line, style="dim"))
 
     console.print()
 
 
 # ── Score display component ──────────────────────────────────────────────
 
-SCORE_DIM_NAMES: list[str] = list(SCORE_DIMENSIONS.values())
-
-
 def _score_lines(score: dict | None, dims: list[str] | None = None) -> list[str]:
     """Return one plain-text line per dimension, e.g. ``'originality    ★★★☆☆  3/5'``."""
-    if not score:
-        return ["—"]
-    if dims is None:
-        dims = SCORE_DIM_NAMES
-    return [
-        f"  {d:<14} {'★'*v}{'☆'*(5-v)}  {v}/5"
-        for d in dims
-        for v in [int(score.get(d, 0))]
-    ]
+    return _shared_score_lines(score, dims)
 
 
 def _stars(score: dict | None, dims: list[str] | None = None) -> str:
     """Render 5-dim scores with Rich markup, e.g. ``[accent]★★★★☆[/][muted]☆[/]  4/5``."""
-    if not score:
-        return "[muted]no score[/]"
-    if dims is None:
-        dims = SCORE_DIM_NAMES
-    return "\n".join(
-        f"  {d:<14} [accent]{'★'*v}[/][muted]{'☆'*(5-v)}[/]  {v}/5"
-        for d in dims
-        for v in [int(score.get(d, 0))]
-    )
+    return _shared_score_stars(score, dims)
 
 
 # ── Pager ────────────────────────────────────────────────────────────────

@@ -9,7 +9,7 @@ from peerpedia_core.storage.db import Session
 from peerpedia_core.config.params import make_peerpedia_email, params
 from peerpedia_core.rules.articles import assert_can_rollback_article
 from peerpedia_core.core.reconcile import reconcile_integrity
-from peerpedia_core.storage.db.crud_article import clear_publish_consents
+from peerpedia_core.storage.db.crud_publish import clear_publish_consents
 from peerpedia_core.storage.git import (
     checkout_files, commit_article, get_head_hash, is_repo_dirty,
 )

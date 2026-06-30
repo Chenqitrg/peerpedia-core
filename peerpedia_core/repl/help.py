@@ -17,7 +17,7 @@ from rich.table import Table
 from rich.text import Text
 
 import peerpedia_core.repl.state as _st
-from peerpedia_core.repl.engine import COMMAND_TABLE
+from peerpedia_core.app.commandspec import COMMAND_GROUPS
 from peerpedia_core.repl.state import console
 
 _CLI_HELP_DIR = Path(__file__).resolve().parent.parent / "cli" / "help"
@@ -128,11 +128,10 @@ def _show_topic_help(topic: str):
 
 def _find_subcommands_for_group(group: str) -> list[str]:
     """Return subcommand names that belong to *group*."""
-    subs: list[str] = []
-    for (g, a) in COMMAND_TABLE:
-        if g == group and a is not None:
-            subs.append(a)
-    return sorted(subs)
+    for grp in COMMAND_GROUPS:
+        if grp.name == group:
+            return sorted(c.action for c in grp.commands if c.action)
+    return []
 
 
 def _is_section_header(line: str) -> bool:

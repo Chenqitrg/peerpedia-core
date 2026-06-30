@@ -14,8 +14,10 @@ response.  When the response shape changes, only this file changes.
 from __future__ import annotations
 
 from peerpedia_core.storage.db import Session
-from peerpedia_core.storage.db.crud_article import get_article, list_author_ids, list_author_ids_batch
-from peerpedia_core.storage.db.crud_user import get_followers, get_following, get_user
+from peerpedia_core.storage.db.crud_article import get_article
+from peerpedia_core.storage.db.crud_author import list_author_ids, list_author_ids_batch
+from peerpedia_core.storage.db.crud_user import get_user
+from peerpedia_core.storage.db.crud_follow import get_followers, get_following
 from peerpedia_core.core.articles import list_articles
 
 

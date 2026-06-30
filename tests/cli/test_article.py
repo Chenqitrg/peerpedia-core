@@ -21,7 +21,7 @@ from peerpedia_core.cli.cmds.article import (
     _cmd_article_diff,
     _cmd_compile,
 )
-from tests.cli.conftest import call, mock_cmd
+from tests.cli.conftest import call, mock_cmd, mock_spec_handler
 
 _MOD = 'peerpedia_core.cli.cmds.article'
 
@@ -156,31 +156,31 @@ def test_article_edit_title_changed(ctx):
 # ── Publish / Delete / Scan ───────────────────────────────────────────────
 
 def test_article_publish_delegates(ctx):
-    with mock_cmd(_MOD, '_article') as app:
+    with mock_spec_handler(_MOD, 'article.publish') as h:
         call(_cmd_article_publish, ctx, Namespace(id='abc', scores='orig=5'))
-    app.publish.assert_called_once_with(ctx, article_ref='abc', scores_str='orig=5')
+    h.assert_called_once_with(ctx, {'id': 'abc', 'scores': 'orig=5'})
 
 
 def test_article_delete_delegates(ctx):
-    with mock_cmd(_MOD, '_article') as app:
+    with mock_spec_handler(_MOD, 'article.delete') as h:
         call(_cmd_article_delete, ctx, Namespace(id='abc'))
-    app.delete.assert_called_once_with(ctx, article_ref='abc')
+    h.assert_called_once_with(ctx, {'id': 'abc'})
 
 
 def test_article_scan_delegates(ctx):
-    with mock_cmd(_MOD, '_article') as app:
+    with mock_spec_handler(_MOD, 'article.scan') as h:
         call(_cmd_article_scan, ctx, Namespace())
-    app.scan.assert_called_once_with(ctx)
+    h.assert_called_once_with(ctx, {})
 
 
 # ── Diff ──────────────────────────────────────────────────────────────────
 
 def test_article_diff_delegates(ctx):
-    with mock_cmd(_MOD, '_article') as app:
-        app.diff.return_value = MagicMock(data={'diff_text': '-old\n+new', 'stats': {}})
+    with mock_spec_handler(_MOD, 'article.diff') as h:
+        h.return_value = MagicMock(data={'diff_text': '-old\n+new', 'stats': {}})
         call(_cmd_article_diff, ctx, Namespace(id='abc', hash1='~1', hash2='HEAD'))
-    app.diff.assert_called_once_with(
-        ctx, article_ref='abc', hash1='~1', hash2='HEAD')
+    h.assert_called_once_with(
+        ctx, {'id': 'abc', 'hash1': '~1', 'hash2': 'HEAD'})
 
 
 # ── Compile ───────────────────────────────────────────────────────────────

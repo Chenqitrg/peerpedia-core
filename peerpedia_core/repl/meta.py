@@ -23,7 +23,7 @@ from peerpedia_core.core import (
     get_notifications_for_user, get_user, list_users_by_name,
     list_articles, search_articles,
 )
-from peerpedia_core.repl.state import ensure_db as _ensure_db
+from peerpedia_core.repl.state import new_session
 from peerpedia_core.repl.state import (
     _EMBER_THEME, _EMBER_STYLE, _PARCHMENT_THEME, _PARCHMENT_STYLE,
     console,
@@ -31,68 +31,70 @@ from peerpedia_core.repl.state import (
 
 
 def _meta_user(name):
-    db = _ensure_db()
-    u = get_user(db, name)
-    if u is None:
-        users = list_users_by_name(db, name)
-        if len(users) == 1:
-            u = users[0]
-        elif len(users) > 1:
-            t = Table(title=f"Multiple users matching '{name}'", border_style="muted")
-            t.add_column("#", style="muted", width=3)
-            t.add_column("ID", style="accent", width=10)
-            t.add_column("Affiliation", style="muted")
-            for i, user in enumerate(users, 1):
-                t.add_row(str(i), user.id, user.affiliation or "—")
-            console.print(t)
-            console.print(f"[muted]Use [accent]:user <id prefix>[/] to pick.[/]")
-            return
-    if u:
-        _st._repl_user = name
-        console.print(f"[success]✓[/] UserStorage set to [accent]{u.name}[/] [muted]({u.id})[/]")
-    else:
-        console.print(f"[error]✗[/] UserStorage '{name}' not found. [muted]register --name {name}[/] to create.[/]")
+    db = new_session()
+    try:
+        u = get_user(db, name)
+        if u is None:
+            users = list_users_by_name(db, name)
+            if len(users) == 1:
+                u = users[0]
+            elif len(users) > 1:
+                t = Table(title=f"Multiple users matching '{name}'", border_style="muted")
+                t.add_column("#", style="muted", width=3)
+                t.add_column("ID", style="accent", width=10)
+                t.add_column("Affiliation", style="muted")
+                for i, user in enumerate(users, 1):
+                    t.add_row(str(i), user.id, user.affiliation or "—")
+                console.print(t)
+                console.print(f"[muted]Use [accent]:user <id prefix>[/] to pick.[/]")
+                return
+        if u:
+            _st._repl_user = name
+            console.print(f"[success]✓[/] UserStorage set to [accent]{u.name}[/] [muted]({u.id})[/]")
+        else:
+            console.print(f"[error]✗[/] UserStorage '{name}' not found. [muted]register --name {name}[/] to create.[/]")
+    finally:
+        db.close()
 
 
 def _meta_article(ref: str):
-    db = _ensure_db()
-    if not ref:
-        _st._repl_article_id = None
-        _st._repl_article_title = ""
-        _st._repl_article_commit = ""
-        console.print("[muted]Article context cleared.[/]")
-        return
-    # FIXME: switch to list_articles when search_articles is deleted.
-    # Use search_articles — pure list, no _die. REPL handles results
-    # interactively (show candidates, let user pick).
-    # FIXME: REPL should use list_articles(db, id_prefix=ref) or list_articles(db, search_query=ref).
-    candidates = search_articles(db, ref)
-    if len(candidates) == 1:
-        article = candidates[0]
-    elif len(candidates) > 1:
-        console.print(f"[warning]{len(candidates)} articles match '{ref}':[/]")
-        for a in candidates[:20]:
-            console.print(f"  {a.id}  {a.title}")
-        return
-    else:
-        console.print(f"[error]✗[/] ArticleMetaStorage '{ref}' not found.")
-        return
-    _st._repl_article_id = article.id
-    _st._repl_article_title = article.title
-    _st._repl_article_commit = _get_article_head_hash(article.id)
-    commit_str = f" @{_st._repl_article_commit[:7]}" if _st._repl_article_commit else ""
-    # Sedimentation countdown
-    sink_info = ""
-    if article.status == "sedimentation" and article.sink_start:
-        now = datetime.now(timezone.utc)
-        start = article.sink_start.replace(tzinfo=timezone.utc) if article.sink_start.tzinfo is None else article.sink_start
-        elapsed = (now - start).days
-        total = article.sink_duration_days or 7
-        remaining = max(0, total - elapsed)
-        bar_filled = min(total, max(0, elapsed))
-        bar = "█" * bar_filled + "░" * (total - bar_filled)
-        sink_info = f"  [{_st.theme.styles['muted']}]{bar}[/] {remaining}d left"
-    console.print(f"[success]▸[/] {article.title} [muted]({article.id}{commit_str})[/]{sink_info}")
+    db = new_session()
+    try:
+        if not ref:
+            _st._repl_article_id = None
+            _st._repl_article_title = ""
+            _st._repl_article_commit = ""
+            console.print("[muted]Article context cleared.[/]")
+            return
+        candidates = search_articles(db, ref)
+        if len(candidates) == 1:
+            article = candidates[0]
+        elif len(candidates) > 1:
+            console.print(f"[warning]{len(candidates)} articles match '{ref}':[/]")
+            for a in candidates[:20]:
+                console.print(f"  {a.id}  {a.title}")
+            return
+        else:
+            console.print(f"[error]✗[/] ArticleMetaStorage '{ref}' not found.")
+            return
+        _st._repl_article_id = article.id
+        _st._repl_article_title = article.title
+        _st._repl_article_commit = _get_article_head_hash(article.id)
+        commit_str = f" @{_st._repl_article_commit[:7]}" if _st._repl_article_commit else ""
+        # Sedimentation countdown
+        sink_info = ""
+        if article.status == "sedimentation" and article.sink_start:
+            now = datetime.now(timezone.utc)
+            start = article.sink_start.replace(tzinfo=timezone.utc) if article.sink_start.tzinfo is None else article.sink_start
+            elapsed = (now - start).days
+            total = article.sink_duration_days or 7
+            remaining = max(0, total - elapsed)
+            bar_filled = min(total, max(0, elapsed))
+            bar = "█" * bar_filled + "░" * (total - bar_filled)
+            sink_info = f"  [{_st.theme.styles['muted']}]{bar}[/] {remaining}d left"
+        console.print(f"[success]▸[/] {article.title} [muted]({article.id}{commit_str})[/]{sink_info}")
+    finally:
+        db.close()
 
 
 def _meta_theme(mode: str):
@@ -114,21 +116,24 @@ def _meta_theme(mode: str):
 
 
 def _show_inbox():
-    db = _ensure_db()
-    session_data = _read_session()
-    if not session_data:
-        console.print("[muted]Not logged in.[/]")
-        return
-    notifications = get_notifications_for_user(db, session_data["user_id"])
-    if not notifications:
-        console.print("[muted]No notifications.[/]")
-        return
-    t = Table(title="Notifications", border_style="muted")
-    t.add_column("Time", style="muted", width=16)
-    t.add_column("Event", style="accent")
-    for n in notifications[:20]:
-        ts_raw = n.get("created_at", "")
-        ts = ts_raw[:16].replace("T", " ") if ts_raw else ""
-        marker = "[bold]●[/] " if not n.get("read") else "  "
-        t.add_row(ts, f"{marker}{n.get('message', '')}")
-    console.print(t)
+    db = new_session()
+    try:
+        session_data = _read_session()
+        if not session_data:
+            console.print("[muted]Not logged in.[/]")
+            return
+        notifications = get_notifications_for_user(db, session_data["user_id"])
+        if not notifications:
+            console.print("[muted]No notifications.[/]")
+            return
+        t = Table(title="Notifications", border_style="muted")
+        t.add_column("Time", style="muted", width=16)
+        t.add_column("Event", style="accent")
+        for n in notifications[:20]:
+            ts_raw = n.get("created_at", "")
+            ts = ts_raw[:16].replace("T", " ") if ts_raw else ""
+            marker = "[bold]●[/] " if not n.get("read") else "  "
+            t.add_row(ts, f"{marker}{n.get('message', '')}")
+        console.print(t)
+    finally:
+        db.close()

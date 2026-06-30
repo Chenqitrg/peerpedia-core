@@ -9,8 +9,9 @@ import difflib
 import sys
 from pathlib import Path
 
+from peerpedia_core.app.commandspec import spec_for_cmd_id
 from peerpedia_core.app.result import AppResult
-from peerpedia_core.app.commands.display import (
+from peerpedia_core.app.readmodels.articles import (
     list_articles as _list_articles_orm,
     list_author_ids_batch,
 )
@@ -153,19 +154,21 @@ def _cmd_article_edit(ctx, args):
 @with_context
 def _cmd_article_publish(ctx, args):
     """Publish an article into the sedimentation pool."""
-    return _article.publish(ctx, article_ref=args.id, scores_str=args.scores)
+    return spec_for_cmd_id("article.publish").handler(ctx, {
+        "id": args.id, "scores": args.scores,
+    })
 
 
 @with_context
 def _cmd_article_delete(ctx, args):
     """Delete an article."""
-    return _article.delete(ctx, article_ref=args.id)
+    return spec_for_cmd_id("article.delete").handler(ctx, {"id": args.id})
 
 
 @with_context
 def _cmd_article_scan(ctx, args):
     """Manually trigger sedimentation → published transition."""
-    return _article.scan(ctx)
+    return spec_for_cmd_id("article.scan").handler(ctx, {})
 
 
 # ── Diff ──────────────────────────────────────────────────────────────────
@@ -173,8 +176,9 @@ def _cmd_article_scan(ctx, args):
 @with_context
 def _cmd_article_diff(ctx, args):
     """Diff two commits of an article."""
-    result = _article.diff(ctx, article_ref=args.id,
-        hash1=args.hash1, hash2=args.hash2)
+    result = spec_for_cmd_id("article.diff").handler(ctx, {
+        "id": args.id, "hash1": args.hash1, "hash2": args.hash2,
+    })
     diff_text = result.data.get("diff_text", "")
     if not diff_text.strip():
         _out(None, "N_SAME_REVISION")

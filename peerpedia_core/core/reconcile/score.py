@@ -8,9 +8,8 @@ from __future__ import annotations
 from peerpedia_core.storage.db import Session
 from peerpedia_core.storage.db.models import UserStorage
 from peerpedia_core.config.params import params
-from peerpedia_core.storage.db.crud_article import (
-    list_author_ids, update_article_score,
-)
+from peerpedia_core.storage.db.crud_article import update_article_score
+from peerpedia_core.storage.db.crud_author import list_author_ids
 from peerpedia_core.storage.db.crud_review import get_reviews_for_article
 from peerpedia_core.storage.db.crud_user import (
     get_user, list_users_by_ids, list_users, update_user_reputation,

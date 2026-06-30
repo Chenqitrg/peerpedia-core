@@ -20,7 +20,41 @@ External callers import from here — never from submodules or storage/ directly
 from peerpedia_core.config.paths import ARTICLES_DIR
 from peerpedia_core.frontmatter import parse_frontmatter
 from peerpedia_core.storage.db import db_repl_setup
+from peerpedia_core.storage.db.engine import get_engine as _get_engine, get_session as _get_session
 from peerpedia_core.storage.db.session_utils import db_session_scope as db_session
+
+# Cache for the REPL engine (per-process singleton).  Engine is thread-safe
+# and designed to be shared; sessions are created per-command from it.
+_repl_engine_cache = None
+
+
+def db_repl_init(database_url: str):
+    """Initialise the REPL engine (tables + migrations) once per process."""
+    global _repl_engine_cache
+    if _repl_engine_cache is None:
+        from peerpedia_core.storage.db import init_db, migrate_db
+        _repl_engine_cache = _get_engine(database_url)
+        init_db(_repl_engine_cache)
+        migrate_db(_repl_engine_cache)
+
+
+def db_repl_new_session(database_url: str):
+    """Return a **new** session from the cached REPL engine.
+
+    Callers must ``.close()`` the session when done.
+    """
+    global _repl_engine_cache
+    if _repl_engine_cache is None:
+        db_repl_init(database_url)
+    return _get_session(_repl_engine_cache)
+
+
+def db_repl_dispose():
+    """Dispose the cached REPL engine (final cleanup)."""
+    global _repl_engine_cache
+    if _repl_engine_cache is not None:
+        _repl_engine_cache.dispose()
+        _repl_engine_cache = None
 
 
 def health_check(database_url: str) -> list[str]:
@@ -148,7 +182,7 @@ from peerpedia_core.storage.db.ingest import (
 
 # ── Pass-through (thin wrappers over storage/) ───────────────────────────────
 
-from peerpedia_core.storage.db.crud_article import create_article_from_orm, list_author_ids_batch
+from peerpedia_core.storage.db.crud_article import create_article_from_orm; from peerpedia_core.storage.db.crud_author import list_author_ids_batch
 from peerpedia_core.storage.db.crud_alias import (
     list_aliases, remove_alias, resolve_username_or_alias, set_alias,
 )

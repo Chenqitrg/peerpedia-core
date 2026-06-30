@@ -3,14 +3,14 @@
 
 """REPL state — theme definitions, session variables, prompt.
 
-Architecture: ``repl/`` only imports from ``cli/``.  All data access goes
-through ``cli.helpers`` — no direct ``commands/`` or ``storage/`` imports.
+Architecture: ``repl/`` only imports from ``app/`` and its own modules.
 No circular dependency: ``cli/`` never imports from ``repl/``.
 """
 
 from __future__ import annotations
 
 import time
+from contextlib import contextmanager
 
 from prompt_toolkit.styles import Style
 from rich.console import Console
@@ -19,39 +19,49 @@ from rich.theme import Theme
 from peerpedia_core.app.context import read_session
 from peerpedia_core.config.paths import DB_PATH, DB_URL
 from peerpedia_core.core import (
-    count_unread_notifications, db_repl_setup, list_articles, list_users,
+    count_unread_notifications, db_repl_dispose, db_repl_init,
+    db_repl_new_session, list_articles, list_users,
 )
 
-# ── REPL persistent DB session ───────────────────────────────────────────
-
-_repl_engine = None
-_repl_db = None
+# ── REPL database sessions (per-command unit of work) ────────────────────
 
 
-def ensure_db():
-    """Return a persistent database session for the REPL."""
-    global _repl_engine, _repl_db
-    if _repl_db is None:
-        DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-        _repl_engine, _repl_db = db_repl_setup(DB_URL)
-    return _repl_db
+def new_session():
+    """Return a **new** database session.  Engine is cached; session is not.
+
+    Each command gets a fresh session, avoiding stale identity maps and
+    cross-command transaction pollution.  The caller owns the session
+    lifecycle — it must ``.close()`` when done.
+    """
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+    db_repl_init(DB_URL)
+    return db_repl_new_session(DB_URL)
+
+
+@contextmanager
+def session_scope():
+    """Context manager: fresh session with auto commit/rollback/close.
+
+    Usage::
+
+        with session_scope() as db:
+            result = do_work(db)
+    """
+    db = new_session()
+    try:
+        yield db
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
 
 
 def close_db():
-    """Close the persistent REPL database session."""
-    global _repl_db, _repl_engine
-    if _repl_db is not None:
-        _repl_db.close()
-        _repl_db = None
-    if _repl_engine is not None:
-        _repl_engine.dispose()
-        _repl_engine = None
+    """Dispose the cached engine (final cleanup on REPL exit)."""
+    db_repl_dispose()
 
-
-# Backward-compat aliases
-_ensure_db = ensure_db
-_close_db = close_db
-_read_session = read_session
 
 # ── Color themes ─────────────────────────────────────────────────────────
 
@@ -114,13 +124,16 @@ def _prompt_text():
         now = time.time()
         global _notif_cache
         if now - _notif_cache[0] > 30.0:
-            db = _ensure_db()
-            sid = _read_session()
-            if sid:
-                unread = count_unread_notifications(db, sid["user_id"])
-                _notif_cache = (now, unread)
-            else:
-                _notif_cache = (now, 0)
+            db = new_session()
+            try:
+                sid = _read_session()
+                if sid:
+                    unread = count_unread_notifications(db, sid["user_id"])
+                    _notif_cache = (now, unread)
+                else:
+                    _notif_cache = (now, 0)
+            finally:
+                db.close()
         badge = f" ({_notif_cache[1]})" if _notif_cache[1] > 0 else ""
     except Exception:
         global _notif_warned
@@ -144,10 +157,9 @@ def _prompt_text():
 def _refresh_completions():
     """Rebuild dynamic completion word list from DB (article IDs + @names)."""
     global _repl_completion_words
+    db = new_session()
     try:
-        db = _ensure_db()
         words = []
-        # ArticleMetaStorage title words and ID prefixes
         for a in list_articles(db, limit=50):
             if a.id:
                 words.append(a.id)
@@ -155,7 +167,6 @@ def _refresh_completions():
                 for w in a.title.split():
                     if len(w) > 2:
                         words.append(w)
-        # @usernames
         for u in list_users(db):
             if u.name:
                 words.append(f"@{u.name}")
@@ -166,6 +177,8 @@ def _refresh_completions():
         logging.getLogger(__name__).warning(
             "Failed to refresh REPL completions", exc_info=True
         )
+    finally:
+        db.close()
 
 
-# _get_session_user_id is in cli.helpers — import from there.
+# _get_session_user_id is in browse.py — use _get_session_user_id() from there.

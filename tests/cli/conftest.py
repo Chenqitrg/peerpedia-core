@@ -49,3 +49,19 @@ def mock_cmd(module_path: str, attr: str):
     target = f'{module_path}.{attr}'
     with patch(target, autospec=True) as mock:
         yield mock
+
+
+@contextmanager
+def mock_spec_handler(module_path: str, cmd_id: str):
+    """Patch ``spec_for_cmd_id`` in *module_path* and yield a mock handler.
+
+    For handlers that route through ``spec.handler(ctx, args)``::
+
+        with mock_spec_handler(MOD, 'account.register') as handler:
+            call(_cmd_account_register, ctx, Namespace(name='Alice'))
+            handler.assert_called_once()
+    """
+    mock_spec = MagicMock()
+    target = f'{module_path}.spec_for_cmd_id'
+    with patch(target, return_value=mock_spec) as mock_lookup:
+        yield mock_spec.handler

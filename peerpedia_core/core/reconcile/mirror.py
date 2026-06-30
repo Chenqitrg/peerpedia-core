@@ -13,7 +13,10 @@ from peerpedia_core.storage.db import Session
 from peerpedia_core.config.paths import article_repo_path
 from peerpedia_core.exceptions import BadRequestError
 from peerpedia_core.storage.db.crud_article import (
-    add_article_authors, list_author_ids, update_article_status, update_witnessed_at,
+    update_article_status, update_witnessed_at,
+)
+from peerpedia_core.storage.db.crud_author import (
+    add_article_authors, list_author_ids,
 )
 from peerpedia_core.core.reconcile.score import reconcile_score
 from peerpedia_core.storage.db.crud_review import upsert_review

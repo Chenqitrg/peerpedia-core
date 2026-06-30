@@ -11,7 +11,7 @@ reputation/scoring algorithms in ``workflow/``.
 from __future__ import annotations
 
 from peerpedia_core.storage.db import Session
-from peerpedia_core.storage.db.crud_article import list_articles_by_author, list_author_ids_batch
+from peerpedia_core.storage.db.crud_author import list_articles_by_author, list_author_ids_batch
 from peerpedia_core.storage.db.crud_review import get_reviews_for_article
 from peerpedia_core.storage.db.crud_user import list_users_by_ids
 from peerpedia_core.storage.db.guards import require_user

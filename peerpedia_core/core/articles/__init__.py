@@ -21,9 +21,9 @@ from peerpedia_core.storage.db.crud_article import (
     count_articles as _count,
     list_all_article_ids as _get_all_ids,
     get_article as _get_article,
-    list_author_ids as _get_author_ids,
     list_articles as _list,
 )
+from peerpedia_core.storage.db.crud_author import list_author_ids as _get_author_ids
 from peerpedia_core.core.reconcile import reconcile_integrity
 
 

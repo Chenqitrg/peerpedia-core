@@ -5,23 +5,27 @@
 
 from __future__ import annotations
 
+from peerpedia_core.app.commandspec import spec_for_cmd_id
 from peerpedia_core.cli.decorators import with_context
 from peerpedia_core.editor import open_editor as _open_editor
 from peerpedia_core.cli.info import _out
-import peerpedia_core.app.commands.review as _review
 
 
 @with_context
 def _cmd_review_submit(ctx, args):
     """Submit a review with 5-dim scores + optional comment."""
-    return _review.submit(ctx, article_ref=args.article_id,
-        scores_str=args.scores, comment=args.comment or "")
+    return spec_for_cmd_id("review.submit").handler(ctx, {
+        "article_id": args.article_id, "scores": args.scores,
+        "comment": args.comment or "",
+    })
 
 
 @with_context
 def _cmd_review_list(ctx, args):
     """List all reviews for an article."""
-    return _review.list_reviews(ctx, article_ref=args.article_id)
+    return spec_for_cmd_id("review.list").handler(ctx, {
+        "article_id": args.article_id,
+    })
 
 
 @with_context
@@ -30,34 +34,42 @@ def _cmd_review_reply(ctx, args):
     reply = _edit_reply(args.to)
     if not reply:
         _out(args, "EMPTY_REPLY")
-    return _review.reply(ctx, article_ref=args.article_id,
-        to_ref=args.to, content=reply)
+    return spec_for_cmd_id("review.reply").handler(ctx, {
+        "article_id": args.article_id, "to": args.to, "content": reply,
+    })
 
 
 @with_context
 def _cmd_review_invite(ctx, args):
     """Invite a user to review an article."""
-    return _review.invite_reviewer(ctx, article_ref=args.article_id,
-        user_ref=args.user)
+    return spec_for_cmd_id("review.invite").handler(ctx, {
+        "article_id": args.article_id, "user": args.user,
+    })
 
 
 @with_context
 def _cmd_review_accept(ctx, args):
     """Accept a pending review invitation."""
-    return _review.accept(ctx, article_ref=args.article_id)
+    return spec_for_cmd_id("review.accept").handler(ctx, {
+        "article_id": args.article_id,
+    })
 
 
 @with_context
 def _cmd_review_decline(ctx, args):
     """Decline a pending review invitation."""
-    return _review.decline(ctx, article_ref=args.article_id)
+    return spec_for_cmd_id("review.decline").handler(ctx, {
+        "article_id": args.article_id,
+    })
 
 
 @with_context
 def _cmd_review_rate(ctx, args):
     """Rate a review's helpfulness."""
-    return _review.rate(ctx, article_ref=args.article_id,
-        reviewer_ref=args.reviewer, helpfulness=args.helpfulness)
+    return spec_for_cmd_id("review.rate").handler(ctx, {
+        "article_id": args.article_id, "reviewer": args.reviewer,
+        "helpfulness": args.helpfulness,
+    })
 
 
 def _edit_reply(to_user: str) -> str:

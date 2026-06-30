@@ -5,26 +5,12 @@
 
 from __future__ import annotations
 
+from peerpedia_core.app.commandspec import spec_for_cmd_id
 from peerpedia_core.app.result import AppResult
 from peerpedia_core.cli.bundle_utils import _resolve_server_url
 from peerpedia_core.cli.decorators import with_context
 from peerpedia_core.cli.display import display_user
 from peerpedia_core.cli.info import console
-import peerpedia_core.app.commands.social as _social
-
-
-# ── Follow / Unfollow ─────────────────────────────────────────────────────
-
-@with_context
-def _cmd_follow(ctx, args):
-    """Follow a user."""
-    return _social.follow(ctx, target_ref=args.user_identifier)
-
-
-@with_context
-def _cmd_unfollow(ctx, args):
-    """Unfollow a user. Idempotent."""
-    return _social.unfollow(ctx, target_ref=args.user_identifier)
 
 
 def _render_user_panels(items: list[dict]) -> None:
@@ -42,10 +28,24 @@ def _render_user_panels(items: list[dict]) -> None:
         )
 
 
+# ── Follow / Unfollow ─────────────────────────────────────────────────────
+
+@with_context
+def _cmd_follow(ctx, args):
+    """Follow a user."""
+    return spec_for_cmd_id("follow").handler(ctx, {"user_identifier": args.user_identifier})
+
+
+@with_context
+def _cmd_unfollow(ctx, args):
+    """Unfollow a user. Idempotent."""
+    return spec_for_cmd_id("unfollow").handler(ctx, {"user_identifier": args.user_identifier})
+
+
 @with_context
 def _cmd_following(ctx, args):
     """List users that *user_id* follows."""
-    result = _social.list_following(ctx, user_ref=args.user)
+    result = spec_for_cmd_id("following").handler(ctx, {"user": args.user})
     items = result.data.get("items", [])
     if items:
         _render_user_panels(items)
@@ -55,7 +55,7 @@ def _cmd_following(ctx, args):
 @with_context
 def _cmd_followers(ctx, args):
     """List followers of *user_id*."""
-    result = _social.list_followers(ctx, user_ref=args.user)
+    result = spec_for_cmd_id("followers").handler(ctx, {"user": args.user})
     items = result.data.get("items", [])
     if items:
         _render_user_panels(items)
@@ -67,19 +67,21 @@ def _cmd_followers(ctx, args):
 @with_context
 def _cmd_alias_set(ctx, args):
     """Set an alias for a followed user."""
-    return _social.alias(ctx, user_ref=args.user_identifier, alias=args.alias)
+    return spec_for_cmd_id("alias.set").handler(ctx, {
+        "user_identifier": args.user_identifier, "alias": args.alias,
+    })
 
 
 @with_context
 def _cmd_alias_remove(ctx, args):
     """Remove an alias for a user."""
-    return _social.unalias(ctx, user_ref=args.user_identifier)
+    return spec_for_cmd_id("alias.remove").handler(ctx, {"user_identifier": args.user_identifier})
 
 
 @with_context
 def _cmd_alias_list(ctx, args):
     """List all aliases for the current user."""
-    return _social.alias_list(ctx)
+    return spec_for_cmd_id("alias.list").handler(ctx, {})
 
 
 # ── Bookmark ──────────────────────────────────────────────────────────────
@@ -87,13 +89,13 @@ def _cmd_alias_list(ctx, args):
 @with_context
 def _cmd_bookmark_add(ctx, args):
     """Bookmark an article."""
-    return _social.bookmark(ctx, article_ref=args.article_id)
+    return spec_for_cmd_id("bookmark.add").handler(ctx, {"article_id": args.article_id})
 
 
 @with_context
 def _cmd_bookmark_remove(ctx, args):
     """Remove a bookmark."""
-    return _social.unbookmark(ctx, article_ref=args.article_id)
+    return spec_for_cmd_id("bookmark.remove").handler(ctx, {"article_id": args.article_id})
 
 
 # ── Share ─────────────────────────────────────────────────────────────────
@@ -101,21 +103,23 @@ def _cmd_bookmark_remove(ctx, args):
 @with_context
 def _cmd_share_add(ctx, args):
     """Share an article — public recommendation visible to followers."""
-    return _social.share(ctx, article_ref=args.article_id,
-        to_ref=getattr(args, "to", None),
-        comment=getattr(args, "comment", None))
+    return spec_for_cmd_id("share.add").handler(ctx, {
+        "article_id": args.article_id,
+        "to": getattr(args, "to", None),
+        "comment": getattr(args, "comment", None),
+    })
 
 
 @with_context
 def _cmd_share_list(ctx, args):
     """List shares from followed users."""
-    return _social.share_list(ctx, mine=getattr(args, "mine", False))
+    return spec_for_cmd_id("share.list").handler(ctx, {"mine": getattr(args, "mine", False)})
 
 
 @with_context
 def _cmd_share_remove(ctx, args):
     """Remove a share (un-share an article)."""
-    return _social.unshare(ctx, article_ref=args.article_id)
+    return spec_for_cmd_id("share.remove").handler(ctx, {"article_id": args.article_id})
 
 
 # ── School ────────────────────────────────────────────────────────────────
@@ -126,12 +130,13 @@ def _cmd_school(ctx, args):
     limit = getattr(args, "limit", 20) or 20
     local = getattr(args, "local", False)
     server = _resolve_server_url(args) if not local else ""
-    result = _social.school(ctx, limit=limit, local=local, server=server)
+    result = spec_for_cmd_id("school").handler(ctx, {
+        "limit": limit, "local": local, "server": server,
+    })
     items = result.data.get("items", [])
     if not items:
         console.print("[muted]No users found.[/]")
         return AppResult(code="", data=None, params=result.params, notices=result.notices)
-    # items are ORM objects (local) or dicts (remote) — normalize to dicts
     if hasattr(items[0], "name"):
         users = [{"name": u.name, "id": u.id,
                   "follower_count": getattr(u, "follower_count", 0)} for u in items]

@@ -9,6 +9,11 @@ import argparse
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from peerpedia_core.app.commandspec import (
+    COMMAND_GROUPS, TOP_LEVEL_COMMANDS, _UNSET,
+    ArgSpec as SharedArgSpec,
+    CommandSpec as SharedCommandSpec, CommandGroupSpec as SharedCommandGroupSpec,
+)
 from peerpedia_core.cli.dispatch import dispatch
 from peerpedia_core.types.scores import SCORE_FORMAT_EXAMPLE, _SCORE_DIMS_LIST
 
@@ -18,6 +23,71 @@ _HELP_DIR = Path(__file__).resolve().parent / "help"
 def _load_help(name: str) -> str:
     path = _HELP_DIR / f"{name}.txt"
     return path.read_text() if path.is_file() else ""
+
+
+def _shared_arg_to_cli(arg: SharedArgSpec) -> ArgSpec:
+    """Convert a shared ``ArgSpec`` to CLI's argparse-oriented ``ArgSpec``."""
+    name = arg.name
+    if arg.positional:
+        args: tuple[str, ...] = (name,)
+    elif not arg.takes_value:
+        args = (f"--{name.replace('_', '-')}",)
+    else:
+        args = (f"--{name.replace('_', '-')}",)
+
+    kwargs: dict = {}
+    if arg.help:
+        kwargs["help"] = arg.help
+    if arg.required:
+        kwargs["required"] = True
+    if arg.type is not None:
+        kwargs["type"] = arg.type
+    if arg.choices:
+        kwargs["choices"] = arg.choices
+    if arg.metavar:
+        kwargs["metavar"] = arg.metavar
+    if arg.default is not _UNSET:
+        kwargs["default"] = arg.default
+    if not arg.takes_value and not arg.positional:
+        kwargs["action"] = "store_true"
+    # Special case: --from → dest="from_" (Python keyword avoidance)
+    if name == "from_" and not arg.positional:
+        kwargs["dest"] = "from_"
+
+    return ArgSpec(args=args, kwargs=kwargs)
+
+
+def _shared_cmd_to_cli(cs: SharedCommandSpec) -> Command:
+    """Convert a shared ``CommandSpec`` to CLI's ``Command``."""
+    if cs.action is not None:
+        name = cs.action
+    elif cs.group:
+        name = ""  # lives directly on group parser
+    else:
+        name = cs.cmd_id  # top-level command
+    return Command(
+        name=name,
+        cmd_id=cs.cmd_id,
+        args=[_shared_arg_to_cli(a) for a in cs.args],
+        help_file=cs.help_file,
+    )
+
+
+def _build_commands() -> list[CommandGroup | Command]:
+    """Build CLI's ``COMMANDS`` list from the shared command specs."""
+    result: list[CommandGroup | Command] = []
+
+    for gs in COMMAND_GROUPS:
+        result.append(CommandGroup(
+            name=gs.name,
+            help=gs.help,
+            commands=[_shared_cmd_to_cli(c) for c in gs.commands],
+        ))
+
+    for cs in TOP_LEVEL_COMMANDS:
+        result.append(_shared_cmd_to_cli(cs))
+
+    return result
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -54,246 +124,7 @@ class CommandGroup:
 # Command definitions
 # ═══════════════════════════════════════════════════════════════════════════════
 
-COMMANDS: list[CommandGroup | Command] = [
-    # ── Groups ────────────────────────────────────────────────────────────
-    CommandGroup("account", "Account management", [
-        Command("register", "account.register", [
-            ArgSpec(("--name",), {"required": True, "help": "Your display name"}),
-            ArgSpec(("--password",), {"help": "Password (omit for interactive prompt; or set PEERPEDIA_PASSWORD env var)"}),
-        ], help_file="account_register"),
-        Command("login", "account.login", [
-            ArgSpec(("--name",), {"required": True, "help": "Your display name"}),
-            ArgSpec(("--password",), {"help": "Password (omit for interactive prompt; or set PEERPEDIA_PASSWORD env var)"}),
-            ArgSpec(("--peer",), {"help": "Peer server URL for remote bootstrap on a new device"}),
-            ArgSpec(("--user-id",), {"help": "User UUID for remote bootstrap (needed on new devices)"}),
-        ], help_file="account_login"),
-        Command("recover", "account.recover", [
-            ArgSpec(("--name",), {"help": "Your display name"}),
-            ArgSpec(("--user-id",), {"help": "Your user ID (UUID)"}),
-        ], help_file="account_recover"),
-        Command("whoami", "account.whoami", [
-            ArgSpec(("--verbose",), {"action": "store_true", "help": "Show user ID, public key, and salt for device bootstrap"}),
-        ], help_file="account_whoami"),
-        Command("bootstrap", "account.bootstrap", [
-            ArgSpec(("--from",), {"required": True, "dest": "from_", "metavar": "JSON",
-                     "help": "JSON blob from 'account whoami --verbose --json'"}),
-            ArgSpec(("--peer",), {"help": "Peer URL for data sync after bootstrap"}),
-        ], help_file="account_bootstrap"),
-        Command("delete", "account.delete", [], help_file="account_delete"),
-        Command("search", "account.search", [
-            ArgSpec(("query",), {"help": "Search query (partial name, case-insensitive)"}),
-        ], help_file="account_search"),
-    ]),
-    CommandGroup("article", "Article management", [
-        Command("create", "article.create", [
-            ArgSpec(("--title",), {"required": True, "help": "Article title"}),
-            ArgSpec(("--format",), {"default": "markdown", "choices": ["markdown", "typst"], "help": "Source format"}),
-            ArgSpec(("--content",), {"help": "Article body (inline; omit to open editor)"}),
-            ArgSpec(("--no-editor",), {"action": "store_true", "help": "Create empty article without opening editor"}),
-            ArgSpec(("--publish",), {"action": "store_true", "help": "Publish immediately after creation"}),
-            ArgSpec(("--scores",), {"help": f'Self-review scores ({_SCORE_DIMS_LIST}), e.g. "{SCORE_FORMAT_EXAMPLE}"'}),
-        ], help_file="article_create"),
-        Command("show", "article.show", [
-            ArgSpec(("id",), {"metavar": "ref", "help": "Article UUID, prefix, or title keyword"}),
-            ArgSpec(("--show",), {"choices": ["meta", "full"], "default": "meta",
-                                  "help": "Display: meta (default), full (+content)"}),
-        ], help_file="article_show"),
-        Command("list", "article.list", [
-            ArgSpec(("--search",), {"help": "Fuzzy title search (case-insensitive)"}),
-            ArgSpec(("--status",), {"choices": ["draft", "sedimentation", "published"], "help": "Filter by status"}),
-            ArgSpec(("--feed",), {"action": "store_true", "help": "Articles from followed users"}),
-            ArgSpec(("--mine",), {"action": "store_true", "help": "My articles"}),
-            ArgSpec(("--bookmarked",), {"action": "store_true", "help": "My bookmarked articles"}),
-            ArgSpec(("--user",), {"help": "Show articles by this user (requires --server for remote fetch)"}),
-            ArgSpec(("--server",), {"help": "Peer server URL for remote --user query"}),
-        ], help_file="article_list"),
-        Command("edit", "article.edit", [
-            ArgSpec(("id",), {"metavar": "ref", "help": "Article UUID, prefix, or title keyword"}),
-            ArgSpec(("--content",), {"help": "New article body (omit to open editor)"}),
-            ArgSpec(("--title",), {"help": "New article title"}),
-            ArgSpec(("--no-editor",), {"action": "store_true", "help": "Skip editor; only apply --title if given"}),
-        ], help_file="article_edit"),
-        Command("publish", "article.publish", [
-            ArgSpec(("id",), {"metavar": "ref", "help": "Article UUID, prefix, or title keyword"}),
-            ArgSpec(("--scores",), {"required": True,
-                     "help": f'Self-review scores ({_SCORE_DIMS_LIST}), e.g. "{SCORE_FORMAT_EXAMPLE}"'}),
-        ], help_file="article_publish"),
-        Command("delete", "article.delete", [
-            ArgSpec(("id",), {"metavar": "ref", "help": "Article UUID, prefix, or title keyword"}),
-            ArgSpec(("--force",), {"action": "store_true", "help": "Delete without confirmation"}),
-        ], help_file="article_delete"),
-        Command("scan", "article.scan", [], help_file="article_scan"),
-        Command("diff", "article.diff", [
-            ArgSpec(("id",), {"metavar": "ref", "help": "Article UUID, prefix, or title keyword"}),
-            ArgSpec(("hash1",), {"help": "Old commit (hash, HEAD, or ~N)"}),
-            ArgSpec(("hash2",), {"help": "New commit (hash, HEAD, or ~N)"}),
-        ], help_file="article_diff"),
-    ]),
-    CommandGroup("review", "Submit, invite, rate, and list peer reviews", [
-        Command("submit", "review.submit", [
-            ArgSpec(("article_id",), {"metavar": "ref", "help": "Article UUID, prefix, or title keyword"}),
-            ArgSpec(("--scores",), {"required": True,
-                     "help": f'Five-dim scores ({_SCORE_DIMS_LIST}), e.g. "{SCORE_FORMAT_EXAMPLE}"'}),
-            ArgSpec(("--comment",), {"required": True, "help": "Review comment (min 200 characters)"}),
-        ], help_file="review_submit"),
-        Command("list", "review.list", [
-            ArgSpec(("article_id",), {"metavar": "ref", "help": "Article UUID, prefix, or title keyword"}),
-            ArgSpec(("--show",), {"choices": ["meta", "full"], "default": "meta",
-                                  "help": "Display: meta (scores, default) or full (scores + threads)"}),
-        ], help_file="review_list"),
-        Command("reply", "review.reply", [
-            ArgSpec(("article_id",), {"metavar": "ref", "help": "Article UUID, prefix, or title keyword"}),
-            ArgSpec(("--to",), {"required": True, "help": "Reviewer (@name, UUID, or prefix) to reply to"}),
-        ], help_file="review_reply"),
-        Command("invite", "review.invite", [
-            ArgSpec(("article_id",), {"metavar": "ref", "help": "Article UUID, prefix, or title keyword"}),
-            ArgSpec(("--user",), {"required": True, "help": "User to invite (@name, UUID, or prefix)"}),
-        ], help_file="review_invite"),
-        Command("accept", "review.accept", [
-            ArgSpec(("article_id",), {"metavar": "ref", "help": "Article UUID, prefix, or title keyword"}),
-        ], help_file="review_accept"),
-        Command("decline", "review.decline", [
-            ArgSpec(("article_id",), {"metavar": "ref", "help": "Article UUID, prefix, or title keyword"}),
-        ], help_file="review_decline"),
-        Command("rate", "review.rate", [
-            ArgSpec(("article_id",), {"metavar": "ref", "help": "Article UUID, prefix, or title keyword"}),
-            ArgSpec(("--reviewer",), {"required": True, "help": "Reviewer to rate (@name, UUID, or prefix)"}),
-            ArgSpec(("--helpfulness",), {"required": True, "type": int, "choices": [1, 2, 3, 4, 5],
-                     "help": "Helpfulness score 1-5"}),
-        ], help_file="review_rate"),
-    ]),
-    CommandGroup("merge", "Propose, accept, or withdraw merge proposals", [
-        Command("propose", "merge.propose", [
-            ArgSpec(("fork_id",), {"help": "Your fork's article ID"}),
-            ArgSpec(("--target",), {"required": True, "help": "Original article ID to merge into"}),
-        ], help_file="merge_propose"),
-        Command("accept", "merge.accept", [
-            ArgSpec(("proposal_id",), {"help": "Merge proposal ID"}),
-            ArgSpec(("--target",), {"required": True, "help": "Target article ID"}),
-        ], help_file="merge_accept"),
-        Command("withdraw", "merge.withdraw", [
-            ArgSpec(("proposal_id",), {"help": "Merge proposal ID to withdraw"}),
-        ], help_file="merge_withdraw"),
-    ]),
-    CommandGroup("alias", "Set or manage aliases for followed users", [
-        Command("set", "alias.set", [
-            ArgSpec(("user_identifier",), {"help": "User ID, @name, or UUID prefix"}),
-            ArgSpec(("alias",), {"help": "Alias to assign"}),
-        ], help_file="alias_set"),
-        Command("remove", "alias.remove", [
-            ArgSpec(("user_identifier",), {"help": "User ID, @name, or UUID prefix"}),
-        ], help_file="alias_remove"),
-        Command("list", "alias.list", [], help_file="alias_list"),
-    ]),
-    CommandGroup("share", "Share or recommend articles to followers", [
-        Command("add", "share.add", [
-            ArgSpec(("article_id",), {"help": "Article ID to share"}),
-            ArgSpec(("--to",), {"help": "Target user (@name, @alias, or UUID)"}),
-            ArgSpec(("--comment",), {"help": "Optional comment on the share"}),
-        ], help_file="share_add"),
-        Command("list", "share.list", [
-            ArgSpec(("--mine",), {"action": "store_true", "help": "Show my shares instead of feed"}),
-        ], help_file="share_list"),
-        Command("remove", "share.remove", [
-            ArgSpec(("article_id",), {"help": "Article ID to unshare"}),
-        ], help_file="share_remove"),
-    ]),
-    CommandGroup("bookmark", "Bookmark articles for later reading", [
-        Command("add", "bookmark.add", [
-            ArgSpec(("article_id",), {"metavar": "ref", "help": "Article UUID, prefix, or title keyword"}),
-        ], help_file="bookmark_add"),
-        Command("remove", "bookmark.remove", [
-            ArgSpec(("article_id",), {"metavar": "ref", "help": "Article UUID, prefix, or title keyword"}),
-        ], help_file="bookmark_remove"),
-    ]),
-    CommandGroup("following", "View who a user follows", [
-        Command("", "following", [
-            ArgSpec(("--user",), {"required": True, "help": "User ID to query"}),
-            ArgSpec(("--local",), {"action": "store_true", "help": "Read from local DB"}),
-            ArgSpec(("--server",), {"help": "Peer server URL"}),
-        ]),
-    ]),
-    CommandGroup("followers", "View who follows a user", [
-        Command("", "followers", [
-            ArgSpec(("--user",), {"required": True, "help": "User ID to query"}),
-            ArgSpec(("--local",), {"action": "store_true", "help": "Read from local DB"}),
-            ArgSpec(("--server",), {"help": "Peer server URL"}),
-        ]),
-    ]),
-    CommandGroup("server", "Run the PeerPedia server", [
-        Command("start", "server.start", [
-            ArgSpec(("--host",), {"default": "127.0.0.1", "help": "Bind address"}),
-            ArgSpec(("--port",), {"default": 8080, "type": int, "help": "Listen port"}),
-            ArgSpec(("--public-url",), {"default": "", "help": "Public URL for peer registration (e.g. https://peer.example.com)"}),
-        ], help_file="server_start"),
-    ]),
-    CommandGroup("sync", "Push/pull articles to/from a peer server", [
-        Command("status", "sync.status", [
-            ArgSpec(("--server",), {"help": "Peer server URL (or set PEERPEDIA_SERVER env var)"}),
-        ], help_file="sync_status"),
-        Command("pull", "sync.pull", [
-            ArgSpec(("--server",), {"help": "Peer server URL (or set PEERPEDIA_SERVER env var)"}),
-        ], help_file="sync_pull"),
-        Command("discover", "sync.discover", [
-            ArgSpec(("--depth",), {"type": int, "default": 1, "help": "Follow graph depth (default 1)"}),
-            ArgSpec(("--max-users",), {"type": int, "default": 100, "help": "Max users to traverse"}),
-        ], help_file="sync_discover"),
-    ]),
-    CommandGroup("notifications", "View and manage notifications", [
-        Command("", "notifications", [
-            ArgSpec(("--all",), {"action": "store_true", "help": "Show all notifications (not just unread)"}),
-        ], help_file="notifications"),
-        Command("read", "notifications.read", [
-            ArgSpec(("notification_id",), {"help": "Notification ID to mark as read"}),
-        ], help_file="notifications_read"),
-    ]),
-    CommandGroup("maintainer", "Manage article co-authors (maintainers)", [
-        Command("add", "maintainer.add", [
-            ArgSpec(("article_id",), {"help": "Article ID"}),
-            ArgSpec(("--target-user",), {"required": True, "help": "User ID to add as maintainer"}),
-        ], help_file="maintainer_add"),
-        Command("remove", "maintainer.remove", [
-            ArgSpec(("article_id",), {"help": "Article ID"}),
-            ArgSpec(("--target-user",), {"required": True, "help": "User ID to remove from maintainers"}),
-        ], help_file="maintainer_remove"),
-        Command("list", "maintainer.list", [
-            ArgSpec(("article_id",), {"help": "Article ID"}),
-        ], help_file="maintainer_list"),
-        Command("consent", "maintainer.consent", [
-            ArgSpec(("article_id",), {"help": "Article ID to consent to publish/merge"}),
-        ], help_file="maintainer_consent"),
-        Command("revoke", "maintainer.revoke", [
-            ArgSpec(("article_id",), {"help": "Article ID to revoke consent"}),
-        ], help_file="maintainer_revoke"),
-    ]),
-
-    # ── Top-level commands ────────────────────────────────────────────────
-    Command("schema", "schema", [
-        ArgSpec(("command",), {"nargs": "?", "help": "Specific command name to describe"}),
-    ]),
-    Command("fork", "fork", [
-        ArgSpec(("article_id",), {"help": "Published article ID to fork"}),
-    ], help_file="fork"),
-    Command("compile", "compile", [
-        ArgSpec(("id",), {"metavar": "ref", "help": "Article UUID, prefix, or title keyword"}),
-        ArgSpec(("--format",), {"choices": ["pdf", "svg", "png", "html"], "help": "Output format (default: pdf)"}),
-    ], help_file="compile"),
-    Command("follow", "follow", [
-        ArgSpec(("user_identifier",), {"help": "User ID, @name, or UUID prefix"}),
-    ], help_file="follow"),
-    Command("unfollow", "unfollow", [
-        ArgSpec(("user_identifier",), {"help": "User ID, @name, or UUID prefix"}),
-    ], help_file="unfollow"),
-    Command("mother", "mother", [], help_file="mother"),
-    Command("school", "school", [
-        ArgSpec(("--limit",), {"type": int, "default": 20, "help": "Max users to show"}),
-        ArgSpec(("--server",), {"help": "Peer server URL (or set PEERPEDIA_SERVER env var)"}),
-        ArgSpec(("--local",), {"action": "store_true", "help": "Read from local DB instead of peer server"}),
-    ], help_file="school"),
-    Command("help", "help", [
-        ArgSpec(("topic",), {"nargs": "?", "help": "Command or topic to get help about (default: meta help)"}),
-    ]),
-]
+COMMANDS: list[CommandGroup | Command] = _build_commands()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

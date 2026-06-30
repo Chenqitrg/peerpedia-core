@@ -10,7 +10,7 @@ from peerpedia_core.config.params import params
 from peerpedia_core.rules.articles import assert_can_submit_review, assert_not_folded
 from peerpedia_core.rules.reviews import assert_valid_review
 from peerpedia_core.storage.db.guards import require_article, require_user
-from peerpedia_core.storage.db.crud_article import list_author_ids
+from peerpedia_core.storage.db.crud_author import list_author_ids
 from peerpedia_core.storage.db.crud_review import (
     get_accepted_invitation, update_review_status, upsert_review,
 )

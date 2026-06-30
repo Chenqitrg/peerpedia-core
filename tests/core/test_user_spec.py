@@ -82,7 +82,7 @@ class TestFollow:
             create_user, follow_user, get_followers, get_following,
             is_following, unfollow_user,
         )
-        from peerpedia_core.storage.db.crud_user import get_follower_count, get_following_count
+        from peerpedia_core.storage.db.crud_follow import get_follower_count, get_following_count
         alice = create_user(db, name="Alice", public_key="00" * 32)
         bob = create_user(db, name="Bob", public_key="11" * 32)
 

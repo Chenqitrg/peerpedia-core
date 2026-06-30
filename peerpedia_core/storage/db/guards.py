@@ -23,7 +23,8 @@ from peerpedia_core.storage.db.crud_merge import get_merge_proposal
 from peerpedia_core.storage.db.crud_review import (
     get_accepted_invitation, get_pending_invitation, get_reviews_for_article,
 )
-from peerpedia_core.storage.db.crud_user import get_user, is_following
+from peerpedia_core.storage.db.crud_user import get_user
+from peerpedia_core.storage.db.crud_follow import is_following
 from peerpedia_core.storage.db.models import (
     ArticleMetaStorage, MergeProposalStorage, ReviewMetaStorage, UserStorage,
 )

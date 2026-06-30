@@ -1,306 +1,132 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""REPL execution engine — command dispatch and result rendering.
+"""REPL execution engine — parse, dispatch, commit, render.
 
-Independent of ``cli/`` dispatch — builds its own ``AppContext`` from
-the REPL's persistent DB session and calls ``app/commands/`` directly.
-No argparse, no ``@with_context``, no ``cli/cmds/``.
+Thin orchestration layer.  Command specs come from ``app/commandspec/``;
+rendering from ``repl/display.py``.  No argparse, no ``@with_context``.
 """
 
 from __future__ import annotations
 
 import logging
+import os
 import shlex
+from typing import Any
 
-from peerpedia_core.app.context import AppContext, build_context
-from peerpedia_core.app.result import AppResult
-from peerpedia_core.cli.display import (
-    display_article_meta, display_diff, display_empty_article_list,
-    display_full_content, display_user, _print_table,
+from peerpedia_core.app.commandspec import (
+    COMMAND_GROUPS, TOP_LEVEL_COMMANDS,
+    ArgSpec, CommandSpec, _UNSET, find_spec,
 )
-from peerpedia_core.cli.info import console
+from peerpedia_core.app.context import build_context
 from peerpedia_core.exceptions import PeerpediaError
-from peerpedia_core.messages import lookup as _lookup
-
-import peerpedia_core.app.commands.account as _account
-import peerpedia_core.app.commands.article as _article
-import peerpedia_core.app.commands.bundle as _bundle
-import peerpedia_core.app.commands.fork as _fork
-import peerpedia_core.app.commands.maintainer as _maintainer
-import peerpedia_core.app.commands.notification as _notify
-import peerpedia_core.app.commands.review as _review
-import peerpedia_core.app.commands.social as _social
-import peerpedia_core.app.commands.sync as _sync
+from peerpedia_core.repl.display import render_error, render_result
+from peerpedia_core.repl.state import console, session_scope
 
 _log = logging.getLogger(__name__)
 
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# Command table — maps (group, action) → handler
-# ═══════════════════════════════════════════════════════════════════════════════
-
-def _cmd_register(ctx: AppContext, args: dict) -> AppResult:
-    from peerpedia_core.editor import get_password as _get_password
-    from argparse import Namespace
-    ns = Namespace(name=args["name"], password=None, json=False, rich=True)
-    password = _get_password(ns, confirm=True)
-    return _account.register(ctx, name=args["name"], password=password)
-
-def _cmd_login(ctx: AppContext, args: dict) -> AppResult:
-    from peerpedia_core.editor import get_password as _get_password
-    from argparse import Namespace
-    ns = Namespace(name=args["name"], password=None, peer=args.get("peer"), user_id=args.get("user_id"), json=False, rich=True)
-    password = _get_password(ns, confirm=False)
-    return _account.login(ctx, name=args["name"], password=password, peer=args.get("peer"), user_id=args.get("user_id"))
-
-def _cmd_account_search(ctx: AppContext, args: dict) -> AppResult:
-    return _account.search_users(ctx, query=args.get("query", ""))
-
-def _cmd_whoami(ctx: AppContext, args: dict) -> AppResult:
-    return _account.whoami(ctx)
-
-def _cmd_article_create(ctx: AppContext, args: dict) -> AppResult:
-    return _article.create(ctx, title=args["title"],
-        format=args.get("format", "markdown"),
-        content=args.get("content", ""),
-        publish=args.get("publish", False),
-        scores_str=args.get("scores"),
-    )
-
-def _cmd_article_show(ctx: AppContext, args: dict) -> AppResult:
-    return _article.show(ctx, article_ref=args["id"], show=args.get("show", "meta"))
-
-def _cmd_article_list(ctx: AppContext, args: dict) -> AppResult:
-    return _article.list_articles(ctx,
-        search_query=args.get("search"),
-        status_arg=args.get("status"),
-        mine=args.get("mine", False),
-        feed=args.get("feed", False),
-        bookmarked=args.get("bookmarked", False),
-        user_ref=args.get("user"),
-        server=args.get("server"),
-        limit=args.get("limit", 20),
-    )
-
-def _cmd_article_edit(ctx: AppContext, args: dict) -> AppResult:
-    return _article.edit(ctx, article_ref=args["id"],
-        content=args.get("content"),
-        title=args.get("title"),
-        message=args.get("message", ""),
-    )
-
-def _cmd_article_publish(ctx: AppContext, args: dict) -> AppResult:
-    return _article.publish(ctx, article_ref=args["id"], scores_str=args["scores"])
-
-def _cmd_article_delete(ctx: AppContext, args: dict) -> AppResult:
-    return _article.delete(ctx, article_ref=args["id"])
-
-def _cmd_article_scan(ctx: AppContext, args: dict) -> AppResult:
-    return _article.scan(ctx)
-
-def _cmd_article_diff(ctx: AppContext, args: dict) -> AppResult:
-    return _article.diff(ctx, article_ref=args["id"],
-        hash1=args.get("hash1"), hash2=args.get("hash2"))
-
-def _cmd_follow(ctx: AppContext, args: dict) -> AppResult:
-    return _social.follow(ctx, target_ref=args["user_identifier"])
-
-def _cmd_unfollow(ctx: AppContext, args: dict) -> AppResult:
-    return _social.unfollow(ctx, target_ref=args["user_identifier"])
-
-def _cmd_following(ctx: AppContext, args: dict) -> AppResult:
-    return _social.list_following(ctx, user_ref=args["user"])
-
-def _cmd_followers(ctx: AppContext, args: dict) -> AppResult:
-    return _social.list_followers(ctx, user_ref=args["user"])
-
-def _cmd_school(ctx: AppContext, args: dict) -> AppResult:
-    return _social.school(ctx, limit=int(args.get("limit", 20)),
-        local=args.get("local", False), server=args.get("server", ""))
-
-def _cmd_bookmark_add(ctx: AppContext, args: dict) -> AppResult:
-    return _social.bookmark(ctx, article_ref=args["article_id"])
-
-def _cmd_bookmark_remove(ctx: AppContext, args: dict) -> AppResult:
-    return _social.unbookmark(ctx, article_ref=args["article_id"])
-
-def _cmd_review_submit(ctx: AppContext, args: dict) -> AppResult:
-    return _review.submit(ctx, article_ref=args["article_id"],
-        scores_str=args["scores"], comment=args.get("comment", ""))
-
-def _cmd_review_list(ctx: AppContext, args: dict) -> AppResult:
-    return _review.list_reviews(ctx, article_ref=args["article_id"])
-
-def _cmd_review_reply(ctx: AppContext, args: dict) -> AppResult:
-    return _review.reply(ctx, article_ref=args["article_id"],
-        to_ref=args["to"], content=args.get("content", ""))
-
-def _cmd_review_invite(ctx: AppContext, args: dict) -> AppResult:
-    return _review.invite_reviewer(ctx, article_ref=args["article_id"], user_ref=args["user"])
-
-def _cmd_review_accept(ctx: AppContext, args: dict) -> AppResult:
-    return _review.accept(ctx, article_ref=args["article_id"])
-
-def _cmd_review_decline(ctx: AppContext, args: dict) -> AppResult:
-    return _review.decline(ctx, article_ref=args["article_id"])
-
-def _cmd_review_rate(ctx: AppContext, args: dict) -> AppResult:
-    return _review.rate(ctx, article_ref=args["article_id"],
-        reviewer_ref=args["reviewer"], helpfulness=int(args["helpfulness"]))
-
-def _cmd_fork(ctx: AppContext, args: dict) -> AppResult:
-    return _fork.fork(ctx, article_ref=args["article_id"])
-
-def _cmd_merge_propose(ctx: AppContext, args: dict) -> AppResult:
-    return _fork.merge_propose(ctx, fork_ref=args.get("fork_id"), target_ref=args["target"])
-
-def _cmd_merge_accept(ctx: AppContext, args: dict) -> AppResult:
-    return _fork.merge_accept(ctx, proposal_ref=args.get("proposal_id"), target_ref=args["target"])
-
-def _cmd_merge_withdraw(ctx: AppContext, args: dict) -> AppResult:
-    return _fork.merge_withdraw(ctx, proposal_ref=args.get("proposal_id"))
-
-def _cmd_notifications(ctx: AppContext, args: dict) -> AppResult:
-    return _notify.list_notifications(ctx, unread_only=not args.get("all", False))
-
-def _cmd_notifications_read(ctx: AppContext, args: dict) -> AppResult:
-    return _notify.mark_read_notification(ctx, notification_id=args["notification_id"])
-
-def _cmd_sync_status(ctx: AppContext, args: dict) -> AppResult:
-    return _bundle.sync_status(ctx, server=args.get("server", ""))
-
-def _cmd_sync_pull(ctx: AppContext, args: dict) -> AppResult:
-    return _bundle.sync_pull(ctx, server=args.get("server", ""))
-
-def _cmd_sync_discover(ctx: AppContext, args: dict) -> AppResult:
-    return _bundle.sync_discover(ctx, server=args.get("server", ""),
-        depth=int(args.get("depth", 1)))
-
-def _cmd_maintainer_add(ctx: AppContext, args: dict) -> AppResult:
-    return _maintainer.add(ctx, article_ref=args["article_id"], target_ref=args["target_user"])
-
-def _cmd_maintainer_remove(ctx: AppContext, args: dict) -> AppResult:
-    return _maintainer.remove(ctx, article_ref=args["article_id"], target_ref=args["target_user"])
-
-def _cmd_maintainer_list(ctx: AppContext, args: dict) -> AppResult:
-    return _maintainer.list_article_maintainers(ctx, article_ref=args["article_id"])
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# Command table
-# ═══════════════════════════════════════════════════════════════════════════════
-
-# (group, action) → (handler_fn, {arg_name: takes_value})
-# takes_value: True = --key value or positional, False = --flag (boolean)
-COMMAND_TABLE: dict[tuple[str, str], tuple[callable, dict[str, bool]]] = {
-    # Account
-    ("account", "register"):     (_cmd_register,         {"name": True}),
-    ("account", "login"):        (_cmd_login,            {"name": True, "peer": True, "user_id": True}),
-    ("account", "whoami"):       (_cmd_whoami,           {}),
-    ("account", "search"):       (_cmd_account_search,   {"query": True}),
-    # Article
-    ("article", "create"):       (_cmd_article_create,   {"title": True, "format": True, "content": True, "publish": False, "scores": True}),
-    ("article", "show"):         (_cmd_article_show,     {"id": True, "show": True}),
-    ("article", "list"):         (_cmd_article_list,     {"search": True, "status": True, "mine": False, "feed": False, "bookmarked": False, "user": True, "server": True, "limit": True}),
-    ("article", "edit"):         (_cmd_article_edit,     {"id": True, "content": True, "title": True, "message": True}),
-    ("article", "publish"):      (_cmd_article_publish,  {"id": True, "scores": True}),
-    ("article", "delete"):       (_cmd_article_delete,   {"id": True}),
-    ("article", "scan"):         (_cmd_article_scan,     {}),
-    ("article", "diff"):         (_cmd_article_diff,     {"id": True, "hash1": True, "hash2": True}),
-    # Social
-    ("follow", None):            (_cmd_follow,           {"user_identifier": True}),
-    ("unfollow", None):          (_cmd_unfollow,         {"user_identifier": True}),
-    ("following", None):         (_cmd_following,        {"user": True}),
-    ("followers", None):         (_cmd_followers,        {"user": True}),
-    ("school", None):            (_cmd_school,           {"limit": True, "local": False, "server": True}),
-    ("bookmark", "add"):         (_cmd_bookmark_add,     {"article_id": True}),
-    ("bookmark", "remove"):      (_cmd_bookmark_remove,  {"article_id": True}),
-    # Review
-    ("review", "submit"):        (_cmd_review_submit,    {"article_id": True, "scores": True, "comment": True}),
-    ("review", "list"):          (_cmd_review_list,      {"article_id": True}),
-    ("review", "reply"):         (_cmd_review_reply,     {"article_id": True, "to": True, "content": True}),
-    ("review", "invite"):        (_cmd_review_invite,    {"article_id": True, "user": True}),
-    ("review", "accept"):        (_cmd_review_accept,    {"article_id": True}),
-    ("review", "decline"):       (_cmd_review_decline,   {"article_id": True}),
-    ("review", "rate"):          (_cmd_review_rate,      {"article_id": True, "reviewer": True, "helpfulness": True}),
-    # Fork / Merge
-    ("fork", None):              (_cmd_fork,             {"article_id": True}),
-    ("merge", "propose"):        (_cmd_merge_propose,    {"fork_id": True, "target": True}),
-    ("merge", "accept"):         (_cmd_merge_accept,     {"proposal_id": True, "target": True}),
-    ("merge", "withdraw"):       (_cmd_merge_withdraw,   {"proposal_id": True}),
-    # Notifications
-    ("notifications", None):     (_cmd_notifications,    {"all": False}),
-    ("notifications", "read"):   (_cmd_notifications_read, {"notification_id": True}),
-    # Sync
-    ("sync", "status"):          (_cmd_sync_status,      {"server": True}),
-    ("sync", "pull"):            (_cmd_sync_pull,        {"server": True}),
-    ("sync", "discover"):        (_cmd_sync_discover,    {"depth": True, "max_users": True, "server": True}),
-    # Maintainer
-    ("maintainer", "add"):       (_cmd_maintainer_add,   {"article_id": True, "target_user": True}),
-    ("maintainer", "remove"):    (_cmd_maintainer_remove,{"article_id": True, "target_user": True}),
-    ("maintainer", "list"):      (_cmd_maintainer_list,  {"article_id": True}),
-}
+# Commands that need interactive password prompting when password is missing
+_PASSWORD_COMMANDS = {"account.register", "account.login", "account.recover"}
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Parser
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def _parse_args(raw_args: list[str], arg_spec: dict[str, bool]) -> dict[str, str | bool]:
-    """Parse shlex-split args into a dict based on *arg_spec*.
+def _parse_args(raw_args: list[str], spec: CommandSpec) -> dict[str, Any]:
+    """Parse shlex-split args into a dict based on *spec.args*.
 
-    Positional values are assigned in order; flags (bool) are set True
-    when present; ``--key=value`` and ``--key value`` are both supported.
+    Supports ``--key=value``, ``--key value``, ``--flag`` (bool), and
+    positional args.  Applies type coercion and defaults from ArgSpec.
     """
-    result: dict[str, str | bool] = {}
-    positional: list[str] = []
+    result: dict[str, Any] = {}
+    positional_queue = [a for a in spec.args if a.positional]
+    pos_idx = 0
     i = 0
+
     while i < len(raw_args):
         a = raw_args[i]
         if a.startswith("--"):
-            # --key=value or --key
-            if "=" in a:
-                key, val = a[2:].split("=", 1)
-                key = key.replace("-", "_")
-                if key in arg_spec:
-                    result[key] = val
+            key, val, consumed = _parse_flag(a, raw_args, i, spec)
+            if key is not None:
+                result[key] = val
+                i += consumed
             else:
-                key = a[2:].replace("-", "_")
-                if key in arg_spec:
-                    if arg_spec[key]:
-                        # Takes a value
-                        i += 1
-                        if i < len(raw_args) and not raw_args[i].startswith("--"):
-                            result[key] = raw_args[i]
-                    else:
-                        result[key] = True
+                i += 1
         else:
-            positional.append(a)
-        i += 1
+            if pos_idx < len(positional_queue):
+                arg_spec = positional_queue[pos_idx]
+                result[arg_spec.name] = _coerce(a, arg_spec)
+                pos_idx += 1
+            i += 1
 
-    # Assign positional values to required args in order
-    pos_names = [k for k, required in arg_spec.items() if required and k not in result]
-    for j, val in enumerate(positional):
-        if j < len(pos_names):
-            result[pos_names[j]] = val
+    # Apply defaults for args not in result
+    for arg in spec.args:
+        if arg.name not in result:
+            if arg.default is not _UNSET:
+                result[arg.name] = arg.default
+            elif arg.takes_value is False:
+                result[arg.name] = False
 
-    # Set bool flags (takes_value=False) to False if not present.
-    # Value args (takes_value=True) are left unset — the handler provides defaults.
-    for k, takes_value in arg_spec.items():
-        if not takes_value and k not in result:
-            result[k] = False
+    # Resolve PEERPEDIA_SERVER env var for server args
+    if "server" in result and not result["server"]:
+        env_server = os.environ.get("PEERPEDIA_SERVER", "")
+        if env_server:
+            result["server"] = env_server
 
     return result
+
+
+def _parse_flag(a: str, raw_args: list[str], i: int, spec: CommandSpec
+                ) -> tuple[str | None, Any, int]:
+    """Parse a ``--flag`` token.  Returns (key, value, tokens_consumed)."""
+    if "=" in a:
+        key_part, val = a[2:].split("=", 1)
+        key = key_part.replace("-", "_")
+    else:
+        key = a[2:].replace("-", "_")
+        val = None
+
+    for arg in spec.args:
+        if arg.name == key:
+            if arg.takes_value:
+                if val is not None:
+                    return key, _coerce(val, arg), 1
+                if i + 1 < len(raw_args) and not raw_args[i + 1].startswith("--"):
+                    return key, _coerce(raw_args[i + 1], arg), 2
+            else:
+                return key, True, 1
+
+    return None, None, 1
+
+
+def _coerce(val: str, arg: ArgSpec) -> Any:
+    """Coerce a string value to *arg.type*, with optional choices validation."""
+    if arg.type is None:
+        coerced = val
+    else:
+        try:
+            coerced = arg.type(val)
+        except (ValueError, TypeError):
+            raise PeerpediaError("BAD_ARG_TYPE", context={
+                "arg": arg.name, "expected": arg.type.__name__, "got": val,
+            })
+    if arg.choices and coerced not in arg.choices:
+        raise PeerpediaError("BAD_ARG_CHOICE", context={
+            "arg": arg.name, "got": str(coerced),
+            "choices": ", ".join(str(c) for c in arg.choices),
+        })
+    return coerced
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Engine
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def execute(cmd_str: str, db) -> bool:
-    """Parse and execute a single REPL command against *db*.
+def execute(cmd_str: str) -> bool:
+    """Parse and execute a single REPL command.
 
+    Creates a fresh DB session per command (unit-of-work pattern).
     Returns False to exit the REPL, True to continue.
     """
     cmd_str = cmd_str.strip()
@@ -319,133 +145,72 @@ def execute(cmd_str: str, db) -> bool:
     action: str | None = None
     rest = parts[1:]
 
-    if len(parts) >= 2 and (group, parts[1]) in COMMAND_TABLE:
+    if len(parts) >= 2 and find_spec(group, parts[1]):
         action = parts[1]
         rest = parts[2:]
-    elif (group, None) in COMMAND_TABLE:
+    elif find_spec(group, None):
         pass  # top-level command
     else:
-        # Try compound lookup for group+action combos where action is required
         found = False
         if len(parts) >= 2:
-            for (g, a), _ in COMMAND_TABLE.items():
-                if g == group and a is not None:
-                    action = a
+            for grp_spec in _iter_all_specs():
+                if grp_spec.group == group and grp_spec.action == parts[1]:
+                    action = parts[1]
+                    rest = parts[2:]
                     found = True
                     break
-        if not found and (group, None) not in COMMAND_TABLE:
+        if not found and find_spec(group, None) is None:
             console.print(f"[error]✗ Unknown command: {cmd_str}[/]. Try :help")
             return True
 
-    key = (group, action)
-    if key not in COMMAND_TABLE:
+    spec = find_spec(group, action)
+    if spec is None:
         console.print(f"[error]✗ Unknown command: {cmd_str}[/]. Try :help")
         return True
 
-    handler, arg_spec = COMMAND_TABLE[key]
-    args = _parse_args(rest, arg_spec)
+    if spec.frontend == "cli" or spec.handler is None:
+        console.print(f"[muted]{spec.cmd_id} is not available in REPL.[/]")
+        return True
 
-    # ── Build context ─────────────────────────────────────────────────────
-    ctx = build_context(db)
-
-    # ── Execute ───────────────────────────────────────────────────────────
+    # ── Parse args ────────────────────────────────────────────────────────
     try:
-        result = handler(ctx, args)
-        db.commit()
+        args = _parse_args(rest, spec)
     except PeerpediaError as e:
-        db.rollback()
-        _render_error(e)
+        render_error(e)
+        return True
+
+    # ── Interactive password prompt ───────────────────────────────────────
+    if spec.cmd_id in _PASSWORD_COMMANDS and "password" not in args:
+        try:
+            from peerpedia_core.editor import get_password as _get_password
+            from argparse import Namespace
+            ns = Namespace(name=args.get("name", ""), password=None, json=False, rich=True)
+            confirm = (spec.cmd_id == "account.register")
+            args["password"] = _get_password(ns, confirm=confirm)
+        except (EOFError, KeyboardInterrupt):
+            console.print("\n[muted]Cancelled.[/]")
+            return True
+
+    # ── Execute (per-command session) ────────────────────────────────────
+    try:
+        with session_scope() as db:
+            ctx = build_context(db)
+            result = spec.handler(ctx, args)
+    except PeerpediaError as e:
+        render_error(e)
         return True
     except Exception as e:
-        db.rollback()
         _log.exception("REPL command failed: %s", cmd_str)
         console.print(f"[error]✗ Internal error: {e}[/]")
         return True
 
     # ── Render ────────────────────────────────────────────────────────────
-    _render(result)
+    render_result(result)
     return True
 
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# Rendering
-# ═══════════════════════════════════════════════════════════════════════════════
-
-def _render(result: AppResult) -> None:
-    """Render an ``AppResult`` — Rich output, no JSON mode in REPL."""
-    # Notices first
-    for notice in result.notices:
-        _out_notice(notice)
-
-    code, m = _lookup(result.code)
-    if m.kind.name in ("SUCCESS", "INFO") and m.text:
-        # Success message
-        console.print(f"✓ {m.text.format(**result.params)}" if result.params else f"✓ {m.text}")
-        return
-
-    data = result.data
-    if not data:
-        return
-
-    # Render data based on structure
-    if isinstance(data, list) and data and isinstance(data[0], dict):
-        _print_table(
-            list(data[0].keys()),
-            [list(d.values()) for d in data],
-        )
-    elif isinstance(data, dict):
-        items = data.get("items")
-        unread = data.get("unread_count")
-        if isinstance(items, list):
-            if items and isinstance(items[0], dict):
-                # List of user-like dicts
-                for u in items:
-                    uid = u.get("id") or u.get("user_id", "?")
-                    display_user(
-                        u.get("name", "?"),
-                        uid,
-                        affiliation=u.get("affiliation", ""),
-                        expertise=u.get("expertise"),
-                        follower_count=u.get("follower_count"),
-                        public_key=u.get("public_key"),
-                        created_at=str(u.get("created_at", "")) if u.get("created_at") else "",
-                    )
-            elif unread is not None and items:
-                # Notifications
-                _print_table(
-                    ["Event", "Message", "Read"],
-                    [[n.get("event", "?"), n.get("message", "?"), "✓" if n.get("read") else "—"]
-                     for n in items],
-                    title=f"Notifications ({unread} unread)",
-                )
-            elif not items:
-                pass  # empty list — already rendered by handler
-        else:
-            # Single-user dict (whoami)
-            uid = data.get("id", "?")
-            display_user(
-                data.get("name", "?"),
-                uid,
-                public_key=data.get("public_key"),
-                affiliation=data.get("affiliation", ""),
-                expertise=data.get("expertise"),
-                created_at=str(data.get("created_at", "")) if data.get("created_at") else "",
-            )
-
-
-def _out_notice(notice) -> None:
-    """Render a notice to the console."""
-    code, m = _lookup(notice.code)
-    if m.text:
-        text = m.text.format(**notice.params) if notice.params else m.text
-        console.print(text)
-
-
-def _render_error(error: PeerpediaError) -> None:
-    """Render a ``PeerpediaError`` to the console."""
-    code, m = _lookup(error.code)
-    console.print(f"[error]✗ {m.text.format(**error.context) if hasattr(error, 'context') and error.context else str(error)}[/]")
-    if m.suggestion:
-        console.print(f"  [dim]→ {m.suggestion}[/]")
-    if m.see_also:
-        console.print(f"  [dim]See also: {' · '.join(m.see_also)}[/]")
+def _iter_all_specs():
+    """Iterate all command specs (for auto-resolve fallback)."""
+    for grp in COMMAND_GROUPS:
+        yield from grp.commands
+    yield from TOP_LEVEL_COMMANDS

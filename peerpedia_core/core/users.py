@@ -15,21 +15,23 @@ from peerpedia_core.storage.db.models import FollowStorage, UserStorage
 from peerpedia_core.storage.db.crud_user import (
     create_user as _create,
     create_user_stub as _create_stub,
-    follow_user as _follow,
     get_user as _get,
     increment_failed_login as _increment_failed,
     list_users as _list_users,
-    get_followers as _get_followers,
-    get_following as _get_following,
-    get_top_users_by_followers as _get_top_users_by_followers,
     list_users_by_name as _get_by_name,
     reset_failed_login as _reset_failed,
     search_users as _search_users,
     soft_delete_user as _soft_delete,
-    is_following as _is_following,
-    unfollow_user as _unfollow,
     update_user_public_key as _update_pubkey,
     update_user_salt as _update_salt,
+)
+from peerpedia_core.storage.db.crud_follow import (
+    follow_user as _follow,
+    get_followers as _get_followers,
+    get_following as _get_following,
+    get_top_users_by_followers as _get_top_users_by_followers,
+    is_following as _is_following,
+    unfollow_user as _unfollow,
 )
 from peerpedia_core.exceptions import BadRequestError
 from datetime import datetime, timezone

@@ -15,9 +15,7 @@ from peerpedia_core.frontmatter import make_article_frontmatter, strip_frontmatt
 from peerpedia_core.core.guards import guard_closes_trailer
 from peerpedia_core.rules.articles import assert_can_edit_article
 from peerpedia_core.core.reconcile import reconcile_integrity
-from peerpedia_core.storage.db.crud_article import (
-    clear_publish_consents,
-)
+from peerpedia_core.storage.db.crud_publish import clear_publish_consents
 from peerpedia_core.storage.git import commit_article, resolve_article_format
 from peerpedia_core.crypto import temp_signing_key
 from peerpedia_core.core.articles._helpers import reset_sink

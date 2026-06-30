@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from peerpedia_core.cli.schema_build import build as _build_schema
+from peerpedia_core.app.commandspec.schema import build as _build_schema
 
 
 def _cmd_schema(args):

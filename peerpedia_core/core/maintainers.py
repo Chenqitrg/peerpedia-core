@@ -32,7 +32,7 @@ from peerpedia_core.storage.db.guards import (
     guard_not_last_maintainer,
     require_article, require_user,
 )
-from peerpedia_core.storage.db.crud_article import (
+from peerpedia_core.storage.db.crud_publish import (
     add_publish_consent, clear_publish_consents, remove_publish_consent,
 )
 from peerpedia_core.storage.db.models import ArticleMetaStorage

@@ -95,8 +95,9 @@ class TestUserCRUD:
 
 class TestFollowCRUD:
     def test_follow_unfollow(self, engine):
-        from peerpedia_core.storage.db.crud_user import (
-            create_user, follow_user, is_following, unfollow_user,
+        from peerpedia_core.storage.db.crud_user import create_user
+        from peerpedia_core.storage.db.crud_follow import (
+            follow_user, is_following, unfollow_user,
         )
 
         session = get_session(engine)
@@ -112,8 +113,9 @@ class TestFollowCRUD:
         session.close()
 
     def test_get_followers_following(self, engine):
-        from peerpedia_core.storage.db.crud_user import (
-            create_user, follow_user, get_follower_count, get_followers,
+        from peerpedia_core.storage.db.crud_user import create_user
+        from peerpedia_core.storage.db.crud_follow import (
+            follow_user, get_follower_count, get_followers,
             get_following, get_following_count,
         )
 
@@ -135,7 +137,7 @@ class TestFollowCRUD:
         session.close()
 
     def test_follow_user_rejects_self_follow(self, engine):
-        from peerpedia_core.storage.db.crud_user import create_user, follow_user
+        from peerpedia_core.storage.db.crud_user import create_user; from peerpedia_core.storage.db.crud_follow import follow_user
 
         session = get_session(engine)
         a = create_user(session, name="A",
@@ -145,8 +147,9 @@ class TestFollowCRUD:
         session.close()
 
     def test_unfollow_soft_deletes(self, engine):
-        from peerpedia_core.storage.db.crud_user import (
-            create_user, follow_user, is_following, unfollow_user,
+        from peerpedia_core.storage.db.crud_user import create_user
+        from peerpedia_core.storage.db.crud_follow import (
+            follow_user, is_following, unfollow_user,
         )
 
         session = get_session(engine)
@@ -164,8 +167,9 @@ class TestFollowCRUD:
         session.close()
 
     def test_follow_restores_soft_deleted(self, engine):
-        from peerpedia_core.storage.db.crud_user import (
-            create_user, follow_user, is_following, unfollow_user,
+        from peerpedia_core.storage.db.crud_user import create_user
+        from peerpedia_core.storage.db.crud_follow import (
+            follow_user, is_following, unfollow_user,
         )
 
         session = get_session(engine)
@@ -433,8 +437,9 @@ class TestUserQueries:
     # ── get_top_users_by_followers ────────────────────────────────────────
 
     def test_get_top_users_by_followers(self, engine):
-        from peerpedia_core.storage.db.crud_user import (
-            create_user, follow_user, get_top_users_by_followers,
+        from peerpedia_core.storage.db.crud_user import create_user
+        from peerpedia_core.storage.db.crud_follow import (
+            follow_user, get_top_users_by_followers,
         )
 
         session = get_session(engine)
@@ -463,7 +468,7 @@ class TestUserQueries:
         session.close()
 
     def test_get_top_users_includes_zero_followers(self, engine):
-        from peerpedia_core.storage.db.crud_user import create_user, get_top_users_by_followers
+        from peerpedia_core.storage.db.crud_user import create_user; from peerpedia_core.storage.db.crud_follow import get_top_users_by_followers
 
         session = get_session(engine)
         create_user(session, name="Nobody",
@@ -509,14 +514,14 @@ class TestUserErrorPaths:
         session.close()
 
     def test_follower_count_zero(self, engine):
-        from peerpedia_core.storage.db.crud_user import get_follower_count
+        from peerpedia_core.storage.db.crud_follow import get_follower_count
 
         session = get_session(engine)
         assert get_follower_count(session, "nonexistent") == 0
         session.close()
 
     def test_following_count_zero(self, engine):
-        from peerpedia_core.storage.db.crud_user import get_following_count
+        from peerpedia_core.storage.db.crud_follow import get_following_count
 
         session = get_session(engine)
         assert get_following_count(session, "nonexistent") == 0

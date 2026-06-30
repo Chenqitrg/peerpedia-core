@@ -3,7 +3,7 @@
 
 """Interactive REPL wizards — guided workflows that call back into dispatch.
 
-Each wizard receives an *execute* callback ``(cmd_str, db) -> bool``
+Each wizard receives an *execute* callback ``(cmd_str) -> bool``
 instead of importing dispatch directly — this avoids a circular import.
 """
 
@@ -17,7 +17,7 @@ import peerpedia_core.repl.state as _st
 from peerpedia_core.repl.state import console
 
 
-def _meta_write(execute, db) -> bool:
+def _meta_write(execute) -> bool:
     """Guided article creation wizard. Returns True to continue REPL."""
     console.print(f"[bold {_st.theme.styles['info']}]▔▔▔ New Article ▔▔▔[/]")
     try:
@@ -48,7 +48,7 @@ def _meta_write(execute, db) -> bool:
     # Build and dispatch — use shlex.quote for safe shell embedding.
     cmd = f"article create --title {shlex.quote(title)} --content {shlex.quote(content)}"
     console.print(f"  [dim]{cmd[:80]}...[/]")
-    execute(cmd, db)
+    execute(cmd)
 
     # Offer to publish
     if _st._repl_article_id:
@@ -59,8 +59,7 @@ def _meta_write(execute, db) -> bool:
             )
             if pub.lower() in ("y", "yes"):
                 return execute(
-                    f'article publish {_st._repl_article_id} --scores "orig=4,rigor=3,comp=4,ped=3,imp=4"',
-                    db
+                    f'article publish {_st._repl_article_id} --scores "orig=4,rigor=3,comp=4,ped=3,imp=4"'
                 )
         except (EOFError, KeyboardInterrupt):
             pass

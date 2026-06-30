@@ -3,8 +3,8 @@
 
 """REPL meta-command dispatch — :help, :quit, :theme, :feed, etc.
 
-Meta-commands are REPL-only (not CLI).  They use the REPL's persistent
-DB session and the engine for sub-dispatch.  No argparse dependency.
+Meta-commands are REPL-only (not CLI).  Each command manages its own DB
+session via the engine (per-command unit of work).  No argparse dependency.
 """
 
 from __future__ import annotations
@@ -15,72 +15,76 @@ from peerpedia_core.repl.help import _meta_help
 from peerpedia_core.repl.meta import (
     _meta_user, _meta_article, _meta_theme, _show_inbox,
 )
-from peerpedia_core.repl.state import console, ensure_db
-from peerpedia_core.repl.wizards import _meta_write
+from peerpedia_core.repl.state import console
 
 import peerpedia_core.repl.state as _st
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# Meta-command handlers — (arg: str, db) -> bool
+# Meta-command handlers — (arg: str) -> bool
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def _handle_quit(arg: str, db) -> bool:
+def _handle_quit(arg: str) -> bool:
     return False
 
 
-def _handle_compact(arg: str, db) -> bool:
+def _handle_compact(arg: str) -> bool:
     _st._repl_compact = not _st._repl_compact
     mode = "compact table" if _st._repl_compact else "rich panels"
     console.print(f"[muted]Output mode: {mode}.[/]")
     return True
 
 
-def _handle_feed(arg: str, db) -> bool:
+def _handle_feed(arg: str) -> bool:
     from peerpedia_core.repl.engine import execute
-    return execute("article list --feed", db)
+    return execute("article list --feed")
 
 
-def _handle_school(arg: str, db) -> bool:
+def _handle_school(arg: str) -> bool:
     if sys.stdout.isatty():
         from peerpedia_core.repl.browse import _browse_school
-        result = _browse_school(db)
+        from peerpedia_core.repl.state import new_session
+        db = new_session()
+        try:
+            result = _browse_school(db)
+        finally:
+            db.close()
         if result and result.startswith("follow:"):
             target_id = result.split(":", 1)[1]
             from peerpedia_core.repl.engine import execute
-            return execute(f"follow {target_id}", db)
+            return execute(f"follow {target_id}")
     else:
         from peerpedia_core.repl.engine import execute
-        return execute("school --local", db)
+        return execute("school --local")
     return True
 
 
-def _handle_write(arg: str, db) -> bool:
+def _handle_write(arg: str) -> bool:
     from peerpedia_core.repl.engine import execute
-    return _meta_write(execute, db)
+    return _meta_write(execute)
 
 
-def _handle_help(arg: str, db) -> bool:
+def _handle_help(arg: str) -> bool:
     _meta_help(arg.strip())
     return True
 
 
-def _handle_user(arg: str, db) -> bool:
+def _handle_user(arg: str) -> bool:
     _meta_user(arg.strip())
     return True
 
 
-def _handle_article(arg: str, db) -> bool:
+def _handle_article(arg: str) -> bool:
     _meta_article(arg.strip())
     return True
 
 
-def _handle_theme(arg: str, db) -> bool:
+def _handle_theme(arg: str) -> bool:
     _meta_theme(arg.strip())
     return True
 
 
-def _handle_inbox(arg: str, db) -> bool:
+def _handle_inbox(arg: str) -> bool:
     _show_inbox()
     return True
 
@@ -109,7 +113,7 @@ _META_DISPATCH = {
 _META_COMMANDS = list(_META_DISPATCH.keys())
 
 
-def _dispatch_meta(cmd_str: str, db) -> bool | None:
+def _dispatch_meta(cmd_str: str) -> bool | None:
     """Look up a ``:<command>`` string in ``_META_DISPATCH`` and run it.
 
     Returns True/False if *cmd_str* is a meta-command and was handled,
@@ -124,7 +128,7 @@ def _dispatch_meta(cmd_str: str, db) -> bool | None:
 
     handler = _META_DISPATCH.get(meta)
     if handler is not None:
-        return handler(arg, db)
+        return handler(arg)
 
     console.print(f"[error]Unknown meta-command: {meta}[/]. Try :help")
     return True

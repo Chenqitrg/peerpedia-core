@@ -11,7 +11,7 @@ from prompt_toolkit.layout import HSplit, Layout, Window
 from prompt_toolkit.layout.controls import FormattedTextControl
 
 import peerpedia_core.repl.state as _st
-from peerpedia_core.cli.display import _score_lines
+from peerpedia_core.repl.display import _score_lines
 from peerpedia_core.app.context import read_session
 from peerpedia_core.core import (
     get_head_hash as _get_article_head_hash,

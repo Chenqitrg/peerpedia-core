@@ -23,7 +23,7 @@ import warnings
 # Suppress SQLAlchemy deprecation warnings from user-facing output.
 warnings.filterwarnings("ignore", category=Warning, module="sqlalchemy")
 
-from peerpedia_core.app.commands.dashboard import (
+from peerpedia_core.app.readmodels.dashboard import (
     count_user_articles,
     count_users,
     publish_ready,

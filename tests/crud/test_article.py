@@ -41,7 +41,7 @@ class TestArticleCRUD:
         article = create_article(session, title="", authors=[user.id], status="draft")
         assert article.id is not None
         assert article.status == "draft"
-        from peerpedia_core.storage.db.crud_article import list_author_ids
+        from peerpedia_core.storage.db.crud_author import list_author_ids
 
         assert list_author_ids(session, article.id) == [user.id]
         session.close()
@@ -344,7 +344,7 @@ class TestListArticles:
     def test_viewer_id_follower_feed(self, db_engine):
         """Articles by authors the viewer follows — exclude others."""
         from peerpedia_core.storage.db.crud_article import list_articles
-        from peerpedia_core.storage.db.crud_user import follow_user
+        from peerpedia_core.storage.db.crud_follow import follow_user
         from peerpedia_core.storage.db.models import FollowStorage
 
         s = get_session(db_engine)

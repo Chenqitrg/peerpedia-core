@@ -10,8 +10,9 @@ from datetime import timedelta, timezone
 from peerpedia_core.storage.db import Session
 from peerpedia_core.config.params import params
 from peerpedia_core.storage.db.crud_article import (
-    list_author_ids, list_articles, update_article_score, update_article_status,
+    list_articles, update_article_score, update_article_status,
 )
+from peerpedia_core.storage.db.crud_author import list_author_ids
 from peerpedia_core.storage.db.crud_review import get_reviews_for_article
 from peerpedia_core.storage.git import DEFAULT_ARTICLES_DIR, commit_status_marker
 from peerpedia_core.types.scores import FiveDimScores

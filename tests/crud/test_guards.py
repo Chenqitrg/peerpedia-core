@@ -261,7 +261,7 @@ class TestGuardNotLastMaintainer:
 
 class TestRequireFollowingForAlias:
     def test_follows_ok(self, engine):
-        from peerpedia_core.storage.db.crud_user import follow_user
+        from peerpedia_core.storage.db.crud_follow import follow_user
         session = get_session(engine)
         alice = make_user(session, "alice")
         bob = make_user(session, "bob")

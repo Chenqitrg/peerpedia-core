@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""Dashboard helpers — thin wrappers over core for the CLI welcome screen."""
+"""Dashboard read models — query helpers for the CLI/REPL welcome screen."""
 
 from __future__ import annotations
 

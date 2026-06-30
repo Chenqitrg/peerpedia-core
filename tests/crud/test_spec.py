@@ -116,7 +116,7 @@ class TestSocialLoop:
 
     def test_follow_and_show_followers(self, engine):
         """A follows B → B MUST appear in A's following and A in B's followers."""
-        from peerpedia_core.storage.db.crud_user import (
+        from peerpedia_core.storage.db.crud_follow import (
             follow_user, get_follower_count, get_followers,
             get_following, get_following_count, is_following,
         )
@@ -138,7 +138,7 @@ class TestSocialLoop:
 
     def test_mutual_follow(self, engine):
         """A follows B and B follows A → both MUST show each other in followers/following."""
-        from peerpedia_core.storage.db.crud_user import (
+        from peerpedia_core.storage.db.crud_follow import (
             follow_user, get_followers, get_following,
         )
 
@@ -157,7 +157,7 @@ class TestSocialLoop:
 
     def test_unfollow_reduces_counts(self, engine):
         """After unfollow, counts MUST decrement and is_following MUST return False."""
-        from peerpedia_core.storage.db.crud_user import (
+        from peerpedia_core.storage.db.crud_follow import (
             follow_user, get_follower_count, get_following_count,
             is_following, unfollow_user,
         )
@@ -177,7 +177,7 @@ class TestSocialLoop:
 
     def test_unfollow_then_refollow_restores(self, engine):
         """Unfollow + follow MUST restore the relationship (soft-delete reuse)."""
-        from peerpedia_core.storage.db.crud_user import (
+        from peerpedia_core.storage.db.crud_follow import (
             follow_user, is_following, unfollow_user,
         )
 
@@ -195,7 +195,7 @@ class TestSocialLoop:
     def test_cannot_self_follow(self, engine):
         """Following yourself MUST raise BadRequestError."""
         from peerpedia_core.exceptions import BadRequestError
-        from peerpedia_core.storage.db.crud_user import follow_user
+        from peerpedia_core.storage.db.crud_follow import follow_user
 
         session = get_session(engine)
         alice = _create_user(session, name="Alice")
@@ -215,7 +215,7 @@ class TestArticleAuthorLoop:
 
     def test_create_article_with_authors(self, engine):
         """An article created with authors MUST return them in order."""
-        from peerpedia_core.storage.db.crud_article import create_article, list_author_ids
+        from peerpedia_core.storage.db.crud_article import create_article; from peerpedia_core.storage.db.crud_author import list_author_ids
 
         session = get_session(engine)
         lead = _create_user(session, name="Lead Author")
@@ -229,7 +229,7 @@ class TestArticleAuthorLoop:
 
     def test_get_author_ids_empty_for_no_authors(self, engine):
         """An article with no author rows MUST return an empty list."""
-        from peerpedia_core.storage.db.crud_article import create_article, list_author_ids
+        from peerpedia_core.storage.db.crud_article import create_article; from peerpedia_core.storage.db.crud_author import list_author_ids
 
         session = get_session(engine)
         article = create_article(session, title="Solo", authors=[])
@@ -238,7 +238,7 @@ class TestArticleAuthorLoop:
 
     def test_replace_authors(self, engine):
         """Replacing all authors MUST produce exactly the new list in order."""
-        from peerpedia_core.storage.db.crud_article import list_author_ids, set_article_authors
+        from peerpedia_core.storage.db.crud_author import list_author_ids, set_article_authors
 
         session = get_session(engine)
         a1 = _create_user(session, name="A1")
@@ -256,7 +256,7 @@ class TestArticleAuthorLoop:
 
     def test_append_author_preserves_position_order(self, engine):
         """Adding an author later MUST place them after existing authors."""
-        from peerpedia_core.storage.db.crud_article import add_article_authors, list_author_ids
+        from peerpedia_core.storage.db.crud_author import add_article_authors, list_author_ids
 
         session = get_session(engine)
         lead = _create_user(session, name="Lead")
@@ -279,7 +279,7 @@ class TestArticleAuthorLoop:
         Callers are expected to deduplicate before calling add_article_authors."""
         from sqlalchemy.exc import IntegrityError
 
-        from peerpedia_core.storage.db.crud_article import add_article_authors, create_article
+        from peerpedia_core.storage.db.crud_author import add_article_authors; from peerpedia_core.storage.db.crud_article import create_article
 
         session = get_session(engine)
         author = _create_user(session, name="Dup")

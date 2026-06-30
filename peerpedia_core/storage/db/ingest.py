@@ -15,9 +15,10 @@ from peerpedia_core.storage.db.crud_bookmark import add_bookmark
 from peerpedia_core.storage.db.crud_maintainer import add_maintainer
 from peerpedia_core.storage.db.crud_share import add_share as _add_share
 from peerpedia_core.storage.db.crud_notification import ensure_notification
-from peerpedia_core.storage.db.crud_user import (
-    add_followers, ensure_user, follow_users, set_followers, set_following,
+from peerpedia_core.storage.db.crud_follow import (
+    add_followers, follow_users, set_followers, set_following,
 )
+from peerpedia_core.storage.db.crud_user import ensure_user
 from peerpedia_core.storage.db.models import (
     ArticleMetaStorage, NotificationStorage, ShareStorage, UserStorage,
 )

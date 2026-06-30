@@ -5,18 +5,18 @@
 
 from __future__ import annotations
 
+from peerpedia_core.app.commandspec import spec_for_cmd_id
 from peerpedia_core.app.result import AppResult
 from peerpedia_core.cli.decorators import with_context
 from peerpedia_core.cli.display import _print_table
 from peerpedia_core.cli.info import console
-import peerpedia_core.app.commands.notification as _notify
 
 
 @with_context
 def _cmd_notifications(ctx, args):
     """List notifications. Shows unread by default; use --all for all."""
-    unread_only = not getattr(args, "all", False)
-    result = _notify.list_notifications(ctx, unread_only=unread_only)
+    all_flag = getattr(args, "all", False)
+    result = spec_for_cmd_id("notifications").handler(ctx, {"all": all_flag})
     items = result.data.get("items", [])
     unread_count = result.data.get("unread_count", 0)
     if not items:
@@ -33,4 +33,6 @@ def _cmd_notifications(ctx, args):
 @with_context
 def _cmd_notification_read(ctx, args):
     """Mark a notification as read."""
-    return _notify.mark_read_notification(ctx, notification_id=args.notification_id)
+    return spec_for_cmd_id("notifications.read").handler(ctx, {
+        "notification_id": args.notification_id,
+    })

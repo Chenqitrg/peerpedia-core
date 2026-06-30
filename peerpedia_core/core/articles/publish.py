@@ -17,10 +17,11 @@ from peerpedia_core.storage.db.guards import (
 )
 from peerpedia_core.core.reconcile import reconcile_integrity, reconcile_score
 from peerpedia_core.storage.db.crud_article import (
-    clear_publish_consents, set_sink_start, update_article_status,
+    set_sink_start, update_article_status,
 )
+from peerpedia_core.storage.db.crud_publish import clear_publish_consents
 from peerpedia_core.storage.db.crud_review import get_reviews_for_article, upsert_review
-from peerpedia_core.storage.db.crud_user import get_followers
+from peerpedia_core.storage.db.crud_follow import get_followers
 from peerpedia_core.storage.git import commit_status_marker
 from peerpedia_core.core.reviews import write_review_to_git
 from peerpedia_core.core.notifications import create_notifications_batch

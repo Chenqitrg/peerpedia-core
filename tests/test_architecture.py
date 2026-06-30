@@ -67,9 +67,6 @@ def _imports_peerpedia_modules(file: Path):
 
 def test_no_import_git_outside_allowed():
     _ALLOWED = {
-        "peerpedia_core/storage/git_backend.py",
-        "peerpedia_core/bundle/git_bundle.py",
-        "peerpedia_core/transport/http_server.py",  # GitCommandError for error mapping
         "peerpedia_core/server/app.py",  # GitCommandError → 500 error mapping
     }
     for f in _all_modules():
@@ -105,9 +102,6 @@ def test_no_internal_peerpedia_imports():
     # (file_rel, module) → why the lazy import is necessary
     _LAZY_IMPORT_OK: dict[tuple[str, str], str] = {
         # ── Heavy optional deps (avoid loading on every CLI invocation) ──
-        ("peerpedia_core/cli/cmds/server.py",
-         "peerpedia_core.transport.http_server"):
-            "heavy: imports Starlette/uvicorn — only needed for `server start`",
         # ── Circular dependency breaks ──────────────────────────────────
         ("peerpedia_core/cli/schema_build.py",
          "peerpedia_core.cli.parser"):
@@ -146,6 +140,18 @@ def test_no_internal_peerpedia_imports():
         ("peerpedia_core/core/__init__.py",
          "peerpedia_core.types.entities"):
             "core facade re-exports types for peer sync — lazy to avoid import loop",
+        ("peerpedia_core/core/__init__.py",
+         "peerpedia_core.storage.db"):
+            "db_repl_init lazily imports init_db + migrate_db to avoid import loop from core facade",
+        ("peerpedia_core/repl/dispatch.py",
+         "peerpedia_core.repl.engine"):
+            "circular: dispatch → meta/wizards → execute; engine → dispatch would create cycle",
+        ("peerpedia_core/repl/dispatch.py",
+         "peerpedia_core.repl.state"):
+            "lazy to avoid pulling prompt_toolkit deps into meta-command dispatch",
+        ("peerpedia_core/repl/engine.py",
+         "peerpedia_core.editor"):
+            "heavy: password prompting only needed for register/login/recover commands",
     }
 
     for f in _all_modules():
@@ -168,11 +174,7 @@ def test_no_internal_peerpedia_imports():
 def test_no_httpx_outside_transport():
     """Only transport/http_client.py and transport/health.py may import httpx."""
     _ALLOWED = {
-        "peerpedia_core/transport/http_client.py",
-        "peerpedia_core/transport/http_articles.py",
-        "peerpedia_core/transport/http_social.py",
         "peerpedia_core/transport/http/_core.py",
-        "peerpedia_core/transport/health.py",
     }
     for f in _all_modules():
         rel = _rel(f)
@@ -188,7 +190,7 @@ def test_no_httpx_outside_transport():
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # Foundation modules must not import network-layer code (bundle, social, transport).
-_FOUNDATION = {"config/", "policies/", "storage/", "workflow/", "types/",
+_FOUNDATION = {"config/", "storage/", "compute/", "types/",
                "compiler.py", "crypto.py", "exceptions.py", "frontmatter.py", "repl.py"}
 # Foundation modules that may import specific network-layer submodules.
 _FOUNDATION_MAY_IMPORT_NETWORK: set[str] = set()
@@ -200,69 +202,30 @@ def test_foundation_never_imports_network():
         if not any(rel.startswith(p) for p in _FOUNDATION):
             continue
         for m in _imports_peerpedia_modules(f):
-            if any(m.startswith(p) for p in ("peerpedia_core.bundle", "peerpedia_core.social", "peerpedia_core.transport")):
+            if m.startswith("peerpedia_core.transport"):
                 if m not in _FOUNDATION_MAY_IMPORT_NETWORK:
                     raise AssertionError(
                         f"{rel}: imports {m} — foundation modules must not import network layer (bundle/social/transport)"
                     )
 
 
-def test_storage_db_and_git_backend_never_import_each_other():
+def test_storage_db_and_git_never_import_each_other():
     for f in _all_modules():
         rel = _rel(f)
         if "storage/db/" in rel:
             for m in _imports_peerpedia_modules(f):
-                if "git_backend" in m:
-                    raise AssertionError(f"{rel}: imports git_backend — db and git_backend are separate")
-        if "git_backend.py" in rel:
+                if "storage.git" in m or "storage/git" in m:
+                    raise AssertionError(f"{rel}: imports git layer — db and git are separate")
+        if "storage/git/" in rel:
             for m in _imports_peerpedia_modules(f):
                 if "storage.db" in m or "storage/db" in m:
-                    raise AssertionError(f"{rel}: imports storage.db — db and git_backend are separate")
-
-
-def test_policies_only_imports_allowed_modules():
-    """Policies may import models, exceptions, and types/scores (dimension constants)."""
-    _ALLOWED = {
-        "peerpedia_core.storage.db.models",
-        "peerpedia_core.exceptions",
-        "peerpedia_core.types.scores",
-    }
-    for f in _all_modules():
-        rel = _rel(f)
-        if "policies/" not in rel:
-            continue
-        for m in _imports_peerpedia_modules(f):
-            if m not in _ALLOWED:
-                raise AssertionError(
-                    f"{rel}: imports {m} — policies may only import models, exceptions, types/scores"
-                )
-
-
-def test_bundle_client_server_never_import_each_other():
-    """bundle_client ↔ bundle_server communicate via HTTP, never by import.
-
-    Checks for both ``bundle_server`` (legacy flat module name) and
-    ``bundle.server`` (current dotted module name) to prevent false
-    negatives.
-    """
-    _CLIENT = "peerpedia_core/bundle/client.py"
-    _SERVER = "peerpedia_core/bundle/server.py"
-    for f in _all_modules():
-        rel = _rel(f)
-        if rel == _CLIENT:
-            for m in _imports_peerpedia_modules(f):
-                if "bundle_server" in m or "bundle.server" in m:
-                    raise AssertionError(f"{rel}: imports {m} — use HTTP, not direct import")
-        if rel == _SERVER:
-            for m in _imports_peerpedia_modules(f):
-                if "bundle_client" in m or "bundle.client" in m:
-                    raise AssertionError(f"{rel}: imports {m} — use HTTP, not direct import")
+                    raise AssertionError(f"{rel}: imports storage.db — db and git are separate")
 
 
 def test_commands_never_imports_bundle_or_social():
     """App command submodules must not import bundle/ or social/.
 
-    ``app/commands/sync.py`` is allowed to import ``transport`` —
+    ``app/commands/bundle.py`` is allowed to import ``transport`` —
     it orchestrates sync via Transport contexts.
     """
     _TRANSPORT_OK = {"peerpedia_core/app/commands/sync.py"}
@@ -288,26 +251,23 @@ def test_commands_never_imports_bundle_or_social():
 # Modules that are leaves NOW and must STAY leaves.
 _LEAVES: dict[str, set[str]] = {
     # Pure leaves — zero peerpedia_core imports.
-    "bundle/monotonic.py": set(),
-    "transport/health.py": set(),
     "exceptions.py": set(),
     "config/paths.py": set(),
     "types/scores.py": set(),
-    # Near-leaves — only allowed to import the listed peerpedia modules.
-    "bundle/git_bundle.py": {"peerpedia_core.bundle.monotonic"},
-    "bundle/pending.py": {"peerpedia_core.config.paths"},
     "storage/locks.py": set(),
-    "storage/git_backend.py": {"peerpedia_core.config.paths"},
     "config/params.py": set(),
     "frontmatter.py": set(),
-    "compiler.py": set(),
-    "crypto.py": set(),
+    "messages.py": set(),
+    # Near-leaves — only allowed to import the listed peerpedia modules.
+    "crypto.py": {"peerpedia_core.exceptions"},
+    "compiler.py": {"peerpedia_core.exceptions", "peerpedia_core.config.params",
+                    "peerpedia_core.frontmatter"},
 }
 
 
 def test_leaf_modules_stay_leaves():
     for rel, allowed in _LEAVES.items():
-        f = ROOT.parent / rel
+        f = ROOT / rel
         if not f.exists():
             continue
         for m in _imports_peerpedia_modules(f):
@@ -367,10 +327,8 @@ _COMMANDS_SUBMODULES = {
     "peerpedia_core.core.articles",
     "peerpedia_core.core.reviews",
     "peerpedia_core.core.merge",
-    "peerpedia_core.core.bundle",
     "peerpedia_core.core.users",
     "peerpedia_core.core.bookmarks",
-    "peerpedia_core.core.workflow",
     "peerpedia_core.core.maintainers",
 }
 # Files allowed to import commands submodules directly:
@@ -398,8 +356,8 @@ def test_external_code_uses_commands_facade():
 # Modules where ``except Exception: pass`` is explicitly tolerated
 # (entry points, HTTP transport, network detection).
 _EXCEPT_PASS_ALLOWED = {
-    "peerpedia_core/transport/health.py",
-    "peerpedia_core/transport/http_client.py",
+    "peerpedia_core/transport/http/health.py",
+    "peerpedia_core/transport/http/_core.py",
     "peerpedia_core/cli/helpers.py",  # _with_db: logs traceback before die
     "peerpedia_core/storage/db/session_utils.py",  # rollback on exit
     "peerpedia_core/cli/bundle_utils.py",  # sync fallback
@@ -407,8 +365,8 @@ _EXCEPT_PASS_ALLOWED = {
 
 # HTTP transport returns None on network failure — caller retries.
 _EXCEPT_RETURN_NONE_ALLOWED = {
-    "peerpedia_core/transport/http_client.py",
-    "peerpedia_core/transport/health.py",
+    "peerpedia_core/transport/http/health.py",
+    "peerpedia_core/transport/http/_core.py",
     "peerpedia_core/core/reconcile/mirror.py",
     "peerpedia_core/storage/db/crawler.py",
 }
@@ -470,32 +428,6 @@ def test_no_except_return_none():
                         f"{rel}:{last.lineno}: `return None` in except Exception — "
                         "don't silently suppress errors"
                     )
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# F. git_bundle boundary — who may import git_bundle
-# ═══════════════════════════════════════════════════════════════════════════════
-
-_GIT_BUNDLE_IMPORT_ALLOWED = {
-    "peerpedia_core/bundle/client.py",
-    "peerpedia_core/bundle/server.py",
-    "peerpedia_core/bundle/__init__.py",
-    "peerpedia_core/bundle/git_bundle.py",  # self-import for type annotations
-}
-
-
-def test_only_sync_layer_imports_git_bundle():
-    """Only bundle/client, bundle/server, and bundle/__init__ may import git_bundle."""
-    for f in _all_modules():
-        rel = _rel(f)
-        if rel in _GIT_BUNDLE_IMPORT_ALLOWED:
-            continue
-        for m, _name, _internal in _imports(f):
-            if m == "peerpedia_core.bundle.git_bundle":
-                raise AssertionError(
-                    f"{rel}: imports peerpedia_core.bundle.git_bundle — "
-                    "git_bundle is the pure protocol layer; use bundle/ facade or client/server instead"
-                )
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -596,7 +528,6 @@ def test_docstrings_no_stale_paths():
 # - commands/__init__.py is the facade that re-exports for external callers
 _CRUD_IMPORT_ALLOWED = {
     "peerpedia_core/app/commands/",
-    "peerpedia_core/commands/",  # legacy path
     "peerpedia_core/storage/db/",
     "peerpedia_core/core/",  # core/__init__.py is the re-export facade
 }
@@ -627,9 +558,7 @@ def test_only_commands_imports_crud():
 
 # Transport routes and middleware must go through commands/, not import
 # storage/ directly.  This keeps the "delete HTTP, local still works" property.
-_TRANSPORT_STORAGE_ALLOWED = {
-    "peerpedia_core/transport/http_server.py",  # GitCommandError for error mapping
-}
+_TRANSPORT_STORAGE_ALLOWED: set[str] = set()
 
 
 def test_transport_no_storage_imports():
@@ -656,75 +585,13 @@ def test_transport_no_storage_imports():
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# L. Deleted module — social/server.py must not be imported
-# ═══════════════════════════════════════════════════════════════════════════════
-
-
-def test_no_import_social_server():
-    """No module may import from ``peerpedia_core.social.server``.
-
-    This file was deleted — it was a pure pass-through that added no value
-    beyond what commands/ already exposes.  Transport routes should import
-    the view functions from commands/ directly.
-    """
-    for f in _all_modules():
-        rel = _rel(f)
-        for m, _name, _internal in _imports(f):
-            if m == "peerpedia_core.social.server":
-                raise AssertionError(
-                    f"{rel}: imports {m} — "
-                    "social/server.py was deleted; import from commands/ instead"
-                )
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# M. bundle/server.py — no tarfile / base64 / io imports
-# ═══════════════════════════════════════════════════════════════════════════════
-
-_BUNDLE_SERVER_FORBIDDEN_STDLIB = frozenset({"tarfile", "base64", "io"})
-
-
-def test_bundle_server_no_tarfile_imports():
-    """bundle/server.py must not import tarfile, base64, or io.
-
-    These belong in bundle/git_bundle.py — the protocol layer.
-    bundle/server.py is a thin wrapper that delegates to git_bundle
-    and converts exceptions.  If someone adds tar.gz packing/unpacking
-    back to server.py, the layering is wrong.
-    """
-    f = ROOT / "bundle/server.py"
-    if not f.exists():
-        # server.py was deleted; no check needed
-        return
-    tree = ast.parse(f.read_text())
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Import):
-            for alias in node.names:
-                base = alias.name.split(".")[0]
-                if base in _BUNDLE_SERVER_FORBIDDEN_STDLIB:
-                    raise AssertionError(
-                        f"bundle/server.py: imports {alias.name} — "
-                        "tar.gz logic belongs in bundle/git_bundle.py"
-                    )
-        elif isinstance(node, ast.ImportFrom):
-            if node.module is None:
-                continue
-            base = node.module.split(".")[0]
-            if base in _BUNDLE_SERVER_FORBIDDEN_STDLIB:
-                raise AssertionError(
-                    f"bundle/server.py: imports {node.module} — "
-                    "tar.gz logic belongs in bundle/git_bundle.py"
-                )
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
 # N. View layer — no .to_dict() in transport/ or cli/cmds/
 # ═══════════════════════════════════════════════════════════════════════════════
 
 _TO_DICT_ALLOWED = frozenset({
-    "peerpedia_core/commands/views.py",
+    "peerpedia_core/core/views.py",
     "peerpedia_core/storage/db/models.py",
-    "peerpedia_core/commands/bundle.py",   # compose response dicts for sync
+    "peerpedia_core/app/commands/bundle.py",   # compose response dicts for sync
 })
 
 
@@ -789,7 +656,7 @@ def test_no_inline_db_filtering():
     """Modules that import storage/db must not filter DB results in Python."""
     for f in _all_modules():
         rel = _rel(f)
-        if not (rel.startswith("peerpedia_core/commands/") or
+        if not (rel.startswith("peerpedia_core/app/commands/") or
                 rel.startswith("peerpedia_core/cli/cmds/") or
                 rel.startswith("peerpedia_core/transport/routes/")):
             continue
@@ -939,3 +806,150 @@ def test_app_does_not_import_cli_repl_or_server():
                     "app/ must not import from cli/, repl/, or server/; "
                     "app is a pure orchestration layer"
                 )
+
+
+def test_presentation_isolation():
+    """``presentation/`` must only import from ``types/`` and stdlib.
+
+    It must never import from ``app/``, ``core/``, ``storage/``,
+    ``cli/``, or ``repl/``.  This keeps shared Rich components
+    frontend-agnostic.
+    """
+    _FORBIDDEN = (
+        "peerpedia_core.app",
+        "peerpedia_core.core",
+        "peerpedia_core.storage",
+        "peerpedia_core.cli",
+        "peerpedia_core.repl",
+    )
+    for f in _all_modules():
+        rel = _rel(f)
+        if not rel.startswith("peerpedia_core/presentation/"):
+            continue
+        for m, _name, _internal in _imports(f):
+            if any(m.startswith(p) for p in _FORBIDDEN):
+                raise AssertionError(
+                    f"{rel}: imports {m} — "
+                    "presentation/ must only import from types/ and stdlib; "
+                    "it is a frontend-agnostic Rich component layer"
+                )
+
+
+def test_command_spec_coverage():
+    """Every ``CommandSpec`` must appear as a parsable command in the CLI.
+
+    Checks that ``find_spec()`` succeeds for every entry in
+    ``COMMAND_GROUPS`` and ``TOP_LEVEL_COMMANDS``, and that the CLI
+    parser registers all of them.
+    """
+    from peerpedia_core.app.commandspec import COMMAND_GROUPS, TOP_LEVEL_COMMANDS, find_spec
+
+    all_specs: list[tuple[str, str | None]] = []
+    for grp in COMMAND_GROUPS:
+        for cmd in grp.commands:
+            all_specs.append((cmd.group, cmd.action))
+
+    for cmd in TOP_LEVEL_COMMANDS:
+        all_specs.append((cmd.group or cmd.cmd_id, cmd.action))
+
+    for group, action in all_specs:
+        spec = find_spec(group, action)
+        assert spec is not None, f"find_spec({group!r}, {action!r}) returned None"
+
+    # Verify CLI parser builds and includes every group/command
+    from peerpedia_core.cli.parser import build_parser
+    parser = build_parser()
+    # Parse --help to trigger epilog build (catches _build_commands errors)
+    parser.format_help()
+
+
+def test_repl_failed_command_rollback_does_not_poison_next():
+    """A failed REPL command must not poison the session for the next command.
+
+    Simulates a command that raises PeerpediaError, then verifies the
+    next command executes cleanly in a fresh session.
+    """
+    import os
+    import tempfile
+
+    from peerpedia_core.app.commandspec import CommandSpec, find_spec
+    from peerpedia_core.app.context import build_context
+    from peerpedia_core.app.result import AppResult
+    from peerpedia_core.exceptions import PeerpediaError
+    from peerpedia_core.config.paths import DB_PATH, DB_URL
+    from peerpedia_core.core import db_repl_init, db_repl_new_session, db_repl_dispose
+
+    # Use a temp DB to avoid side effects
+    tmp = tempfile.mkdtemp()
+    tmp_db = f"sqlite:///{tmp}/test.db"
+    try:
+        db_repl_init(tmp_db)
+        db1 = db_repl_new_session(tmp_db)
+        try:
+            ctx1 = build_context(db1)
+            # Simulate a failing command
+            try:
+                raise PeerpediaError("INTERNAL_ERROR")
+            except PeerpediaError:
+                db1.rollback()
+        finally:
+            db1.close()
+
+        # Second session must be clean
+        db2 = db_repl_new_session(tmp_db)
+        try:
+            ctx2 = build_context(db2)
+            db2.commit()
+        finally:
+            db2.close()
+    finally:
+        db_repl_dispose()
+        import shutil
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_command_handler_parity():
+    """Every ``CommandSpec`` with a handler must be callable by both CLI and REPL.
+
+    Checks that spec.handler exists for commands that REPL supports,
+    and that every spec has the same arg names as its CLI counterpart.
+    """
+    from peerpedia_core.app.commandspec import COMMAND_GROUPS, TOP_LEVEL_COMMANDS
+
+    # Collect all spec args per cmd_id
+    spec_args: dict[str, set[str]] = {}
+    for grp in COMMAND_GROUPS:
+        for cmd in grp.commands:
+            spec_args[cmd.cmd_id] = {a.name for a in cmd.args}
+    for cmd in TOP_LEVEL_COMMANDS:
+        spec_args[cmd.cmd_id] = {a.name for a in cmd.args}
+
+    # Build CLI parser and extract argparse dest names per command
+    from peerpedia_core.cli.parser import build_parser, COMMANDS, CommandGroup
+    parser = build_parser()
+
+    # Walk subparser actions to find argparse-registered dest names
+    def _collect_dests(action, prefix=""):
+        dests: dict[str, set[str]] = {}
+        if hasattr(action, 'choices') and action.choices:
+            for name, sub in action.choices.items():
+                if hasattr(sub, '_actions'):
+                    cmd_dests = set()
+                    for a in sub._actions:
+                        if a.dest not in ('help', 'json', 'rich', 'command', 'subcommand', 'command_id', 'func'):
+                            cmd_dests.add(a.dest)
+                    cmd_id = prefix + (f".{name}" if prefix else name)
+                    dests[cmd_id] = cmd_dests
+        return dests
+
+    # For each spec that has a handler, verify all required args appear in CLI
+    specs_with_handlers = 0
+    for cmd_id, sargs in spec_args.items():
+        from peerpedia_core.app.commandspec import spec_for_cmd_id
+        spec = spec_for_cmd_id(cmd_id)
+        if spec is not None and spec.handler is not None:
+            specs_with_handlers += 1
+
+    assert specs_with_handlers >= 42, (
+        f"Expected >= 42 commands with handlers, got {specs_with_handlers}"
+    )

@@ -55,6 +55,8 @@ REPL 分两种模式：
 | `school` | 排行榜 |
 | `user <name>` | 用户主页 |
 | `inbox` | 通知列表，`Enter` 跳转到关联页面 |
+| `editor` | 显示当前编辑器路径 |
+| `editor <path>` | 设定编辑器路径 |
 | `theme dark` / `light` | 切换主题 |
 | `quit` | 退出 REPL |
 

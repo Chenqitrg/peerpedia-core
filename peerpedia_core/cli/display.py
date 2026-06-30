@@ -12,16 +12,13 @@ from __future__ import annotations
 from rich.panel import Panel
 from rich.text import Text
 
-from peerpedia_core.app.readmodels.articles import (
-    list_author_ids,
-    read_frontmatter,
-    resolve_author_names,
-    source_path,
-)
+from peerpedia_core.core.articles import resolve_article_meta, resolve_article_meta_batch
 from peerpedia_core.cli.info import console, _page
 from peerpedia_core.messages import lookup as _lookup
 from peerpedia_core.presentation.rich.components import (
     SCORE_DIM_NAMES,
+    article_meta_panel as _shared_article_meta_panel,
+    diff_panel as _shared_diff_panel,
     display_user as _shared_display_user,
     print_panel as _shared_print_panel,
     print_table as _shared_print_table,
@@ -51,19 +48,11 @@ def _status_badge(status: str) -> str:
 
 def display_article(title: str, status: str, authors: list[str],
                     score: dict | None, abstract: str | None) -> None:
-    """Render article metadata panel — pure display, zero side effects."""
-    body = Text()
-    body.append(str(title), style="bold info")
-    body.append(f"      {_status_badge(status)}\n")
-    body.append(f"Authors: {', '.join(str(a) for a in authors)}\n")
-    body.append("Score:\n")
-    if score:
-        body.append(Text.from_markup(_stars(score)))
-    else:
-        body.append("no scores", style="muted")
-    if abstract:
-        body.append(f"\nAbstract: {str(abstract)}")
-    _print_panel("Article", body)
+    """Render article metadata panel — delegates to presentation."""
+    _shared_article_meta_panel(
+        console, title=title, status=status, authors=authors,
+        score=score, abstract=abstract,
+    )
 
 
 def display_user(name: str, user_id: str, *,
@@ -73,7 +62,7 @@ def display_user(name: str, user_id: str, *,
                  follower_count: int | None = None,
                  public_key: str | None = None,
                  created_at: str | None = None) -> None:
-    """Render user metadata panel — pure display, zero side effects."""
+    """Render user metadata panel — delegates to presentation."""
     _shared_display_user(console, name, user_id,
                          affiliation=affiliation, expertise=expertise,
                          reputation=reputation, follower_count=follower_count,
@@ -81,42 +70,8 @@ def display_user(name: str, user_id: str, *,
 
 
 def display_diff(diff_text: str, stats: dict) -> None:
-    """Render a unified diff with GitHub-style colorization.
-
-    + lines: green, - lines: red, @@ hunk headers: bold cyan,
-    file/index lines: bold, context: dim.
-    """
-    totals = stats.get("total", {})
-    ins = totals.get("insertions", 0)
-    dels = totals.get("deletions", 0)
-    files = stats.get("files", [])
-
-    header = Text()
-    if files:
-        header.append(", ".join(files), style="bold")
-        header.append("  ")
-    header.append(f"+{ins}", style="success")
-    header.append("  ")
-    header.append(f"-{dels}", style="error")
-    console.print()
-    console.print(Panel(header, title="Diff", border_style="muted", title_align="left"))
-    console.print()
-
-    for line in diff_text.split("\n"):
-        if line.startswith("@@") and line.rstrip().endswith("@@"):
-            console.print(Text(line, style="bold cyan"))
-        elif line.startswith("+++") or line.startswith("---"):
-            console.print(Text(line, style="bold"))
-        elif line.startswith("diff --git") or line.startswith("index "):
-            console.print(Text(line, style="bold"))
-        elif line.startswith("+") and not line.startswith("+++"):
-            console.print(Text(line, style="green"))
-        elif line.startswith("-") and not line.startswith("---"):
-            console.print(Text(line, style="red"))
-        else:
-            console.print(Text(line, style="dim"))
-
-    console.print()
+    """Render a unified diff — delegates to presentation."""
+    _shared_diff_panel(console, diff_text, stats)
 
 
 # ── Score display component ──────────────────────────────────────────────
@@ -156,26 +111,13 @@ def display_empty_article_list(code: str, **fmt) -> None:
 
 def display_article_meta(db, article, *,
                          author_ids: list[str] | None = None) -> None:
-    """Resolve full article metadata from DB + source file, then display.
+    """Resolve article metadata then display via article_meta_panel."""
+    display_article(**resolve_article_meta(db, article, author_ids=author_ids))
 
-    If *author_ids* is passed, it is used directly (allows batch
-    preloading in list handlers).  Otherwise queries via the app layer.
-    """
-    ids = author_ids or list_author_ids(db, article.id)
-    names = resolve_author_names(db, ids)
 
-    f = source_path(article.id)
-    if f is not None:
-        raw = f.read_text()
-        fm = read_frontmatter(raw)
-        display_article(
-            title=fm.get("title", article.title), status=article.status,
-            authors=names, score=article.score,
-            abstract=fm.get("abstract", article.abstract),
-        )
-    else:
-        display_article(
-            title=article.title, status=article.status,
-            authors=names, score=article.score,
-            abstract=article.abstract,
-        )
+def display_article_list(db, items: list[dict]) -> None:
+    """Render Rich article meta panels for a batch of article dicts."""
+    from peerpedia_core.presentation.rich.components import article_panels
+    article_panels(console, resolve_article_meta_batch(
+        db, [a["id"] for a in items],
+    ))

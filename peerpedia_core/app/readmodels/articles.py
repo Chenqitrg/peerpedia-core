@@ -1,11 +1,11 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""Display helpers — thin wrappers over core for CLI rendering.
+"""Article read models — pure data resolution, no display.
 
-CLI display code needs author names, article paths, frontmatter, etc.
-These are read-only lookups; the wrappers exist so CLI never imports
-from ``core/`` directly, which architecture tests enforce.
+Read-only queries that assemble data from multiple sources (DB, filesystem)
+into frontend-ready dicts.  CLI/REPL call these to get data; presentation
+layer handles rendering.  Never imports from ``cli/``, ``repl/``, or ``server/``.
 """
 
 from __future__ import annotations
@@ -67,3 +67,7 @@ def list_articles(db: Session, *, search_query: str | None = None,
     """List article ORM objects with optional filters — for CLI display."""
     return _list_articles(db, search_query=search_query, limit=limit,
                           status=status, author_id=author_id)
+
+
+# Re-export from core — canonical implementation lives there.
+from peerpedia_core.core.articles import resolve_article_meta  # noqa: F401

@@ -28,6 +28,7 @@ from peerpedia_core.app.readmodels.dashboard import (
     count_users,
     publish_ready,
 )
+from peerpedia_core.presentation.rich.components import guest_hint
 from peerpedia_core.cli.parser import build_parser
 from peerpedia_core.config.paths import DB_PATH, DB_URL
 from peerpedia_core.cli.info import console
@@ -59,7 +60,7 @@ def _show_dashboard() -> None:
                 "Failed to load dashboard stats", exc_info=True
             )
     else:
-        console.print("  [dim]Not logged in.[/]")
+        console.print(f"  {guest_hint(cli=True)}")
 
     console.print()
     console.print("  Get started:")

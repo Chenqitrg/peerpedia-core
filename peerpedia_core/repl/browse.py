@@ -23,7 +23,10 @@ from peerpedia_core.core import (
     list_articles,
     list_users_by_ids,
 )
-from peerpedia_core.presentation.rich.components import star_string
+from peerpedia_core.presentation.rich.components import (
+    no_articles_msg, no_rating_stars, no_reviews_msg, no_users_msg,
+    star_string, status_label,
+)
 from peerpedia_core.repl.display import _score_lines
 from peerpedia_core.repl.state import console, repl_style
 
@@ -38,6 +41,14 @@ _FULL_CARD_LINES = 7    # 1 title + 5 scores + 1 blank
 _COMPACT_CARD_LINES = 1
 _SCHOOL_PAGE_SIZE = 20
 _RANK_WIDTH = 3
+_SCHOOL_NAME_WIDTH = 25
+_RATING_PRECISION = ".1f"  # one decimal place for review averages
+
+# Status bar action hints
+_ARTICLE_ACTIONS_HINT = "Enter:view p:publish e:edit r:review b:bookmark q:back  ↑↓/wheel:scroll"
+_SCHOOL_ACTIONS_HINT = "Enter: follow  q: back  ↑↓/wheel:scroll"
+_REVIEW_ACTIONS_HINT = "Enter: view  r: reply  q: back  ↑↓/wheel:scroll"
+_REVIEW_NAME_WIDTH = 20
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Types
@@ -211,10 +222,6 @@ def _get_session_user_id() -> str:
     return s["user_id"] if s else ""
 
 
-def _format_status_label(status: str | None) -> str:
-    return status[:4].upper() if status else "?"
-
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Article browser
@@ -222,7 +229,7 @@ def _format_status_label(status: str | None) -> str:
 
 
 def _render_compact_card(a, prefix: str, style: str) -> list[Fragment]:
-    status = _format_status_label(a.status)
+    status = status_label(a.status)
     if a.score:
         star = star_string(int(a.score.get("originality", 0)))
     else:
@@ -236,7 +243,7 @@ def _render_compact_card(a, prefix: str, style: str) -> list[Fragment]:
 
 
 def _render_full_card(a, prefix: str, style: str) -> list[Fragment]:
-    status = _format_status_label(a.status)
+    status = status_label(a.status)
     lines: list[Fragment] = [(style, f"{prefix} {a.id}  {a.title}  {status}\n")]
     for sl in _score_lines(a.score):
         lines.append((style, f"          {sl}\n"))
@@ -254,7 +261,7 @@ def _render_article_item(article, index: int, is_selected: bool, *, compact: boo
 
 def _article_status_text(article, index: int, total: int, *, compact: bool) -> str:
     compact_mark = "[⊞]" if compact else ""
-    actions = "Enter:view p:publish e:edit r:review b:bookmark q:back  ↑↓/wheel:scroll"
+    actions = _ARTICLE_ACTIONS_HINT
     return f" {compact_mark} {index + 1}/{total}  ▸ {article.title[:_TITLE_TRUNCATE]}  │  {actions}"
 
 
@@ -277,10 +284,10 @@ _ARTICLE_ACTIONS: list[BrowserAction] = [
 def _browse_articles(db) -> str | None:
     articles = list_articles(db)
     if not articles:
-        console.print("[muted]No articles.[/]")
+        console.print(no_articles_msg())
         return None
 
-    compact = _st._repl_compact
+    compact = _st.session.compact
     return ListBrowser(
         title="Articles",
         items=articles,
@@ -301,12 +308,12 @@ def _render_user_line(user, rank: int, is_selected: bool, *, is_self: bool) -> F
     style = "class:selected" if is_selected else ""
     fc = getattr(user, "follower_count", 0)
     self_mark = " (you)" if is_self else ""
-    text = f"{prefix} {rank:>{_RANK_WIDTH}}. {user.name:<25} {fc} followers{self_mark}\n"
+    text = f"{prefix} {rank:>{_RANK_WIDTH}}. {user.name:<{_SCHOOL_NAME_WIDTH}} {fc} followers{self_mark}\n"
     return style, text
 
 
 def _user_status_text(user, index: int, total: int, *, is_self: bool) -> str:
-    hint = "" if is_self else "Enter: follow  "
+    hint = "" if is_self else _SCHOOL_ACTIONS_HINT
     self_note = " (you)" if is_self else ""
     return f" {index + 1}/{total}  ▸ {user.name}{self_note}  │  {hint}q: back  ↑↓/wheel:scroll"
 
@@ -314,7 +321,7 @@ def _user_status_text(user, index: int, total: int, *, is_self: bool) -> str:
 def _browse_school(db) -> str | None:
     users = get_top_users_by_followers(db, limit=_SCHOOL_PAGE_SIZE)
     if not users:
-        console.print("[muted]No users found.[/]")
+        console.print(no_users_msg())
         return None
 
     current_user_id = _get_session_user_id()
@@ -349,7 +356,7 @@ def _reviewer_name(r, users_by_id: dict) -> str:
 def _format_star_rating(scores: dict | None) -> tuple[str, float]:
     s = scores if scores else {}
     if not s:
-        return "  —  ", 0.0
+        return no_rating_stars(), 0.0
     avg = sum(s.values()) / len(s)
     return star_string(int(avg)), avg
 
@@ -359,19 +366,19 @@ def _render_review_line(r, index: int, is_selected: bool, users_by_id: dict) -> 
     style = "class:selected" if is_selected else ""
     name = _reviewer_name(r, users_by_id)
     stars, avg = _format_star_rating(getattr(r, "scores", None))
-    text = f"{prefix} {name:<20} {stars}  {avg:.1f}\n"
+    text = f"{prefix} {name:<{_REVIEW_NAME_WIDTH}} {stars}  {format(avg, _RATING_PRECISION)}\n"
     return style, text
 
 
 def _review_status_text(r, index: int, total: int, users_by_id: dict) -> str:
     name = _reviewer_name(r, users_by_id)
-    return f" {index + 1}/{total}  ▸ {name}  │  Enter: view  r: reply  q: back  ↑↓/wheel:scroll"
+    return f" {index + 1}/{total}  ▸ {name}  │  {_REVIEW_ACTIONS_HINT}"
 
 
 def _browse_reviews(db, article_id: str) -> str | None:
     reviews = get_reviews_for_article(db, article_id)
     if not reviews:
-        console.print("[muted]No reviews yet.[/]")
+        console.print(no_reviews_msg())
         return None
 
     reviewer_ids = {getattr(r, "reviewer_id", None) for r in reviews} - {None}

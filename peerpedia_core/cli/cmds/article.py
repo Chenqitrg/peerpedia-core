@@ -11,16 +11,13 @@ from pathlib import Path
 
 from peerpedia_core.app.commandspec import spec_for_cmd_id
 from peerpedia_core.app.result import AppResult
-from peerpedia_core.app.readmodels.articles import (
-    list_articles as _list_articles_orm,
-    list_author_ids_batch,
-)
 from peerpedia_core.cli.decorators import with_context
 from peerpedia_core.cli.display import (
-    display_article_meta, display_diff, display_empty_article_list,
-    display_full_content,
+    display_article_list, display_diff,
+    display_empty_article_list, display_full_content,
 )
 from peerpedia_core.cli.info import _open_file, _out, _page, console
+from peerpedia_core.presentation.rich.components import cli_compiling_msg
 from peerpedia_core.compiler import compile_article
 from peerpedia_core.editor import (
     open_editor as _open_editor,
@@ -72,6 +69,20 @@ def _cmd_article_create(ctx, args):
 
 # ── Read ──────────────────────────────────────────────────────────────────
 
+
+def _show_empty_article_state(args) -> AppResult | None:
+    """Render context-sensitive guidance when no articles match.  Returns a
+    sentinel AppResult to suppress double-printing, or None if items exist."""
+    if getattr(args, "feed", False):
+        display_empty_article_list("N_NO_ARTICLES_FEED")
+        display_empty_article_list("N_NO_ARTICLES_FEED_HINT")
+    elif getattr(args, "mine", False):
+        display_empty_article_list("N_NO_ARTICLES_MINE")
+        display_empty_article_list("N_NO_ARTICLES_MINE_HINT")
+    else:
+        display_empty_article_list("N_NO_ARTICLES")
+    return None  # caller builds the sentinel
+
 @with_context
 def _cmd_article_show(ctx, args):
     """Show article details: title, status, authors, score, abstract, content."""
@@ -99,38 +110,35 @@ def _cmd_article_list(ctx, args):
     )
     items: list[dict] = result.data.get("items", [])
     if not items:
-        if getattr(args, "feed", False):
-            display_empty_article_list("N_NO_ARTICLES_FEED")
-            display_empty_article_list("N_NO_ARTICLES_FEED_HINT")
-        elif getattr(args, "mine", False):
-            display_empty_article_list("N_NO_ARTICLES_MINE")
-            display_empty_article_list("N_NO_ARTICLES_MINE_HINT")
-        else:
-            display_empty_article_list("N_NO_ARTICLES")
-        # Empty-state messages already rendered — suppress double-print
+        _show_empty_article_state(args)
         return AppResult(code="", data=None, params=result.params, notices=result.notices)
-    # ── Display search results ──
-    author_map = list_author_ids_batch(ctx.db, [a["id"] for a in items])
-    item_ids = {a["id"] for a in items}
-    for a in _list_articles_orm(ctx.db, limit=len(items)):
-        if a.id in item_ids:
-            display_article_meta(ctx.db, a, author_ids=author_map.get(a.id, []))
-    # Rich already rendered — don't let _render_result double-print raw data
+
+    display_article_list(ctx.db, items)
     return AppResult(code="", data=None, params=result.params, notices=result.notices)
 
 
 # ── Edit ──────────────────────────────────────────────────────────────────
 
+
+def _build_edit_message(raw: str, new_content: str | None, new_title: str | None,
+                        content_changed: bool) -> str:
+    """Build a commit message from edit changes."""
+    if content_changed:
+        return _prompt_commit_message(
+            _compute_edit_diff(raw, new_content, new_title, content_changed),
+        )
+    if new_title:
+        return f"Title: {new_title}"
+    return "Edit article"
+
+
 @with_context
 def _cmd_article_edit(ctx, args):
     """Edit an article's content or title."""
-    article_ref = args.id
-    # ── Read current content ──
-    result = _article.get_source_path(ctx, article_ref=article_ref)
-    raw = result.data.get("content", "")
-
+    raw = _article.get_source_path(ctx, article_ref=args.id).data.get("content", "")
     new_content = args.content if args.content is not None else (
-        _open_editor(raw) if not args.no_editor else None)
+        _open_editor(raw) if not args.no_editor else None
+    )
     content_changed = new_content is not None and new_content != raw
     title_changed = args.title is not None
 
@@ -138,15 +146,11 @@ def _cmd_article_edit(ctx, args):
         _out(None, "N_NO_EDIT_CHANGES")
         return
 
-    if content_changed:
-        message = _prompt_commit_message(
-            _compute_edit_diff(raw, new_content, args.title, content_changed))
-    elif title_changed:
-        message = f"Title: {args.title}"
-    else:
-        message = "Edit article"
-    return _article.edit(ctx, article_ref=article_ref,
-        content=new_content, title=args.title, message=message)
+    return _article.edit(
+        ctx, article_ref=args.id,
+        content=new_content, title=args.title,
+        message=_build_edit_message(raw, new_content, args.title, content_changed),
+    )
 
 
 # ── Publish / Delete / Scan ───────────────────────────────────────────────
@@ -189,21 +193,9 @@ def _cmd_article_diff(ctx, args):
 
 # ── Compile ───────────────────────────────────────────────────────────────
 
-@with_context
-def _cmd_compile(ctx, args):
-    """Compile an article to PDF/SVG/PNG/HTML."""
-    source_result = _article.get_source_path(ctx, article_ref=args.id)
-    source_path = source_result.data.get("path", "")
-    if not source_path:
-        _out(args, "SOURCE_NOT_FOUND", article_id=args.id)
-        return
-    with console.status("[info]Compiling...[/]", spinner="dots"):
-        result = compile_article(Path(source_path), args.format)
 
-    if not result.success:
-        code = result.error_code or "COMPILE_FAILED"
-        _out(args, code, error=result.error or "", fmt=result.format)
-
+def _print_compile_output(result) -> None:
+    """Display compile output — open file for PDF/SVG/PNG, page for HTML."""
     if result.output_path:
         _out(None, "N_COMPILED", fmt=result.format.upper())
         _out(None, "N_COMPILED_PATH", path=str(result.output_path))
@@ -213,3 +205,22 @@ def _cmd_compile(ctx, args):
             _page(result.html_content)
         else:
             console.print(result.html_content)
+
+
+@with_context
+def _cmd_compile(ctx, args):
+    """Compile an article to PDF/SVG/PNG/HTML."""
+    source_result = _article.get_source_path(ctx, article_ref=args.id)
+    source_path = source_result.data.get("path", "")
+    if not source_path:
+        _out(args, "SOURCE_NOT_FOUND", article_id=args.id)
+        return
+
+    with console.status(cli_compiling_msg(), spinner="dots"):
+        result = compile_article(Path(source_path), args.format)
+
+    if not result.success:
+        _out(args, result.error_code or "COMPILE_FAILED",
+             error=result.error or "", fmt=result.format)
+    else:
+        _print_compile_output(result)

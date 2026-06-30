@@ -10,6 +10,7 @@ from peerpedia_core.app.result import AppResult
 from peerpedia_core.cli.decorators import with_context
 from peerpedia_core.cli.display import display_user
 from peerpedia_core.cli.info import console
+from peerpedia_core.presentation.rich.components import cli_no_users_msg
 from peerpedia_core.editor import get_password as _get_password
 
 
@@ -89,7 +90,7 @@ def _cmd_account_search(ctx, args):
     })
     items = result.data.get("items", [])
     if not items:
-        console.print(f"[muted]No users match '{args.query}'.[/]")
+        console.print(cli_no_users_msg(args.query))
         return AppResult(code="", data=None, params=result.params, notices=result.notices)
     for u in items:
         display_user(u["name"], u["user_id"])

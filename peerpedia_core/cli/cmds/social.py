@@ -9,23 +9,8 @@ from peerpedia_core.app.commandspec import spec_for_cmd_id
 from peerpedia_core.app.result import AppResult
 from peerpedia_core.cli.bundle_utils import _resolve_server_url
 from peerpedia_core.cli.decorators import with_context
-from peerpedia_core.cli.display import display_user
 from peerpedia_core.cli.info import console
-
-
-def _render_user_panels(items: list[dict]) -> None:
-    """Render a list of user dicts as individual Rich panels."""
-    for u in items:
-        display_user(
-            u.get("name", "?"),
-            u.get("id") or u.get("user_id", "?"),
-            affiliation=u.get("affiliation", ""),
-            expertise=u.get("expertise"),
-            reputation=u.get("reputation"),
-            follower_count=u.get("follower_count"),
-            public_key=u.get("public_key"),
-            created_at=u.get("created_at"),
-        )
+from peerpedia_core.presentation.rich.components import no_users_msg, user_panels
 
 
 # ── Follow / Unfollow ─────────────────────────────────────────────────────
@@ -48,7 +33,7 @@ def _cmd_following(ctx, args):
     result = spec_for_cmd_id("following").handler(ctx, {"user": args.user})
     items = result.data.get("items", [])
     if items:
-        _render_user_panels(items)
+        user_panels(console, items)
     return AppResult(code=result.code, data=None, params=result.params, notices=result.notices)
 
 
@@ -58,7 +43,7 @@ def _cmd_followers(ctx, args):
     result = spec_for_cmd_id("followers").handler(ctx, {"user": args.user})
     items = result.data.get("items", [])
     if items:
-        _render_user_panels(items)
+        user_panels(console, items)
     return AppResult(code=result.code, data=None, params=result.params, notices=result.notices)
 
 
@@ -135,12 +120,12 @@ def _cmd_school(ctx, args):
     })
     items = result.data.get("items", [])
     if not items:
-        console.print("[muted]No users found.[/]")
+        console.print(no_users_msg())
         return AppResult(code="", data=None, params=result.params, notices=result.notices)
     if hasattr(items[0], "name"):
         users = [{"name": u.name, "id": u.id,
                   "follower_count": getattr(u, "follower_count", 0)} for u in items]
     else:
         users = items
-    _render_user_panels(users)
+    user_panels(console, items)
     return AppResult(code="", data=None, params=result.params, notices=result.notices)

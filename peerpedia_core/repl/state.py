@@ -12,6 +12,7 @@ from __future__ import annotations
 import logging
 import time
 from contextlib import contextmanager
+from dataclasses import dataclass, field
 
 from prompt_toolkit.styles import Style
 from rich.console import Console
@@ -19,6 +20,7 @@ from rich.theme import Theme
 
 logger = logging.getLogger(__name__)
 
+from peerpedia_core.presentation.rich.components import abbrev_commit
 from peerpedia_core.app.context import read_session
 from peerpedia_core.config.paths import DB_PATH, DB_URL
 from peerpedia_core.core import (
@@ -26,7 +28,9 @@ from peerpedia_core.core import (
     db_repl_new_session, list_articles, list_users,
 )
 
-# ── REPL database sessions (per-command unit of work) ────────────────────
+# ═══════════════════════════════════════════════════════════════════════════════
+# REPL database sessions (per-command unit of work)
+# ═══════════════════════════════════════════════════════════════════════════════
 
 
 def new_session():
@@ -66,24 +70,26 @@ def close_db():
     db_repl_dispose()
 
 
-# ── Color themes ─────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════════
+# Color themes
+# ═══════════════════════════════════════════════════════════════════════════════
 
 _PARCHMENT_THEME = Theme({
-    "success": "#777C5C bold",    # olive
-    "error": "#B84040 bold",      # brick red
-    "warning": "#D4893C bold",    # amber
-    "info": "#A85F3B bold",       # primary terracotta
-    "accent": "#B08A57 bold",     # gold-brown
-    "muted": "#6F665E dim",       # warm gray
+    "success": "#777C5C bold",
+    "error": "#B84040 bold",
+    "warning": "#D4893C bold",
+    "info": "#A85F3B bold",
+    "accent": "#B08A57 bold",
+    "muted": "#6F665E dim",
 })
 
 _EMBER_THEME = Theme({
-    "success": "#8F9A82 bold",    # sage
-    "error": "#CC5544 bold",      # ember red
-    "warning": "#D4A03C bold",    # golden amber
-    "info": "#D18462 bold",       # primary rose
-    "accent": "#B89A66 bold",     # dark gold
-    "muted": "#BDB3A6 dim",       # warm gray (night)
+    "success": "#8F9A82 bold",
+    "error": "#CC5544 bold",
+    "warning": "#D4A03C bold",
+    "info": "#D18462 bold",
+    "accent": "#B89A66 bold",
+    "muted": "#BDB3A6 dim",
 })
 
 _PARCHMENT_STYLE = Style.from_dict({
@@ -100,78 +106,90 @@ theme = _PARCHMENT_THEME
 repl_style = _PARCHMENT_STYLE
 console = Console(theme=theme)
 
-# Module-level globals — mutated via ``_st.<field>`` by meta.py / dispatch.py.
 
-# ── Session state ────────────────────────────────────────────────────────
+# ═══════════════════════════════════════════════════════════════════════════════
+# Session state — a single object instead of scattered module globals
+# ═══════════════════════════════════════════════════════════════════════════════
 
-_repl_user: str | None = None
-_repl_article_id: str | None = None
-_repl_article_title: str = ""
-_repl_article_commit: str = ""
-_repl_theme: str = "parchment"
-_repl_compact: bool = False
-_repl_completion_words: list = []  # dynamic completion: article IDs, @names
+
+@dataclass
+class ReplSession:
+    """All mutable REPL state in one place.  pgcli/IPython pattern."""
+
+    user: str | None = None
+    article_id: str | None = None
+    article_title: str = ""
+    article_commit: str = ""
+    compact: bool = False
+    completion_words: list[str] = field(default_factory=list)
+    theme_name: str = "parchment"
+
+
+session = ReplSession()
+
+
+# ── Public setters — write through to session ────────────────────────────────
 
 
 def set_article_context(article_id: str | None, title: str = "", commit: str = "") -> None:
-    """Set the current article context for prompt display.  Public setter."""
-    global _repl_article_id, _repl_article_title, _repl_article_commit
-    _repl_article_id = article_id
-    _repl_article_title = title
-    _repl_article_commit = commit
+    session.article_id = article_id
+    session.article_title = title
+    session.article_commit = commit
 
 
 def set_user(name: str) -> None:
-    """Set the current REPL user name."""
-    global _repl_user
-    _repl_user = name
+    session.user = name
 
 
 def set_compact(compact: bool) -> None:
-    """Toggle compact output mode."""
-    global _repl_compact
-    _repl_compact = compact
+    session.compact = compact
 
 
 def set_theme(mode: str) -> str:
     """Switch to *mode* theme ('light'/'dark').  Returns the theme name."""
-    global theme, repl_style, _repl_theme
+    global theme, repl_style
     if mode in ("dark", "ember", "night"):
         theme = _EMBER_THEME
         repl_style = _EMBER_STYLE
-        _repl_theme = "ember"
+        session.theme_name = "ember"
     elif mode in ("light", "parchment", "day"):
         theme = _PARCHMENT_THEME
         repl_style = _PARCHMENT_STYLE
-        _repl_theme = "parchment"
+        session.theme_name = "parchment"
     else:
-        return ""  # unknown mode — caller handles
+        return ""
     console.push_theme(theme)
-    return _repl_theme
+    return session.theme_name
 
-# Cache for notification count — only refresh every 30s, not on every
-# keystroke (prompt_toolkit calls _prompt_text on each render cycle).
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Notification badge (cached for 30s — called on every keystroke)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+_NOTIF_CACHE_TTL = 30.0
 _notif_cache: tuple[float, int] = (0.0, 0)
-# One-shot warning flag — _prompt_text is called on every keystroke,
-# so we only warn once per session when notification lookup fails.
 _notif_warned: bool = False
+
+
+def _refresh_notif_cache() -> None:
+    """Refresh the notification count cache if stale."""
+    now = time.time()
+    global _notif_cache
+    if now - _notif_cache[0] <= _NOTIF_CACHE_TTL:
+        return
+    db = new_session()
+    try:
+        sid = read_session()
+        unread = count_unread_notifications(db, sid["user_id"]) if sid else 0
+        _notif_cache = (now, unread)
+    finally:
+        db.close()
+
 
 def _get_notification_badge() -> str:
     """Return a notification count badge string, cached for 30s."""
     try:
-        now = time.time()
-        global _notif_cache
-        if now - _notif_cache[0] > 30.0:
-            db = new_session()
-            try:
-                sid = _read_session()
-                if sid:
-                    unread = count_unread_notifications(db, sid["user_id"])
-                    _notif_cache = (now, unread)
-                else:
-                    _notif_cache = (now, 0)
-            finally:
-                db.close()
+        _refresh_notif_cache()
         return f" ({_notif_cache[1]})" if _notif_cache[1] > 0 else ""
     except Exception:
         global _notif_warned
@@ -181,40 +199,56 @@ def _get_notification_badge() -> str:
         return ""
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# Prompt + completions
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def _prompt_user_badge() -> tuple[str, str]:
+    """Prompt fragment: 'alice (3)'."""
+    return "class:prompt", f"{session.user or 'guest'}{_get_notification_badge()}"
+
+
+def _prompt_article_segment() -> list[tuple[str, str]]:
+    """Prompt fragments for current article context, e.g. ' ▸ My Paper @abc1234'."""
+    if not session.article_id:
+        return []
+    label = session.article_title or session.article_id
+    parts: list[tuple[str, str]] = [("class:separator", f" ▸ {label}")]
+    if session.article_commit:
+        parts.append(("class:separator", f" @{abbrev_commit(session.article_commit)}"))
+    return parts
+
+
 def _prompt_text():
     """Build the REPL prompt line with user badge, article context, notifications."""
-    parts = [("class:prompt", f"{_repl_user or 'guest'}{_get_notification_badge()}")]
-    if _repl_article_id:
-        label = _repl_article_title or _repl_article_id
-        parts.append(("class:separator", f" ▸ {label}"))
-        if _repl_article_commit:
-            parts.append(("class:separator", f" @{_repl_article_commit[:7]}"))
+    parts = [_prompt_user_badge()]
+    parts.extend(_prompt_article_segment())
     parts.append(("class:separator", "> "))
     return parts
 
 
+def _collect_completion_words(db) -> list[str]:
+    """Collect completion candidates: article IDs, title words, @names, user IDs."""
+    words: list[str] = []
+    for a in list_articles(db, limit=50):
+        if a.id:
+            words.append(a.id)
+        if a.title:
+            words.extend(w for w in a.title.split() if len(w) > 2)
+    for u in list_users(db):
+        if u.name:
+            words.append(f"@{u.name}")
+            words.append(u.id)
+    return sorted(set(words))
+
+
 def _refresh_completions():
-    """Rebuild dynamic completion word list from DB (article IDs + @names)."""
-    global _repl_completion_words
+    """Rebuild dynamic completion word list from DB."""
     db = new_session()
     try:
-        words = []
-        for a in list_articles(db, limit=50):
-            if a.id:
-                words.append(a.id)
-            if a.title:
-                for w in a.title.split():
-                    if len(w) > 2:
-                        words.append(w)
-        for u in list_users(db):
-            if u.name:
-                words.append(f"@{u.name}")
-                words.append(u.id)
-        _repl_completion_words = sorted(set(words))
+        session.completion_words = _collect_completion_words(db)
     except Exception:
         logger.warning("Failed to refresh REPL completions", exc_info=True)
     finally:
         db.close()
-
-
-# _get_session_user_id is in browse.py — use _get_session_user_id() from there.

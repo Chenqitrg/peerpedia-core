@@ -17,6 +17,19 @@ import peerpedia_core.repl.state as _st
 from peerpedia_core.repl.state import console
 
 _DEFAULT_SELF_REVIEW_SCORES = "orig=4,rigor=3,comp=4,ped=3,imp=4"
+_EMPTY_TITLE_MSG = "[muted]Cancelled — empty title.[/]"
+_CMD_PREVIEW_WIDTH = 80
+_EMPTY_CONTENT_MSG = "[muted]Created with empty content.[/]"
+_CONTENT_PROMPT_MSG = "[muted]Content (Ctrl+D or empty line to finish):[/]"
+_PUBLISH_PROMPT_FMT = "  [{style}]Publish now?[/] [muted][y/N][/]"
+
+
+def _article_create_cmd(title: str, content: str) -> str:
+    return f"article create --title {shlex.quote(title)} --content {shlex.quote(content)}"
+
+
+def _article_publish_cmd(article_id: str) -> str:
+    return f'article publish {article_id} --scores "{_DEFAULT_SELF_REVIEW_SCORES}"'
 
 
 def _prompt_title() -> str | None:
@@ -30,7 +43,7 @@ def _prompt_title() -> str | None:
 
 def _prompt_content() -> str:
     """Prompt for multi-line article content.  Returns content string."""
-    console.print(f"  [muted]Content (Ctrl+D or empty line to finish):[/]")
+    console.print(f"  {_CONTENT_PROMPT_MSG}")
     lines = []
     try:
         while True:
@@ -49,28 +62,26 @@ def _meta_write(execute) -> bool:
 
     title = _prompt_title()
     if not title:
-        console.print("[muted]Cancelled — empty title.[/]")
+        console.print(_EMPTY_TITLE_MSG)
         return True
 
     content = _prompt_content()
     if not content:
-        console.print("[muted]Created with empty content.[/]")
+        console.print(_EMPTY_CONTENT_MSG)
 
-    cmd = f"article create --title {shlex.quote(title)} --content {shlex.quote(content)}"
-    console.print(f"  [dim]{cmd[:80]}...[/]")
+    cmd = _article_create_cmd(title, content)
+    console.print(f"  [dim]{cmd[:_CMD_PREVIEW_WIDTH]}...[/]")
     execute(cmd)
 
     # Offer to publish
-    if _st._repl_article_id:
+    if _st.session.article_id:
         try:
             pub = Prompt.ask(
-                f"  [{_st.theme.styles['accent']}]Publish now?[/] [muted][y/N][/]",
-                default="n"
+                _PUBLISH_PROMPT_FMT.format(style=_st.theme.styles['accent']),
+                default="n",
             )
             if pub.lower() in ("y", "yes"):
-                return execute(
-                    f'article publish {_st._repl_article_id} --scores "{_DEFAULT_SELF_REVIEW_SCORES}"'
-                )
+                return execute(_article_publish_cmd(_st.session.article_id))
         except (EOFError, KeyboardInterrupt):
             pass
 

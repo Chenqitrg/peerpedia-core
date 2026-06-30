@@ -10,6 +10,13 @@ from peerpedia_core.cli.decorators import with_context
 from peerpedia_core.editor import open_editor as _open_editor
 from peerpedia_core.cli.info import _out
 
+_REPLY_TEMPLATE = (
+    "# Author Reply\n"
+    "# Replying to: {to_user}\n"
+    "# Write your reply below. Lines starting with # are ignored.\n"
+    "# An empty reply aborts.\n\n"
+)
+
 
 @with_context
 def _cmd_review_submit(ctx, args):
@@ -74,12 +81,6 @@ def _cmd_review_rate(ctx, args):
 
 def _edit_reply(to_user: str) -> str:
     """Open $EDITOR with a reply template, return the non-comment text."""
-    template = (
-        f"# Author Reply\n"
-        f"# Replying to: {to_user}\n"
-        "# Write your reply below. Lines starting with # are ignored.\n"
-        "# An empty reply aborts.\n\n"
-    )
-    content = _open_editor(template)
+    content = _open_editor(_REPLY_TEMPLATE.format(to_user=to_user))
     lines = [l for l in content.splitlines() if not l.strip().startswith("#")]
     return "\n".join(lines).strip()

@@ -73,7 +73,7 @@ def _last_token(text: str) -> str | None:
 
 def _dynamic_completion_words() -> set[str]:
     """Return dynamic REPL completion words: article IDs and @usernames."""
-    return set(_st._repl_completion_words)
+    return set(_st.session.completion_words)
 
 
 def _matching_completions(
@@ -99,6 +99,23 @@ class ReplCompleter(Completer):
     def __init__(self, static_words: Iterable[str]) -> None:
         self._static_words = frozenset(static_words)
 
+    def _complete_prefix(self, prefix: str,
+                         words: set[str], yielded: set[str]) -> Iterator[Completion]:
+        """Try multi-word prefix match — e.g. 'article p' → 'article publish'."""
+        if prefix:
+            yield from _matching_completions(
+                words, prefix, start_position=-len(prefix), yielded=yielded,
+            )
+
+    def _complete_token(self, text: str,
+                        words: set[str], yielded: set[str]) -> Iterator[Completion]:
+        """Try last-token match — e.g. 'review @al' → '@alice'."""
+        token = _last_token(text)
+        if token:
+            yield from _matching_completions(
+                words, token, start_position=-len(token), yielded=yielded,
+            )
+
     def get_completions(
         self,
         document: Document,
@@ -107,30 +124,10 @@ class ReplCompleter(Completer):
         text = document.text_before_cursor
         if not text:
             return
-
         words = self._all_words()
         yielded: set[str] = set()
-
-        # Multi-word command prefix match — e.g. "article p" → "article publish"
-        command_prefix = text.lstrip()
-        if command_prefix:
-            yield from _matching_completions(
-                words,
-                command_prefix,
-                start_position=-len(command_prefix),
-                yielded=yielded,
-            )
-
-        # Last-token fallback — e.g. "review @al" → "@alice"
-        token = _last_token(text)
-        if token is None:
-            return
-        yield from _matching_completions(
-            words,
-            token,
-            start_position=-len(token),
-            yielded=yielded,
-        )
+        yield from self._complete_prefix(text.lstrip(), words, yielded)
+        yield from self._complete_token(text, words, yielded)
 
     def _all_words(self) -> set[str]:
         return set(self._static_words) | _dynamic_completion_words()

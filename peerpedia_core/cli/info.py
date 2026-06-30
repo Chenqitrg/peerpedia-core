@@ -21,10 +21,10 @@ import os
 import subprocess
 import sys
 from rich.console import Console
-from rich.text import Text
 from rich.theme import Theme
 
 from peerpedia_core.messages import Kind, log_text as _log_text, lookup as _lookup
+from peerpedia_core.presentation.rich.components import error_lines
 
 # ── Rich console (singleton) ──────────────────────────────────────────────
 # Only output.py owns the Console instance — all other CLI modules go through
@@ -176,12 +176,8 @@ def _render_error_out(code: str, m, use_json: bool, fmt: dict) -> None:
         print(json.dumps(payload, indent=2, default=str))
         return
 
-    console.print(Text(f"✗ {msg}", style=theme.styles["error"]))
-    if suggestion:
-        console.print()
-        console.print(f"  [dim]→ {suggestion}[/]")
-    if see_also:
-        console.print(f"  [muted]See also: {' · '.join(see_also)}[/]")
+    for line in error_lines(msg, suggestion=suggestion, see_also=see_also or ()):
+        console.print(line)
 
 
 # ── AppResult / AppError renderers ───────────────────────────────────────

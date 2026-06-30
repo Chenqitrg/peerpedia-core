@@ -15,6 +15,8 @@ from peerpedia_core.core.articles.diff import diff_article
 
 # ── Read wrappers — thin pass-through to crud ────────────────────────────
 
+from peerpedia_core.config.paths import article_repo_path
+from peerpedia_core.frontmatter import parse_frontmatter as _parse_frontmatter
 from peerpedia_core.storage.db import Session
 from peerpedia_core.storage.db.models import ArticleMetaStorage
 from peerpedia_core.storage.db.crud_article import (
@@ -24,6 +26,7 @@ from peerpedia_core.storage.db.crud_article import (
     list_articles as _list,
 )
 from peerpedia_core.storage.db.crud_author import list_author_ids as _get_author_ids
+from peerpedia_core.storage.db.crud_user import list_users_by_ids as _list_users_by_ids
 from peerpedia_core.core.reconcile import reconcile_integrity
 
 
@@ -83,3 +86,60 @@ def list_all_article_ids(db: Session) -> list[str]:
 def list_author_ids(db: Session, article_id: str) -> list[str]:
     """Return ordered author IDs for an article."""
     return _get_author_ids(db, article_id)
+
+
+def _author_names(db: Session, author_ids: list[str]) -> list[str]:
+    """Resolve author UUIDs to display names."""
+    if not author_ids:
+        return []
+    users = {u.id: u for u in _list_users_by_ids(db, set(author_ids))}
+    return [users[uid].name if uid in users else uid for uid in author_ids]
+
+
+def _article_frontmatter(article_id: str) -> dict:
+    """Read frontmatter from an article's source file, or {}."""
+    source = article_repo_path(article_id) / "article.md"
+    return _parse_frontmatter(source.read_text()) if source.exists() else {}
+
+
+def resolve_article_meta(db: Session, article,
+                         *, author_ids: list[str] | None = None) -> dict:
+    """Resolve article metadata from DB + source file with fallbacks."""
+    ids = author_ids or _get_author_ids(db, article.id)
+    fm = _article_frontmatter(article.id)
+    return {
+        "title": fm.get("title", article.title),
+        "status": article.status,
+        "authors": _author_names(db, ids),
+        "score": article.score,
+        "abstract": fm.get("abstract", article.abstract),
+    }
+
+
+def resolve_article_meta_batch(db: Session,
+                               article_ids: list[str]) -> list[dict]:
+    """Resolve metadata for a batch of articles — single DB round-trip."""
+    from peerpedia_core.storage.db.crud_author import list_author_ids_batch
+
+    author_map = list_author_ids_batch(db, article_ids)
+    all_author_ids = {aid for ids in author_map.values() for aid in ids}
+    users = {u.id: u for u in _list_users_by_ids(db, all_author_ids)} if all_author_ids else {}
+
+    articles = _list(db, limit=len(article_ids))
+    article_by_id = {a.id: a for a in articles}
+    result: list[dict] = []
+    for aid in article_ids:
+        a = article_by_id.get(aid)
+        if a is None:
+            continue
+        ids = author_map.get(aid, [])
+        fm = _article_frontmatter(aid)
+        result.append({
+            "id": aid,
+            "title": fm.get("title", a.title),
+            "status": a.status,
+            "authors": [users[uid].name if uid in users else uid for uid in ids],
+            "score": a.score,
+            "abstract": fm.get("abstract", a.abstract),
+        })
+    return result

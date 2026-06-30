@@ -12,18 +12,13 @@ from rich.panel import Panel
 from rich.text import Text
 
 from peerpedia_core.core import count_articles
+from peerpedia_core.presentation.rich.components import (
+    banner_keyboard_hints, banner_stats_line, banner_subtitle,
+    greeting_banner, guest_hint,
+)
 from peerpedia_core.repl.state import console, theme
 
 logger = logging.getLogger(__name__)
-
-
-def _greeting_panel() -> Text:
-    """Build the peerpedia greeting Text object."""
-    greeting = Text()
-    greeting.append("✧ ", style=theme.styles['accent'])
-    greeting.append("PeerPedia", style=f"bold {theme.styles['info']}")
-    return greeting
-
 
 def _format_user_article_stats(db, user_id: str) -> str:
     """Return a formatted article stats line for one user."""
@@ -35,18 +30,7 @@ def _format_user_article_stats(db, user_id: str) -> str:
         logger.warning("Failed to load REPL dashboard stats", exc_info=True)
         return "?"
 
-    parts: list[str] = []
-
-    if drafts:
-        parts.append(f"[bold]{drafts}[/] draft(s)")
-
-    if in_review:
-        parts.append(f"[bold]{in_review}[/] in review")
-
-    if published:
-        parts.append(f"[bold]{published}[/] published")
-
-    return " · ".join(parts) if parts else "no articles yet"
+    return banner_stats_line(drafts, in_review, published)
 
 
 def _print_logged_in_banner(db, session_data: Mapping[str, str]) -> None:
@@ -54,8 +38,8 @@ def _print_logged_in_banner(db, session_data: Mapping[str, str]) -> None:
     user_id = session_data.get("user_id", "")
     user_name = session_data.get("name", "?")
 
-    greeting = _greeting_panel()
-    greeting.append("  scholarly terminal", style="muted")
+    greeting = greeting_banner(theme.styles['accent'], theme.styles['info'])
+    greeting.append(banner_subtitle(), style="muted")
 
     console.print(Panel(greeting, border_style="muted", padding=(0, 2)))
 
@@ -64,18 +48,15 @@ def _print_logged_in_banner(db, session_data: Mapping[str, str]) -> None:
     user_line.append(f"  {user_id}", style="muted")
 
     console.print(user_line)
-    console.print(f"  [muted]{_format_user_article_stats(db, user_id)}[/]")
+    console.print(_format_user_article_stats(db, user_id))
 
 
 def _print_logged_out_banner() -> None:
     """Print startup banner for an anonymous user."""
-    greeting = _greeting_panel()
+    greeting = greeting_banner(theme.styles['accent'], theme.styles['info'])
 
     console.print(Panel(greeting, border_style="muted", padding=(0, 2)))
-    console.print(
-        "  [muted]Not logged in.  "
-        "[accent]register --name <name>[/] to begin.[/]"
-    )
+    console.print(f"  {guest_hint()}")
 
 
 def show_startup_banner(db, session_data: Mapping[str, str] | None) -> None:
@@ -87,8 +68,5 @@ def show_startup_banner(db, session_data: Mapping[str, str] | None) -> None:
     else:
         _print_logged_out_banner()
 
-    console.print(
-        "  [dim]Enter submit  ·  Ctrl+J newline  ·  "
-        ":help commands  ·  :quit exit[/]"
-    )
+    console.print(f"  {banner_keyboard_hints()}")
     console.print()

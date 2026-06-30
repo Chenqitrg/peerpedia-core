@@ -20,6 +20,10 @@ from peerpedia_core.app.commandspec import (
 )
 from peerpedia_core.app.context import build_context
 from peerpedia_core.exceptions import PeerpediaError
+from peerpedia_core.presentation.rich.components import (
+    repl_cancelled_msg, repl_internal_error, repl_parse_error,
+    repl_unavailable_cmd, repl_unknown_cmd,
+)
 from peerpedia_core.repl.display import (
     format_error, format_result, print_result,
 )
@@ -139,16 +143,16 @@ def execute(cmd_str: str) -> bool:
     try:
         parts = shlex.split(cmd_str)
     except ValueError as e:
-        console.print(f"[error]✗ Parse error: {e}[/]")
+        console.print(repl_parse_error(e))
         return True
 
     # ── Lookup ────────────────────────────────────────────────────────────
     spec, rest = _resolve_spec(parts)
     if spec is None:
-        console.print(f"[error]✗ Unknown command: {cmd_str}[/]. Try :help")
+        console.print(repl_unknown_cmd(cmd_str))
         return True
     if spec.frontend == "cli" or spec.handler is None:
-        console.print(f"[muted]{spec.cmd_id} is not available in REPL.[/]")
+        console.print(repl_unavailable_cmd(spec.cmd_id))
         return True
 
     # ── Parse args ────────────────────────────────────────────────────────
@@ -162,7 +166,7 @@ def execute(cmd_str: str) -> bool:
     try:
         _prompt_password_if_needed(spec, args)
     except KeyboardInterrupt:
-        console.print("\n[muted]Cancelled.[/]")
+        console.print(repl_cancelled_msg())
         return True
 
     # ── Execute ───────────────────────────────────────────────────────────
@@ -175,7 +179,7 @@ def execute(cmd_str: str) -> bool:
         return True
     except Exception as e:
         _log.exception("REPL command failed: %s", cmd_str)
-        console.print(f"[error]✗ Internal error: {e}[/]")
+        console.print(repl_internal_error(e))
         return True
 
     # ── Format + Print ────────────────────────────────────────────────────

@@ -14,12 +14,11 @@ from dataclasses import dataclass
 
 import pytest
 
-from peerpedia_core.presentation.rich.components import star_string
+from peerpedia_core.presentation.rich.components import star_string, status_label
 from peerpedia_core.repl.browse import (
     BrowserCursor,
     _browser_result,
     _format_star_rating,
-    _format_status_label,
     _render_compact_card,
     _render_full_card,
     _render_user_line,
@@ -66,21 +65,21 @@ def test_browser_result():
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# _format_status_label
+# status_label
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-def test_format_status_label_normal():
-    assert _format_status_label("sedimentation") == "SEDI"
+def teststatus_label_normal():
+    assert status_label("sedimentation") == "SEDI"
 
 
-def test_format_status_label_short():
-    assert _format_status_label("dr") == "DR"
+def teststatus_label_short():
+    assert status_label("dr") == "DR"
 
 
-def test_format_status_label_none():
-    assert _format_status_label(None) == "?"
-    assert _format_status_label("") == "?"
+def teststatus_label_none():
+    assert status_label(None) == "?"
+    assert status_label("") == "?"
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

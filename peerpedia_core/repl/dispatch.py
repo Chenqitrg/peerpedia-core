@@ -15,6 +15,10 @@ from peerpedia_core.repl.help import _meta_help
 from peerpedia_core.repl.meta import (
     _meta_user, _meta_article, _meta_theme, _show_inbox,
 )
+from peerpedia_core.repl.wizards import _meta_write
+from peerpedia_core.presentation.rich.components import (
+    compact_mode_msg, unknown_meta_cmd_msg,
+)
 from peerpedia_core.repl.state import console
 
 import peerpedia_core.repl.state as _st
@@ -29,9 +33,9 @@ def _handle_quit(arg: str) -> bool:
 
 
 def _handle_compact(arg: str) -> bool:
-    _st.set_compact(not _st._repl_compact)
-    mode = "compact table" if _st._repl_compact else "rich panels"
-    console.print(f"[muted]Output mode: {mode}.[/]")
+    _st.set_compact(not _st.session.compact)
+    mode = "compact table" if _st.session.compact else "rich panels"
+    console.print(compact_mode_msg(mode))
     return True
 
 
@@ -130,5 +134,5 @@ def _dispatch_meta(cmd_str: str) -> bool | None:
     if handler is not None:
         return handler(arg)
 
-    console.print(f"[error]Unknown meta-command: {meta}[/]. Try :help")
+    console.print(unknown_meta_cmd_msg(meta))
     return True

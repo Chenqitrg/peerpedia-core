@@ -17,37 +17,22 @@ from peerpedia_core.app.result import AppResult
 from peerpedia_core.exceptions import PeerpediaError
 from peerpedia_core.messages import lookup as _lookup
 from peerpedia_core.presentation.rich.components import (
-    SCORE_DIM_NAMES,
-    display_user as _shared_display_user,
-    print_panel as _shared_print_panel,
-    print_table as _shared_print_table,
+    data_table,
+    error_lines,
+    notification_table as _notification_table,
     score_lines as _shared_score_lines,
-    score_stars as _shared_score_stars,
-    status_badge as _shared_status_badge,
+    user_line_text,
 )
 from peerpedia_core.repl.state import console
 
-# ── Thin wrappers (inject REPL console) ──────────────────────────────────────
+# ── Thin wrappers ─────────────────────────────────────────────────────────────
 
 
 def _score_lines(score: dict | None, dims: list[str] | None = None) -> list[str]:
     return _shared_score_lines(score, dims)
 
 
-def _status_badge(status: str) -> str:
-    return _shared_status_badge(status)
-
-
 # ── Format: data → renderables (no print) ────────────────────────────────────
-
-
-def _format_table(headers, rows, *, title=None) -> Table:
-    table = Table(title=title, border_style="muted")
-    for i, h in enumerate(headers):
-        table.add_column(str(h), style="bold" if i == 0 else "")
-    for row in rows:
-        table.add_row(*[str(v) for v in row])
-    return table
 
 
 def _format_result_data(data: dict | list) -> list[Table | Text]:
@@ -55,7 +40,7 @@ def _format_result_data(data: dict | list) -> list[Table | Text]:
     result: list[Table | Text] = []
 
     if isinstance(data, list) and data and isinstance(data[0], dict):
-        result.append(_format_table(
+        result.append(data_table(
             list(data[0].keys()),
             [list(d.values()) for d in data],
         ))
@@ -65,22 +50,13 @@ def _format_result_data(data: dict | list) -> list[Table | Text]:
         if isinstance(items, list):
             if items and isinstance(items[0], dict):
                 for u in items:
-                    uid = u.get("id") or u.get("user_id", "?")
-                    result.append(Text(
-                        f"{u.get('name', '?')} ({uid})"
-                        f"{' · ' + u.get('affiliation', '') if u.get('affiliation') else ''}"
-                    ))
+                    result.append(user_line_text(u))
             elif unread is not None and items:
-                result.append(_format_table(
-                    ["Event", "Message", "Read"],
-                    [[n.get("event", "?"), n.get("message", "?"),
-                      "✓" if n.get("read") else "—"]
-                     for n in items],
-                    title=f"Notifications ({unread} unread)",
+                result.append(_notification_table(
+                    items, title=f"Notifications ({unread} unread)",
                 ))
         else:
-            uid = data.get("id", "?")
-            result.append(Text(f"{data.get('name', '?')} ({uid})"))
+            result.append(user_line_text(data))
     return result
 
 
@@ -110,12 +86,10 @@ def format_error(error: PeerpediaError) -> list[Text]:
     detail = (m.text.format(**error.context)
               if hasattr(error, 'context') and error.context
               else str(error))
-    lines = [Text(f"✗ {detail}", style="error")]
-    if m.suggestion:
-        lines.append(Text(f"  → {m.suggestion}", style="dim"))
-    if m.see_also:
-        lines.append(Text(f"  See also: {' · '.join(m.see_also)}", style="dim"))
-    return lines
+    return [Text(line) for line in error_lines(
+        detail, suggestion=m.suggestion or "",
+        see_also=m.see_also or (),
+    )]
 
 
 # ── Print: renderables → console (the I/O step) ──────────────────────────────

@@ -9,7 +9,6 @@ command examples in accent colour, dim comments, and bold flag names.
 
 from __future__ import annotations
 
-import re
 from pathlib import Path
 
 from rich.panel import Panel
@@ -18,109 +17,86 @@ from rich.text import Text
 
 import peerpedia_core.repl.state as _st
 from peerpedia_core.app.commandspec import COMMAND_GROUPS
+from peerpedia_core.presentation.rich.components import (
+    help_group_extra_lines, help_not_found_msg, render_help_text,
+)
 from peerpedia_core.repl.state import console
 
 _CLI_HELP_DIR = Path(__file__).resolve().parent.parent / "cli" / "help"
 _REPL_HELP_DIR = Path(__file__).resolve().parent / "help"
+_CMD_COL_WIDTH = 16
 
 
 # ── Public entry points ───────────────────────────────────────────────────
 
 
+def _print_kv_panel(filepath: Path, title: str, columns: list[tuple[str, str, int]]) -> None:
+    """Read a KV file, build a Table, print in a Panel."""
+    t = Table(show_header=False, border_style="muted", padding=(0, 1))
+    for name, style, width in columns:
+        t.add_column(name, style=style, width=width)
+    for k, v in _parse_kv(filepath):
+        t.add_row(k, v)
+    console.print(Panel(t, title=title, border_style="muted", title_align="left", padding=(0, 2)))
+
+
 def _meta_help(topic: str = ""):
-    """Show REPL help — overview or topic-specific.
-
-    ``:help`` (no argument) shows the 3-tier overview:
-    1.  Welcome + quick-start examples
-    2.  Meta-commands table (everything starting with ``:``)
-    3.  Keyboard shortcuts
-
-    ``:help <topic>`` shows detailed, example-driven help for one command
-    or REPL concept.
-    """
+    """Show REPL help — overview or topic-specific."""
     if topic:
         _show_topic_help(topic)
         return
 
-    # ═══════════════════════════════════════════════════════════════════════
-    # Tier 1 — Welcome + quick start
-    # ═══════════════════════════════════════════════════════════════════════
     welcome_path = _REPL_HELP_DIR / "_welcome.txt"
-    intro = Text.from_markup(welcome_path.read_text().strip())
-    console.print(Panel(intro, border_style="muted", padding=(0, 2)))
+    console.print(Panel(
+        Text.from_markup(welcome_path.read_text().strip()),
+        border_style="muted", padding=(0, 2),
+    ))
 
-    # ═══════════════════════════════════════════════════════════════════════
-    # Tier 2 — Meta-commands
-    # ═══════════════════════════════════════════════════════════════════════
-    meta_table = Table(show_header=False, border_style="muted", padding=(0, 1))
-    meta_table.add_column("cmd", style=f"bold {_st.theme.styles['info']}", width=16)
-    meta_table.add_column("desc", style="muted")
-    for cmd, desc in _parse_kv(_REPL_HELP_DIR / "_meta_commands.txt"):
-        meta_table.add_row(cmd, desc)
+    _print_kv_panel(_REPL_HELP_DIR / "_meta_commands.txt", "REPL Commands", [
+        ("cmd", f"bold {_st.theme.styles['info']}", _CMD_COL_WIDTH),
+        ("desc", "muted", 0),
+    ])
+    _print_kv_panel(_REPL_HELP_DIR / "_keys.txt", "Keys", [
+        ("key", "bold", 10),
+        ("action", "muted", 0),
+    ])
 
-    console.print(Panel(meta_table, title="REPL Commands", border_style="muted",
-                        title_align="left", padding=(0, 2)))
 
-    # ═══════════════════════════════════════════════════════════════════════
-    # Tier 3 — Keyboard shortcuts
-    # ═══════════════════════════════════════════════════════════════════════
-    keys_table = Table(show_header=False, border_style="muted", padding=(0, 1))
-    keys_table.add_column("key", style="bold", width=10)
-    keys_table.add_column("action", style="muted")
-    for key, action in _parse_kv(_REPL_HELP_DIR / "_keys.txt"):
-        keys_table.add_row(key, action)
+def _try_repl_help(topic: str) -> bool:
+    """Try REPL-specific help file.  Returns True if found."""
+    path = _REPL_HELP_DIR / f"{topic}.txt"
+    if path.is_file():
+        _display_help_panel(path.read_text(), title=f"REPL: {topic}")
+    return path.is_file()
 
-    console.print(Panel(keys_table, title="Keys", border_style="muted",
-                        title_align="left", padding=(0, 2)))
+
+def _try_cli_help(topic: str) -> bool:
+    """Try exact CLI help file match.  Returns True if found."""
+    name = topic.replace(" ", "_") if " " in topic else topic
+    path = _CLI_HELP_DIR / f"{name}.txt"
+    if path.is_file():
+        _display_help_panel(path.read_text(), title=topic)
+    return path.is_file()
+
+
+def _try_group_help(topic: str) -> bool:
+    """Try group fallback (e.g. 'review' → review_submit help).  Returns True if found."""
+    subs = _find_subcommands_for_group(topic)
+    if not subs:
+        return False
+    path = _CLI_HELP_DIR / f"{topic}_{subs[0]}.txt"
+    if not path.is_file():
+        return False
+    extra = help_group_extra_lines(topic, subs[1:]) if len(subs) > 1 else []
+    _display_help_panel(path.read_text(), title=topic, extra_markup=extra)
+    return True
 
 
 def _show_topic_help(topic: str):
-    """Display detailed help for *topic* in a Rich Panel.
-
-    Looks up the topic in three places (in order):
-    1.  ``repl/help/<topic>.txt`` — REPL-specific concepts
-    2.  ``cli/help/<group>_<subcommand>.txt`` or ``cli/help/<topic>.txt``
-    3.  Partial match — if *topic* is a group name, show its primary
-        subcommand's help with a list of related subcommands.
-    """
-    # ── 1. REPL-specific concept help ──────────────────────────────────
-    repl_path = _REPL_HELP_DIR / f"{topic}.txt"
-    if repl_path.is_file():
-        _display_help_panel(repl_path.read_text(), title=f"REPL: {topic}")
+    """Display detailed help for *topic*, trying 3 lookup strategies."""
+    if _try_repl_help(topic) or _try_cli_help(topic) or _try_group_help(topic):
         return
-
-    # ── 2. Exact match in CLI help ─────────────────────────────────────
-    if " " in topic:
-        # Compound: "review submit" → cli/help/review_submit.txt
-        cli_path = _CLI_HELP_DIR / f"{topic.replace(' ', '_')}.txt"
-    else:
-        # Top-level: "fork" → cli/help/fork.txt
-        cli_path = _CLI_HELP_DIR / f"{topic}.txt"
-
-    if cli_path.is_file():
-        _display_help_panel(cli_path.read_text(), title=topic)
-        return
-
-    # ── 3. Topic is a group name (e.g. "review", "sync") ──────────────
-    group_subcommands = _find_subcommands_for_group(topic)
-    if group_subcommands:
-        primary = group_subcommands[0]
-        primary_path = _CLI_HELP_DIR / f"{topic}_{primary}.txt"
-        if primary_path.is_file():
-            text = primary_path.read_text()
-            extra_lines: list[str] = []
-            if len(group_subcommands) > 1:
-                others = ", ".join(f"[accent]{s}[/]" for s in group_subcommands[1:])
-                extra_lines.append(f"\n\nOTHER {topic.upper()} COMMANDS\n  {others}\n")
-                extra_lines.append(f"\n  Type [accent]:help {topic} <cmd>[/] for any of the above.")
-            _display_help_panel(text, title=topic, extra_markup=extra_lines)
-            return
-
-    # ── Not found ─────────────────────────────────────────────────────
-    console.print(
-        f"[warning]No help for [accent]{topic}[/]. "
-        f"Try [accent]:help[/] (no argument) to see all commands.[/]"
-    )
+    console.print(help_not_found_msg(topic))
 
 
 # ── Internal helpers ──────────────────────────────────────────────────────
@@ -132,92 +108,6 @@ def _find_subcommands_for_group(group: str) -> list[str]:
         if grp.name == group:
             return sorted(c.action for c in grp.commands if c.action)
     return []
-
-
-def _is_section_header(line: str) -> bool:
-    """Return True if *line* looks like a section header (all caps, short)."""
-    stripped = line.strip()
-    if not stripped:
-        return False
-    # Must be at least 3 characters and contain at least one letter
-    if len(stripped) < 3 or not any(c.isalpha() for c in stripped):
-        return False
-    # All characters must be uppercase, spaces, or punctuation
-    return all(c.isupper() or c in " /-&()" for c in stripped)
-
-
-def _style_help_line(line: str, stripped: str, ACCENT: str, INFO: str,
-                     MUTED: str) -> list[tuple[str, str]]:
-    """Apply help-text styling rules to a single line.
-
-    Returns a list of (style, text) tuples to append to the output.
-    An empty list means the line should be rendered as default text.
-    """
-    # 1. Section header
-    if _is_section_header(stripped):
-        return [(INFO, line + "\n")]
-
-    # 2. Command example
-    if stripped.startswith("peerpedia") or stripped.startswith("$ "):
-        return [(ACCENT, line + "\n")]
-
-    # 3. Comment line
-    if re.match(r"^ {2,}# (→|  )", line):
-        return [(MUTED, line + "\n")]
-    if re.match(r"^# (→|  )", line):
-        return [(MUTED, line + "\n")]
-
-    # 4. Flag definition line
-    flag_match = re.match(r"^( +)(--\S+)(.*)", line)
-    if flag_match:
-        return [
-            ("", flag_match.group(1)),
-            ("bold", flag_match.group(2)),
-            ("", flag_match.group(3) + "\n"),
-        ]
-
-    # 5. Default — caller handles
-    return []
-
-
-def _render_help_text(text: str) -> Text:
-    """Parse a CLI help ``.txt`` file into a Rich ``Text`` object.
-
-    Rules (checked in order per line):
-    1.  All-caps short line → bold ``info`` colour (section header)
-    2.  Line starts with ``peerpedia`` (with optional indent) → ``accent``
-    3.  Line starts with ``# →`` or ``#  `` (comment) → ``muted``
-    4.  Flag-definition line (indented ``--flag …``) → bold the flag name
-    5.  Everything else → default style
-    """
-    ACCENT = _st.theme.styles.get("accent", "bold")
-    INFO = f"bold {_st.theme.styles.get('info', '')}"
-    MUTED = _st.theme.styles.get("muted", "dim")
-
-    out = Text()
-    in_boilerplate = False
-    boilerplate_ended = False
-
-    for line in text.split("\n"):
-        stripped = line.strip()
-
-        # ── Inject separator after "HOW TO READ THIS HELP" block ────
-        if stripped == "HOW TO READ THIS HELP":
-            in_boilerplate = True
-        elif in_boilerplate and stripped == "EXAMPLES":
-            in_boilerplate = False
-            if not boilerplate_ended:
-                boilerplate_ended = True
-                out.append("─" * 60 + "\n", style=MUTED)
-
-        styled = _style_help_line(line, stripped, ACCENT, INFO, MUTED)
-        if styled:
-            for style, text in styled:
-                out.append(text, style=style if style else None)
-        else:
-            out.append(line + "\n")
-
-    return out
 
 
 def _parse_kv(filepath: Path) -> list[tuple[str, str]]:
@@ -244,7 +134,12 @@ def _display_help_panel(text: str, title: str = "Help",
     *extra_markup* are optional Rich-markup lines appended after the
     rendered text (used for the "OTHER … COMMANDS" group listing).
     """
-    rendered = _render_help_text(text.strip())
+    rendered = render_help_text(
+        text.strip(),
+        accent=_st.theme.styles.get("accent", "bold"),
+        info=f"bold {_st.theme.styles.get('info', '')}",
+        muted=_st.theme.styles.get("muted", "dim"),
+    )
     if extra_markup:
         for markup in extra_markup:
             rendered.append_text(Text.from_markup(markup))

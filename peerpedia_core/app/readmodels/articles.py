@@ -70,4 +70,4 @@ def list_articles(db: Session, *, search_query: str | None = None,
 
 
 # Re-export from core — canonical implementation lives there.
-from peerpedia_core.core.articles import resolve_article_meta  # noqa: F401
+from peerpedia_core.core import resolve_article_meta  # noqa: F401

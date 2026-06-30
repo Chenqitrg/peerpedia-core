@@ -22,7 +22,7 @@ from peerpedia_core.core.reconcile.mirror import (
     reconcile_integrity, reconcile_authors, reconcile_reviews, reconcile_status,
 )
 from peerpedia_core.core.reconcile.score import (
-    reconcile_all_reputations, reconcile_reputation, reconcile_score,
+    reconcile_all_reputations, reconcile_many_reputations, reconcile_reputation, reconcile_score,
 )
 
 logger = logging.getLogger(__name__)

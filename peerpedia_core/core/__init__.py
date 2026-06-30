@@ -83,6 +83,8 @@ from peerpedia_core.core.articles import (
     list_articles,
     publish_article,
     publish_ready_articles,
+    resolve_article_meta,
+    resolve_article_meta_batch,
     rollback_article,
     update_article_content,
 )

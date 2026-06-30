@@ -12,12 +12,13 @@ from __future__ import annotations
 from rich.panel import Panel
 from rich.text import Text
 
-from peerpedia_core.core.articles import resolve_article_meta, resolve_article_meta_batch
+from peerpedia_core.core import resolve_article_meta, resolve_article_meta_batch
 from peerpedia_core.cli.info import console, _page
 from peerpedia_core.messages import lookup as _lookup
 from peerpedia_core.presentation.rich.components import (
     SCORE_DIM_NAMES,
     article_meta_panel as _shared_article_meta_panel,
+    article_panels,
     diff_panel as _shared_diff_panel,
     display_user as _shared_display_user,
     print_panel as _shared_print_panel,
@@ -117,7 +118,6 @@ def display_article_meta(db, article, *,
 
 def display_article_list(db, items: list[dict]) -> None:
     """Render Rich article meta panels for a batch of article dicts."""
-    from peerpedia_core.presentation.rich.components import article_panels
     article_panels(console, resolve_article_meta_batch(
         db, [a["id"] for a in items],
     ))

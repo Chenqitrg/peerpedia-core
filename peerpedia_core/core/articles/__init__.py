@@ -25,7 +25,7 @@ from peerpedia_core.storage.db.crud_article import (
     get_article as _get_article,
     list_articles as _list,
 )
-from peerpedia_core.storage.db.crud_author import list_author_ids as _get_author_ids
+from peerpedia_core.storage.db.crud_author import list_author_ids as _get_author_ids, list_author_ids_batch
 from peerpedia_core.storage.db.crud_user import list_users_by_ids as _list_users_by_ids
 from peerpedia_core.core.reconcile import reconcile_integrity
 
@@ -119,8 +119,6 @@ def resolve_article_meta(db: Session, article,
 def resolve_article_meta_batch(db: Session,
                                article_ids: list[str]) -> list[dict]:
     """Resolve metadata for a batch of articles — single DB round-trip."""
-    from peerpedia_core.storage.db.crud_author import list_author_ids_batch
-
     author_map = list_author_ids_batch(db, article_ids)
     all_author_ids = {aid for ids in author_map.values() for aid in ids}
     users = {u.id: u for u in _list_users_by_ids(db, all_author_ids)} if all_author_ids else {}

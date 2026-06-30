@@ -85,6 +85,14 @@ def reconcile_reputation(db: Session, user_id: str, *, user: UserStorage | None 
     return blended
 
 
+def reconcile_many_reputations(db: Session, user_ids: set[str]) -> None:
+    """Recompute and persist reputation for a batch of *user_ids*."""
+    users = list_users_by_ids(db, user_ids)
+    user_map = {u.id: u for u in users}
+    for uid in user_ids:
+        reconcile_reputation(db, uid, user=user_map.get(uid))
+
+
 def reconcile_all_reputations(db: Session) -> int:
     """Recompute reputation for every user in the system."""
     users = list_users(db)

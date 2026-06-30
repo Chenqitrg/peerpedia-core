@@ -125,6 +125,9 @@ def test_no_internal_peerpedia_imports():
          "peerpedia_core.repl"):
             "heavy: prompt_toolkit is heavy, only loaded for REPL mode; __main__ is the top-level router",
         # ── REPL heavy optional deps ────────────────────────────────────
+        ("peerpedia_core/repl/main.py",
+         "peerpedia_core.repl.pages.app"):
+            "heavy: prompt_toolkit Application — only loaded when REPL actually runs",
         ("peerpedia_core/repl/state.py",
          "peerpedia_core.cli"):
             "heavy: parser (argparse registration) only needed when _get_parser is first called",

@@ -121,26 +121,11 @@ def run():
         return
 
     _startup()
+    _close_db()  # close the startup DB session's engine
 
-    REPL_HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
-    static_words = frozenset(build_command_list() + FLAGS)
-    _refresh_completions()
-    session = _build_prompt_session(static_words)
-
-    _last_scan = 0.0
+    from peerpedia_core.repl.pages.app import ReplApplication
+    app = ReplApplication()
     try:
-        while True:
-            try:
-                cmd = session.prompt(_prompt_text())
-            except KeyboardInterrupt:
-                console.print(repl_interrupt_msg())
-                continue
-            except EOFError:
-                console.print(repl_bye_msg())
-                break
-
-            _execute_command(cmd)
-
-            _last_scan = _post_command_cycle(_last_scan)
+        app.run()
     finally:
         _close_db()

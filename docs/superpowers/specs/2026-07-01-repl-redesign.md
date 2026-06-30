@@ -137,7 +137,8 @@ mother > help                   ← 输出彩蛋（mother.txt）
 
 - 打 `?` → prompt 变为 `mother >`（dim 颜色），下方提示 "press ? for help"
 - 删 `?` → 恢复 `peerpedia >`
-- `mother > help` → 输出 mother.txt 内容
+- `mother > help` → 输出彩蛋（mother.txt）
+- `hi` / `hello` → 随机输出一条互动语
 
 ### 补全
 

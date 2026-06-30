@@ -18,6 +18,7 @@ from peerpedia_core.repl.engine import execute as _execute_command
 from peerpedia_core.repl.pages import Page
 from peerpedia_core.repl.pages.article_list import ArticleListPage
 from peerpedia_core.repl.pages.placeholder import PlaceholderPage
+from peerpedia_core.repl.pages.school import SchoolPage
 from peerpedia_core.repl.state import console, new_session, repl_style
 
 
@@ -188,8 +189,10 @@ class ReplApplication:
 
         if cmd in ("mine", "feed"):
             self._open_article_list(cmd)
-        elif cmd in ("new", "school"):
-            self.push(PlaceholderPage())  # Phase 4/6 will replace
+        elif cmd == "school":
+            self._open_school()
+        elif cmd == "new":
+            self.push(PlaceholderPage())  # Phase 6 will replace
         else:
             _execute_command(cmd)
 
@@ -208,3 +211,16 @@ class ReplApplication:
 
         if articles:
             self.push(ArticleListPage(articles))
+
+    def _open_school(self) -> None:
+        """Execute school command and open School page."""
+        db = new_session()
+        try:
+            ctx = build_context(db)
+            spec = spec_for_cmd_id("school")
+            result = spec.handler(ctx, {"limit": 20, "local": True})
+            users = result.data.get("items", []) if result.data else []
+        finally:
+            db.close()
+        if users:
+            self.push(SchoolPage(users))

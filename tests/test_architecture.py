@@ -128,6 +128,9 @@ def test_no_internal_peerpedia_imports():
         ("peerpedia_core/repl/main.py",
          "peerpedia_core.repl.pages.app"):
             "heavy: prompt_toolkit Application — only loaded when REPL actually runs",
+        ("peerpedia_core/repl/pages/user_profile.py",
+         "peerpedia_core.repl.pages.review_list"):
+            "circular: user_profile → review_list (Enter on article), review_list → user_profile (Enter on reviewer)",
         ("peerpedia_core/repl/state.py",
          "peerpedia_core.cli"):
             "heavy: parser (argparse registration) only needed when _get_parser is first called",

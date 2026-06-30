@@ -28,7 +28,7 @@ Invoke when the user expresses dissatisfaction with code quality:
 
 ---
 
-## Iron Rules (9)
+## Iron Rules (10)
 
 ```
 NO MOVING CODE WITHOUT UNDERSTANDING ITS SIBLINGS FIRST
@@ -40,6 +40,7 @@ NO AWKWARD FUNCTION AS ARCHITECTURE CENTER — find natural behaviors
 NO INCONSISTENT NAMES IN THE SAME DOMAIN — siblings share a verb convention
 NO SINGLE-PASS DIAGNOSIS — 7 lenses, one question each, every lens reports
 NO INLINE VALUES — string building goes to dedicated formatters, magic literals go to constants
+NO REINVENTING — search the codebase before extracting; generalize repeated patterns, don't duplicate them
 ```
 
 ---
@@ -92,7 +93,7 @@ NO INLINE VALUES — string building goes to dedicated formatters, magic literal
 
 ---
 
-### Pass 3 — Diagnose (7 Parallel Subagents)
+### Pass 3 — Diagnose (8 Parallel Subagents)
 
 **Question**: What is wrong, specifically?
 
@@ -161,10 +162,25 @@ Deliverable: inline value violation list, or "no findings"
 Every inline string builder → extract to a dedicated formatter function.
 Every magic literal → extract to a named constant (config/params.py or module-level).
 
+#### Lens H — Duplication & Pattern Lens
+```
+Question: Any function duplicated elsewhere? Any repeated pattern that should be generalized?
+Look for: two functions in different modules doing the same thing under different names,
+          functions that differ by only 1-2 parameters and could be unified,
+          repeated "extract → compute → write back" or "check → raise" templates,
+          copy-pasted logic blocks across functions,
+          functions that already exist in the codebase but were missed
+Deliverable: duplication violation list, or "no findings"
+```
+
+For each duplicated function: identify the canonical version (or merge into one).
+For each repeated pattern: propose a generalization (shared helper, decorator, context manager, template function).
+Before extracting ANY new function: search the codebase for an existing one that already does this.
+
 **Rules**:
 - Each subagent is independent — contexts don't contaminate
 - Each MUST produce output or explicitly declare "no findings"
-- Main agent merges 7 reports → deduplicates → sorts by severity → produces unified violation list
+- Main agent merges 8 reports → deduplicates → sorts by severity → produces unified violation list
 - Lens F (Type Safety) findings are annotation-level fixes — resolve them inline during Steps 1-3, no separate step needed
 
 **Why parallel subagents**: AI attention is linear — with 6 questions competing in one context, the model notices the most salient and ignores the rest. Six independent subagents each carry one question through the full code, ensuring nothing is missed.
@@ -182,7 +198,8 @@ Parallel subagents:      A ─┐
                          D ─┼─ run simultaneously → merge
                          E ─┤
                          F ─┤
-                         G ─┘
+                         G ─┤
+                         H ─┘
                          ↑ independent contexts, truly parallel
 ```
 
@@ -207,6 +224,8 @@ Parallel subagents:      A ─┐
 
 **Must deliver**: An orchestrator function name — after splitting, which function is the caller/entry point?
 
+**Before extracting any new function**: Search the entire codebase for an existing function that already does the same thing (or can be adapted with minimal changes). If found → use/modify it instead of creating a new one.
+
 **Red flags**:
 - Splitting every long function mechanically without considering natural behavior boundaries
 - Creating functions named `_helper_1`, `_helper_2`
@@ -223,6 +242,8 @@ Parallel subagents:      A ─┐
 | Two functions have >50% duplicate logic | Visual comparison |
 | A domain set is split across multiple files | e.g. "SSH signing triad" across 3 files |
 | Sibling functions have inconsistent names | `get_`/`fetch_`/`retrieve_` mixed in same domain |
+| A function duplicates an existing one elsewhere (or a minor variant) | Lens H found same behavior under different names, or a function that differs by only 1-2 params |
+| Repeated structural pattern across 3+ functions | Lens H found same template (extract→compute→write, check→raise, etc.) with only data varying |
 
 **Naming unification rules**:
 1. Find the most frequent naming pattern in the domain set → use as standard
@@ -365,6 +386,8 @@ No generic error messages. "It didn't work" is not acceptable.
 | "This function is only 5 lines, no need to check" | A 5-line function doing 2 unrelated things is worse than a 30-line function doing 1. |
 | "It's just one magic number, everyone knows what 30 means" | Nobody knows. Name it. Next person changes it to 60 and breaks everything. |
 | "This string is only used once, no need to extract it" | A format string embedded in business logic is a bug waiting to happen. Dedicated formatter, always. |
+| "I'll write a new helper for this" | Did you search the codebase first? An existing function probably already does 90% of it. |
+| "These two functions are similar but not exactly the same" | If they differ by only 1-2 parameters, unify them. Duplication is worse than a slightly more general function. |
 
 ---
 
@@ -382,6 +405,8 @@ These thoughts mean STOP — you're about to violate an iron rule:
 - "This name is different but it's clear enough" → Iron rule #7. Siblings share a verb convention.
 - "It's just a string concatenation, it's fine here" → Iron rule #9. String building goes to dedicated formatters.
 - "This number is obvious, I don't need a constant" → Iron rule #9. Every magic literal becomes a named constant.
+- "I'll just write a new helper function here" → Iron rule #10. Search the codebase first. An existing function probably does this.
+- "These functions look similar but it's fine" → Iron rule #10. Repeated patterns must be generalized, not copy-pasted.
 
 ---
 

@@ -208,6 +208,7 @@ COMMAND_GROUPS: list[CommandGroupSpec] = [
             ArgSpec("server", help="Peer server URL (or set PEERPEDIA_SERVER env var)"),
         ]),
         CommandSpec("sync.discover", "sync", "discover", handler=_h.sync_discover, effect="external", help_file="sync_discover", args=[
+            ArgSpec("server", help="Peer server URL (or set PEERPEDIA_SERVER env var)"),
             ArgSpec("depth", type=int, default=1, help="Follow graph depth (default 1)"),
             ArgSpec("max_users", type=int, default=100, help="Max users to traverse"),
         ]),

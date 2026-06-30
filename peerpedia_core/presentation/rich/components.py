@@ -54,6 +54,11 @@ def score_stars(score: dict | None, dims: list[str] | None = None) -> str:
     )
 
 
+def star_string(value: int, max_val: int = 5) -> str:
+    """Plain-text star rating, e.g. ``'★★★☆☆'``."""
+    return f"{'★' * value}{'☆' * (max_val - value)}"
+
+
 # ── Badges ───────────────────────────────────────────────────────────────────
 
 def status_badge(status: str) -> str:

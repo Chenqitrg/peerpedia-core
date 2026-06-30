@@ -6,27 +6,41 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable, Iterator
 
-from prompt_toolkit.completion import Completer, Completion
+from prompt_toolkit.completion import CompleteEvent, Completer, Completion
+from prompt_toolkit.document import Document
 
 import peerpedia_core.repl.state as _st
 from peerpedia_core.app.commandspec import COMMAND_GROUPS, TOP_LEVEL_COMMANDS
 from peerpedia_core.repl.dispatch import _META_COMMANDS
 
+LAST_TOKEN_RE = re.compile(r"\S+$")
+EXTRA_REPL_FLAGS = ("--json", "--rich")
+
+
+def _flag_name(raw_name: str) -> str:
+    """Convert a CommandSpec arg name to a CLI-style flag name."""
+    return f"--{raw_name.replace('_', '-')}"
+
+
+def _iter_command_args():
+    """Yield all arguments from grouped and top-level CommandSpec commands."""
+    for group in COMMAND_GROUPS:
+        for command in group.commands:
+            yield from command.args
+    for command in TOP_LEVEL_COMMANDS:
+        yield from command.args
+
 
 def build_flags() -> list[str]:
-    """Generate all flag names from shared CommandSpec (always in sync)."""
-    flags: set[str] = set()
-    for grp in COMMAND_GROUPS:
-        for cmd in grp.commands:
-            for arg in cmd.args:
-                if not arg.positional:
-                    flags.add(f"--{arg.name.replace('_', '-')}")
-    for cmd in TOP_LEVEL_COMMANDS:
-        for arg in cmd.args:
-            if not arg.positional:
-                flags.add(f"--{arg.name.replace('_', '-')}")
-    flags.update(["--json", "--rich"])  # CLI-only, useful in REPL completion
+    """Generate all flag names from CommandSpec plus REPL-only flags."""
+    flags = {
+        _flag_name(arg.name)
+        for arg in _iter_command_args()
+        if not arg.positional
+    }
+    flags.update(EXTRA_REPL_FLAGS)
     return sorted(flags)
 
 
@@ -34,41 +48,94 @@ FLAGS = build_flags()
 
 
 def build_command_list() -> list[str]:
-    """Build the list of all known command strings (groups, actions, top-level)."""
-    commands: list[str] = []
-    for grp in COMMAND_GROUPS:
-        commands.append(grp.name)
-        for cmd in grp.commands:
-            if cmd.action:
-                commands.append(f"{grp.name} {cmd.action}")
-    for cmd in TOP_LEVEL_COMMANDS:
-        if cmd.cmd_id not in commands:
-            commands.append(cmd.cmd_id)
-    return sorted(set(commands)) + _META_COMMANDS
+    """Build all known command strings: groups, actions, top-level, and meta commands."""
+    commands: set[str] = set()
+    for group in COMMAND_GROUPS:
+        commands.add(group.name)
+        for command in group.commands:
+            if command.action:
+                commands.add(f"{group.name} {command.action}")
+    for command in TOP_LEVEL_COMMANDS:
+        commands.add(command.cmd_id)
+
+    result = sorted(commands)
+    for mc in _META_COMMANDS:
+        if mc not in commands:
+            result.append(mc)
+    return result
+
+
+def _last_token(text: str) -> str | None:
+    """Return the non-space token immediately before the cursor."""
+    match = LAST_TOKEN_RE.search(text)
+    return match.group(0) if match else None
+
+
+def _dynamic_completion_words() -> set[str]:
+    """Return dynamic REPL completion words: article IDs and @usernames."""
+    return set(_st._repl_completion_words)
+
+
+def _matching_completions(
+    words: Iterable[str],
+    prefix: str,
+    *,
+    start_position: int,
+    yielded: set[str],
+) -> Iterator[Completion]:
+    """Yield completions whose text starts with *prefix*, skipping duplicates."""
+    prefix_lower = prefix.lower()
+    for word in sorted(words, key=str.lower):
+        if word in yielded:
+            continue
+        if word.lower().startswith(prefix_lower):
+            yielded.add(word)
+            yield Completion(word, start_position=start_position, display=word)
+
+
+class ReplCompleter(Completer):
+    """Completer for REPL commands, flags, article IDs, and @usernames."""
+
+    def __init__(self, static_words: Iterable[str]) -> None:
+        self._static_words = frozenset(static_words)
+
+    def get_completions(
+        self,
+        document: Document,
+        complete_event: CompleteEvent,
+    ) -> Iterator[Completion]:
+        text = document.text_before_cursor
+        if not text:
+            return
+
+        words = self._all_words()
+        yielded: set[str] = set()
+
+        # Multi-word command prefix match — e.g. "article p" → "article publish"
+        command_prefix = text.lstrip()
+        if command_prefix:
+            yield from _matching_completions(
+                words,
+                command_prefix,
+                start_position=-len(command_prefix),
+                yielded=yielded,
+            )
+
+        # Last-token fallback — e.g. "review @al" → "@alice"
+        token = _last_token(text)
+        if token is None:
+            return
+        yield from _matching_completions(
+            words,
+            token,
+            start_position=-len(token),
+            yielded=yielded,
+        )
+
+    def _all_words(self) -> set[str]:
+        return set(self._static_words) | _dynamic_completion_words()
 
 
 def make_completer(static_words: frozenset[str]) -> Completer:
-    """Build a ``_ReplCompleter`` that matches the last word of input."""
-
-    class _ReplCompleter(Completer):
-        def get_completions(self, document, complete_event):
-            text = document.text_before_cursor
-            if not text:
-                return
-            m = re.search(r'(\S+)$', text)
-            if not m:
-                return
-            word_before = m.group(1)
-            low = word_before.lower()
-
-            all_words: set[str] = set(static_words) | set(_st._repl_completion_words)
-
-            yielded: set[str] = set()
-            for w in sorted(all_words):
-                if w in yielded:
-                    continue
-                if w.lower().startswith(low):
-                    yielded.add(w)
-                    yield Completion(w, start_position=-len(word_before), display=w)
-
-    return _ReplCompleter()
+    """Build a REPL completer."""
+    return ReplCompleter(static_words)

@@ -35,6 +35,57 @@ from peerpedia_core.repl.state import (
 )
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# Startup helpers
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def _detect_theme_from_env() -> None:
+    """Auto-detect dark terminal background from COLORFGBG env var."""
+    if not _os.environ.get("COLORFGBG"):
+        return
+    try:
+        bg_hex = _os.environ["COLORFGBG"].split(";")[-1]
+        if int(bg_hex) < 8:
+            _meta_theme("dark")
+    except (ValueError, IndexError):
+        pass
+
+
+def _startup() -> None:
+    """Initialize session, detect theme, show banner."""
+    db = new_session()
+    try:
+        session_data = _read_session()
+        if session_data and _st._repl_user is None:
+            _st.set_user(session_data.get("name", ""))
+        _detect_theme_from_env()
+        show_startup_banner(db, session_data)
+    finally:
+        db.close()
+
+
+def _maybe_auto_publish(last_scan: float) -> float:
+    """Run sink scan if interval has elapsed.  Returns updated timestamp."""
+    now = time.time()
+    if now - last_scan <= params.sink.scan_interval_seconds:
+        return last_scan
+    db = new_session()
+    try:
+        count = publish_ready_articles(db)
+        db.commit()
+        if count > 0:
+            console.print(f"[info]{count} article(s) auto-published[/]")
+    finally:
+        db.close()
+    return now
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# Main loop
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
 def run():
     """Start the interactive REPL."""
     if not sys.stdin.isatty():
@@ -43,30 +94,12 @@ def run():
                       "or [accent]peerpedia --help[/] for the command list.")
         return
 
-    db = new_session()
-    try:
-        session_data = _read_session()
+    _startup()
 
-        if session_data and _st._repl_user is None:
-            _st._repl_user = session_data.get("name")
-
-        if _os.environ.get("COLORFGBG"):
-            try:
-                bg_hex = _os.environ["COLORFGBG"].split(";")[-1]
-                if int(bg_hex) < 8:
-                    _meta_theme("dark")
-            except (ValueError, IndexError):
-                pass
-
-        show_startup_banner(db, session_data)
-    finally:
-        db.close()
-
-    # ── Session setup ──────────────────────────────────────────────────
+    # ── Prompt session setup ─────────────────────────────────────────────
     REPL_HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
     _STATIC_WORDS = frozenset(build_command_list() + FLAGS)
     _refresh_completions()
-    completer = make_completer(_STATIC_WORDS)
 
     kb = KeyBindings()
 
@@ -80,7 +113,7 @@ def run():
 
     session = PromptSession(
         history=FileHistory(str(REPL_HISTORY_FILE)),
-        completer=completer,
+        completer=make_completer(_STATIC_WORDS),
         style=repl_style,
         mouse_support=False,
         key_bindings=kb,
@@ -105,30 +138,15 @@ def run():
                 if not should_continue:
                     break
             else:
-                should_continue = _execute_command(cmd)
+                _execute_command(cmd)
 
             sid = _read_session()
             if sid:
                 session_name = sid.get("name", "")
                 if session_name and session_name != _st._repl_user:
-                    _st._repl_user = session_name
+                    _st.set_user(session_name)
 
             _refresh_completions()
-
-            now = time.time()
-            if now - _last_scan > params.sink.scan_interval_seconds:
-                db2 = new_session()
-                try:
-                    count = publish_ready_articles(db2)
-                    db2.commit()
-                    if count > 0:
-                        console.print(f"[info]{count} article(s) auto-published[/]")
-                finally:
-                    db2.close()
-                _last_scan = now
-
-            if not should_continue:
-                console.print("[muted]Bye.[/]")
-                break
+            _last_scan = _maybe_auto_publish(_last_scan)
     finally:
         _close_db()

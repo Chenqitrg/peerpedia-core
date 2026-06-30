@@ -9,12 +9,15 @@ No circular dependency: ``cli/`` never imports from ``repl/``.
 
 from __future__ import annotations
 
+import logging
 import time
 from contextlib import contextmanager
 
 from prompt_toolkit.styles import Style
 from rich.console import Console
 from rich.theme import Theme
+
+logger = logging.getLogger(__name__)
 
 from peerpedia_core.app.context import read_session
 from peerpedia_core.config.paths import DB_PATH, DB_URL
@@ -109,6 +112,43 @@ _repl_theme: str = "parchment"
 _repl_compact: bool = False
 _repl_completion_words: list = []  # dynamic completion: article IDs, @names
 
+
+def set_article_context(article_id: str | None, title: str = "", commit: str = "") -> None:
+    """Set the current article context for prompt display.  Public setter."""
+    global _repl_article_id, _repl_article_title, _repl_article_commit
+    _repl_article_id = article_id
+    _repl_article_title = title
+    _repl_article_commit = commit
+
+
+def set_user(name: str) -> None:
+    """Set the current REPL user name."""
+    global _repl_user
+    _repl_user = name
+
+
+def set_compact(compact: bool) -> None:
+    """Toggle compact output mode."""
+    global _repl_compact
+    _repl_compact = compact
+
+
+def set_theme(mode: str) -> str:
+    """Switch to *mode* theme ('light'/'dark').  Returns the theme name."""
+    global theme, repl_style, _repl_theme
+    if mode in ("dark", "ember", "night"):
+        theme = _EMBER_THEME
+        repl_style = _EMBER_STYLE
+        _repl_theme = "ember"
+    elif mode in ("light", "parchment", "day"):
+        theme = _PARCHMENT_THEME
+        repl_style = _PARCHMENT_STYLE
+        _repl_theme = "parchment"
+    else:
+        return ""  # unknown mode — caller handles
+    console.push_theme(theme)
+    return _repl_theme
+
 # Cache for notification count — only refresh every 30s, not on every
 # keystroke (prompt_toolkit calls _prompt_text on each render cycle).
 _notif_cache: tuple[float, int] = (0.0, 0)
@@ -116,10 +156,8 @@ _notif_cache: tuple[float, int] = (0.0, 0)
 # so we only warn once per session when notification lookup fails.
 _notif_warned: bool = False
 
-def _prompt_text():
-    """Build the REPL prompt line with user badge, article context, notifications."""
-    user = _repl_user or "guest"
-    # NotificationStorage badge — cached for 30s to avoid DB query on every keystroke.
+def _get_notification_badge() -> str:
+    """Return a notification count badge string, cached for 30s."""
     try:
         now = time.time()
         global _notif_cache
@@ -134,17 +172,18 @@ def _prompt_text():
                     _notif_cache = (now, 0)
             finally:
                 db.close()
-        badge = f" ({_notif_cache[1]})" if _notif_cache[1] > 0 else ""
+        return f" ({_notif_cache[1]})" if _notif_cache[1] > 0 else ""
     except Exception:
         global _notif_warned
         if not _notif_warned:
             _notif_warned = True
-            import logging
-            logging.getLogger(__name__).warning(
-                "Failed to read notification count", exc_info=True
-            )
-        badge = ""
-    parts = [("class:prompt", f"{user}{badge}")]
+            logger.warning("Failed to read notification count", exc_info=True)
+        return ""
+
+
+def _prompt_text():
+    """Build the REPL prompt line with user badge, article context, notifications."""
+    parts = [("class:prompt", f"{_repl_user or 'guest'}{_get_notification_badge()}")]
     if _repl_article_id:
         label = _repl_article_title or _repl_article_id
         parts.append(("class:separator", f" ▸ {label}"))
@@ -173,10 +212,7 @@ def _refresh_completions():
                 words.append(u.id)
         _repl_completion_words = sorted(set(words))
     except Exception:
-        import logging
-        logging.getLogger(__name__).warning(
-            "Failed to refresh REPL completions", exc_info=True
-        )
+        logger.warning("Failed to refresh REPL completions", exc_info=True)
     finally:
         db.close()
 

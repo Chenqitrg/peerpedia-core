@@ -29,7 +29,7 @@ def _handle_quit(arg: str) -> bool:
 
 
 def _handle_compact(arg: str) -> bool:
-    _st._repl_compact = not _st._repl_compact
+    _st.set_compact(not _st._repl_compact)
     mode = "compact table" if _st._repl_compact else "rich panels"
     console.print(f"[muted]Output mode: {mode}.[/]")
     return True
@@ -50,7 +50,7 @@ def _handle_school(arg: str) -> bool:
         finally:
             db.close()
         if result and result.startswith("follow:"):
-            target_id = result.split(":", 1)[1]
+            target_id = result[len("follow:"):]
             from peerpedia_core.repl.engine import execute
             return execute(f"follow {target_id}")
     else:

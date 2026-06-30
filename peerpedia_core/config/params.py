@@ -7,7 +7,7 @@ To adjust any parameter, edit the defaults here or load from external config.
 All tunable functions are replaceable so the community can iterate on mechanisms.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Identity constants
@@ -214,20 +214,12 @@ class ServerParams:
 class Params:
     """Aggregate of all tunable parameter groups."""
 
-    sink: SinkParams
-    score: ScoreParams
-    reputation: ReputationParams
-    comment: CommentParams
-    discovery: DiscoveryParams
-    server: ServerParams
-
-    def __init__(self):
-        self.sink = SinkParams()
-        self.score = ScoreParams()
-        self.reputation = ReputationParams()
-        self.comment = CommentParams()
-        self.discovery = DiscoveryParams()
-        self.server = ServerParams()
+    sink: SinkParams = field(default_factory=SinkParams)
+    score: ScoreParams = field(default_factory=ScoreParams)
+    reputation: ReputationParams = field(default_factory=ReputationParams)
+    comment: CommentParams = field(default_factory=CommentParams)
+    discovery: DiscoveryParams = field(default_factory=DiscoveryParams)
+    server: ServerParams = field(default_factory=ServerParams)
 
 
 params = Params()

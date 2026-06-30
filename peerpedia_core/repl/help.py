@@ -146,6 +146,40 @@ def _is_section_header(line: str) -> bool:
     return all(c.isupper() or c in " /-&()" for c in stripped)
 
 
+def _style_help_line(line: str, stripped: str, ACCENT: str, INFO: str,
+                     MUTED: str) -> list[tuple[str, str]]:
+    """Apply help-text styling rules to a single line.
+
+    Returns a list of (style, text) tuples to append to the output.
+    An empty list means the line should be rendered as default text.
+    """
+    # 1. Section header
+    if _is_section_header(stripped):
+        return [(INFO, line + "\n")]
+
+    # 2. Command example
+    if stripped.startswith("peerpedia") or stripped.startswith("$ "):
+        return [(ACCENT, line + "\n")]
+
+    # 3. Comment line
+    if re.match(r"^ {2,}# (→|  )", line):
+        return [(MUTED, line + "\n")]
+    if re.match(r"^# (→|  )", line):
+        return [(MUTED, line + "\n")]
+
+    # 4. Flag definition line
+    flag_match = re.match(r"^( +)(--\S+)(.*)", line)
+    if flag_match:
+        return [
+            ("", flag_match.group(1)),
+            ("bold", flag_match.group(2)),
+            ("", flag_match.group(3) + "\n"),
+        ]
+
+    # 5. Default — caller handles
+    return []
+
+
 def _render_help_text(text: str) -> Text:
     """Parse a CLI help ``.txt`` file into a Rich ``Text`` object.
 
@@ -155,23 +189,19 @@ def _render_help_text(text: str) -> Text:
     3.  Line starts with ``# →`` or ``#  `` (comment) → ``muted``
     4.  Flag-definition line (indented ``--flag …``) → bold the flag name
     5.  Everything else → default style
-
-    A dim rule (``⋯⋯⋯``) is inserted between the boilerplate "HOW TO READ
-    THIS HELP" block and the first real content section (EXAMPLES / FLAGS).
     """
     ACCENT = _st.theme.styles.get("accent", "bold")
     INFO = f"bold {_st.theme.styles.get('info', '')}"
     MUTED = _st.theme.styles.get("muted", "dim")
 
     out = Text()
-    lines = text.split("\n")
     in_boilerplate = False
     boilerplate_ended = False
 
-    for i, line in enumerate(lines):
+    for line in text.split("\n"):
         stripped = line.strip()
 
-        # ── Inject separator after "HOW TO READ THIS HELP" block ──────
+        # ── Inject separator after "HOW TO READ THIS HELP" block ────
         if stripped == "HOW TO READ THIS HELP":
             in_boilerplate = True
         elif in_boilerplate and stripped == "EXAMPLES":
@@ -180,35 +210,12 @@ def _render_help_text(text: str) -> Text:
                 boilerplate_ended = True
                 out.append("─" * 60 + "\n", style=MUTED)
 
-        # ── 1. Section header ─────────────────────────────────────────
-        if _is_section_header(stripped):
-            out.append(line + "\n", style=INFO)
-            continue
-
-        # ── 2. Command example ────────────────────────────────────────
-        if stripped.startswith("peerpedia") or stripped.startswith("$ "):
-            out.append(line + "\n", style=ACCENT)
-            continue
-
-        # ── 3. Comment line (# → or #   ) ─────────────────────────────
-        if re.match(r"^ {2,}# (→|  )", line):
-            out.append(line + "\n", style=MUTED)
-            continue
-        # Also catch un-indented # comments inside examples
-        if re.match(r"^# (→|  )", line):
-            out.append(line + "\n", style=MUTED)
-            continue
-
-        # ── 4. Flag definition line ───────────────────────────────────
-        flag_match = re.match(r"^( +)(--\S+)(.*)", line)
-        if flag_match:
-            out.append(flag_match.group(1))            # leading spaces
-            out.append(flag_match.group(2), style="bold")  # --flag
-            out.append(flag_match.group(3) + "\n")     # rest of line
-            continue
-
-        # ── 5. Default ────────────────────────────────────────────────
-        out.append(line + "\n")
+        styled = _style_help_line(line, stripped, ACCENT, INFO, MUTED)
+        if styled:
+            for style, text in styled:
+                out.append(text, style=style if style else None)
+        else:
+            out.append(line + "\n")
 
     return out
 

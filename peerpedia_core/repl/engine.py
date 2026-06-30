@@ -20,7 +20,9 @@ from peerpedia_core.app.commandspec import (
 )
 from peerpedia_core.app.context import build_context
 from peerpedia_core.exceptions import PeerpediaError
-from peerpedia_core.repl.display import render_error, render_result
+from peerpedia_core.repl.display import (
+    format_error, format_result, print_result,
+)
 from peerpedia_core.repl.state import console, session_scope
 
 _log = logging.getLogger(__name__)
@@ -141,6 +143,55 @@ def execute(cmd_str: str) -> bool:
         return True
 
     # ── Lookup ────────────────────────────────────────────────────────────
+    spec, rest = _resolve_spec(parts)
+    if spec is None:
+        console.print(f"[error]✗ Unknown command: {cmd_str}[/]. Try :help")
+        return True
+    if spec.frontend == "cli" or spec.handler is None:
+        console.print(f"[muted]{spec.cmd_id} is not available in REPL.[/]")
+        return True
+
+    # ── Parse args ────────────────────────────────────────────────────────
+    try:
+        args = _parse_args(rest, spec)
+    except PeerpediaError as e:
+        print_result(format_error(e))
+        return True
+
+    # ── Interactive password prompt ───────────────────────────────────────
+    try:
+        _prompt_password_if_needed(spec, args)
+    except KeyboardInterrupt:
+        console.print("\n[muted]Cancelled.[/]")
+        return True
+
+    # ── Execute ───────────────────────────────────────────────────────────
+    try:
+        with session_scope() as db:
+            ctx = build_context(db)
+            result = spec.handler(ctx, args)
+    except PeerpediaError as e:
+        print_result(format_error(e))
+        return True
+    except Exception as e:
+        _log.exception("REPL command failed: %s", cmd_str)
+        console.print(f"[error]✗ Internal error: {e}[/]")
+        return True
+
+    # ── Format + Print ────────────────────────────────────────────────────
+    print_result(format_result(result))
+    return True
+
+
+def _iter_all_specs():
+    """Iterate all command specs (for auto-resolve fallback)."""
+    for grp in COMMAND_GROUPS:
+        yield from grp.commands
+    yield from TOP_LEVEL_COMMANDS
+
+
+def _resolve_spec(parts: list[str]) -> tuple[CommandSpec | None, list[str]]:
+    """Find the command spec for *parts* and return (spec, rest_args)."""
     group = parts[0]
     action: str | None = None
     rest = parts[1:]
@@ -151,66 +202,24 @@ def execute(cmd_str: str) -> bool:
     elif find_spec(group, None):
         pass  # top-level command
     else:
-        found = False
-        if len(parts) >= 2:
-            for grp_spec in _iter_all_specs():
-                if grp_spec.group == group and grp_spec.action == parts[1]:
-                    action = parts[1]
-                    rest = parts[2:]
-                    found = True
-                    break
-        if not found and find_spec(group, None) is None:
-            console.print(f"[error]✗ Unknown command: {cmd_str}[/]. Try :help")
-            return True
+        for grp_spec in _iter_all_specs():
+            if grp_spec.group == group and grp_spec.action == parts[1]:
+                action = parts[1]
+                rest = parts[2:]
+                break
 
-    spec = find_spec(group, action)
-    if spec is None:
-        console.print(f"[error]✗ Unknown command: {cmd_str}[/]. Try :help")
-        return True
+    return find_spec(group, action), rest
 
-    if spec.frontend == "cli" or spec.handler is None:
-        console.print(f"[muted]{spec.cmd_id} is not available in REPL.[/]")
-        return True
 
-    # ── Parse args ────────────────────────────────────────────────────────
+def _prompt_password_if_needed(spec: CommandSpec, args: dict[str, Any]) -> None:
+    """Interactively prompt for password if required and missing."""
+    if spec.cmd_id not in _PASSWORD_COMMANDS or "password" in args:
+        return
     try:
-        args = _parse_args(rest, spec)
-    except PeerpediaError as e:
-        render_error(e)
-        return True
-
-    # ── Interactive password prompt ───────────────────────────────────────
-    if spec.cmd_id in _PASSWORD_COMMANDS and "password" not in args:
-        try:
-            from peerpedia_core.editor import get_password as _get_password
-            from argparse import Namespace
-            ns = Namespace(name=args.get("name", ""), password=None, json=False, rich=True)
-            confirm = (spec.cmd_id == "account.register")
-            args["password"] = _get_password(ns, confirm=confirm)
-        except (EOFError, KeyboardInterrupt):
-            console.print("\n[muted]Cancelled.[/]")
-            return True
-
-    # ── Execute (per-command session) ────────────────────────────────────
-    try:
-        with session_scope() as db:
-            ctx = build_context(db)
-            result = spec.handler(ctx, args)
-    except PeerpediaError as e:
-        render_error(e)
-        return True
-    except Exception as e:
-        _log.exception("REPL command failed: %s", cmd_str)
-        console.print(f"[error]✗ Internal error: {e}[/]")
-        return True
-
-    # ── Render ────────────────────────────────────────────────────────────
-    render_result(result)
-    return True
-
-
-def _iter_all_specs():
-    """Iterate all command specs (for auto-resolve fallback)."""
-    for grp in COMMAND_GROUPS:
-        yield from grp.commands
-    yield from TOP_LEVEL_COMMANDS
+        from peerpedia_core.editor import get_password as _get_password
+        from argparse import Namespace
+        ns = Namespace(name=args.get("name", ""), password=None, json=False, rich=True)
+        confirm = (spec.cmd_id == "account.register")
+        args["password"] = _get_password(ns, confirm=confirm)
+    except (EOFError, KeyboardInterrupt):
+        raise KeyboardInterrupt()

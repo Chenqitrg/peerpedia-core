@@ -24,10 +24,7 @@ from peerpedia_core.core import (
     list_articles, search_articles,
 )
 from peerpedia_core.repl.state import new_session
-from peerpedia_core.repl.state import (
-    _EMBER_THEME, _EMBER_STYLE, _PARCHMENT_THEME, _PARCHMENT_STYLE,
-    console,
-)
+from peerpedia_core.repl.state import console
 
 
 def _meta_user(name):
@@ -49,7 +46,7 @@ def _meta_user(name):
                 console.print(f"[muted]Use [accent]:user <id prefix>[/] to pick.[/]")
                 return
         if u:
-            _st._repl_user = name
+            _st.set_user(name)
             console.print(f"[success]✓[/] UserStorage set to [accent]{u.name}[/] [muted]({u.id})[/]")
         else:
             console.print(f"[error]✗[/] UserStorage '{name}' not found. [muted]register --name {name}[/] to create.[/]")
@@ -57,13 +54,25 @@ def _meta_user(name):
         db.close()
 
 
+def _format_sink_bar(article) -> str:
+    """Sedimentation progress bar, e.g. '  ████░░ 4d left'.  Empty if not sinking."""
+    if article.status != "sedimentation" or not article.sink_start:
+        return ""
+    now = datetime.now(timezone.utc)
+    start = article.sink_start.replace(tzinfo=timezone.utc) if article.sink_start.tzinfo is None else article.sink_start
+    elapsed = (now - start).days
+    total = article.sink_duration_days or 7
+    remaining = max(0, total - elapsed)
+    bar_filled = min(total, max(0, elapsed))
+    bar = "█" * bar_filled + "░" * (total - bar_filled)
+    return f"  [{_st.theme.styles['muted']}]{bar}[/] {remaining}d left"
+
+
 def _meta_article(ref: str):
     db = new_session()
     try:
         if not ref:
-            _st._repl_article_id = None
-            _st._repl_article_title = ""
-            _st._repl_article_commit = ""
+            _st.set_article_context(None)
             console.print("[muted]Article context cleared.[/]")
             return
         candidates = search_articles(db, ref)
@@ -77,42 +86,36 @@ def _meta_article(ref: str):
         else:
             console.print(f"[error]✗[/] ArticleMetaStorage '{ref}' not found.")
             return
-        _st._repl_article_id = article.id
-        _st._repl_article_title = article.title
-        _st._repl_article_commit = _get_article_head_hash(article.id)
+        _st.set_article_context(article.id, article.title, _get_article_head_hash(article.id))
         commit_str = f" @{_st._repl_article_commit[:7]}" if _st._repl_article_commit else ""
-        # Sedimentation countdown
-        sink_info = ""
-        if article.status == "sedimentation" and article.sink_start:
-            now = datetime.now(timezone.utc)
-            start = article.sink_start.replace(tzinfo=timezone.utc) if article.sink_start.tzinfo is None else article.sink_start
-            elapsed = (now - start).days
-            total = article.sink_duration_days or 7
-            remaining = max(0, total - elapsed)
-            bar_filled = min(total, max(0, elapsed))
-            bar = "█" * bar_filled + "░" * (total - bar_filled)
-            sink_info = f"  [{_st.theme.styles['muted']}]{bar}[/] {remaining}d left"
-        console.print(f"[success]▸[/] {article.title} [muted]({article.id}{commit_str})[/]{sink_info}")
+        console.print(
+            f"[success]▸[/] {article.title} "
+            f"[muted]({article.id}{commit_str})[/]"
+            f"{_format_sink_bar(article)}"
+        )
     finally:
         db.close()
 
 
 def _meta_theme(mode: str):
     mode = mode.strip().lower() or "parchment"
-    if mode in ("dark", "ember", "night"):
-        _st.theme = _EMBER_THEME
-        _st.repl_style = _EMBER_STYLE
-        _st._repl_theme = "ember"
-        console.push_theme(_st.theme)
+    theme_name = _st.set_theme(mode)
+    if theme_name == "ember":
         console.print("🌙  Ember (dark) theme.")
-    elif mode in ("light", "parchment", "day"):
-        _st.theme = _PARCHMENT_THEME
-        _st.repl_style = _PARCHMENT_STYLE
-        _st._repl_theme = "parchment"
-        console.push_theme(_st.theme)
+    elif theme_name == "parchment":
         console.print("☀   Parchment (light) theme.")
     else:
         console.print(f"[warning]Unknown theme '{mode}'. Use [accent]light[/] or [accent]dark[/].[/]")
+
+
+def _format_notification_time(ts_raw: str) -> str:
+    """'2026-01-15T09:30:00' → '2026-01-15 09:30'."""
+    return ts_raw[:16].replace("T", " ") if ts_raw else ""
+
+
+def _unread_marker(read: bool) -> str:
+    """● for unread, blank for read."""
+    return "[bold]●[/] " if not read else "  "
 
 
 def _show_inbox():
@@ -130,10 +133,10 @@ def _show_inbox():
         t.add_column("Time", style="muted", width=16)
         t.add_column("Event", style="accent")
         for n in notifications[:20]:
-            ts_raw = n.get("created_at", "")
-            ts = ts_raw[:16].replace("T", " ") if ts_raw else ""
-            marker = "[bold]●[/] " if not n.get("read") else "  "
-            t.add_row(ts, f"{marker}{n.get('message', '')}")
+            t.add_row(
+                _format_notification_time(n.get("created_at", "")),
+                f"{_unread_marker(n.get('read', False))}{n.get('message', '')}",
+            )
         console.print(t)
     finally:
         db.close()

@@ -455,6 +455,20 @@ def print_panel(console: Console, title: str, content: str | Text,
                         title_align="left"))
 
 
+# ── Page-mode rendering ───────────────────────────────────────────────────────
+
+
+_BORDER_FOCUSED = "bold cyan"
+
+
+def focused_panel(console: Console, title: str, content: str | Text,
+                  *, is_focused: bool = False) -> None:
+    """Print a panel with focus indicator (left bar) when selected."""
+    border = _BORDER_FOCUSED if is_focused else "muted"
+    console.print(Panel(content, title=title, border_style=border,
+                        title_align="left"))
+
+
 # ── User display ─────────────────────────────────────────────────────────────
 
 def display_user(console: Console, name: str, user_id: str, *,

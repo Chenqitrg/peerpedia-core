@@ -11,11 +11,14 @@ from prompt_toolkit.layout import HSplit, Layout, Window
 from prompt_toolkit.layout.controls import FormattedTextControl
 from prompt_toolkit.styles import Style
 
+from peerpedia_core.app.commandspec import spec_for_cmd_id
+from peerpedia_core.app.context import build_context
 from peerpedia_core.repl.constants import GREETINGS, PROMPT_DEFAULT, PROMPT_MOTHER
 from peerpedia_core.repl.engine import execute as _execute_command
 from peerpedia_core.repl.pages import Page
+from peerpedia_core.repl.pages.article_list import ArticleListPage
 from peerpedia_core.repl.pages.placeholder import PlaceholderPage
-from peerpedia_core.repl.state import console, repl_style
+from peerpedia_core.repl.state import console, new_session, repl_style
 
 
 class ReplApplication:
@@ -183,10 +186,25 @@ class ReplApplication:
             import sys
             sys.exit(0)
 
-        # Temporary: push placeholder page for any command
-        # Phase 2 will wire real pages
-        if cmd in ("new", "mine", "feed", "school"):
-            self.push(PlaceholderPage())
+        if cmd in ("mine", "feed"):
+            self._open_article_list(cmd)
+        elif cmd in ("new", "school"):
+            self.push(PlaceholderPage())  # Phase 4/6 will replace
         else:
-            # Fall through to existing engine for non-page commands
             _execute_command(cmd)
+
+    def _open_article_list(self, cmd: str) -> None:
+        """Execute an article listing command and open the ArticleList page."""
+        db = new_session()
+        try:
+            ctx = build_context(db)
+            spec = spec_for_cmd_id("article.list")
+            result = spec.handler(ctx, {"search": "", "status": "",
+                                         "mine": cmd == "mine",
+                                         "feed": cmd == "feed"})
+            articles = result.data.get("items", []) if result.data else []
+        finally:
+            db.close()
+
+        if articles:
+            self.push(ArticleListPage(articles))

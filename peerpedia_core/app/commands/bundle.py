@@ -30,7 +30,12 @@ def sync_pull(ctx: AppContext, *, server: str) -> AppResult:
 
     # ── Sync existing articles ──
     synced, failed = _sync_all_articles(ctx, server)
-    if synced:
+
+    # ── Commit ──
+    # Must commit even if no articles synced — _discover_new_articles
+    # may have pulled new articles into the DB.  Skipping the commit
+    # would silently lose them.
+    if synced or _db_has_pending(ctx.db):
         ctx.db.commit()
 
     # ── Result ──
@@ -88,3 +93,8 @@ def _sync_all_articles(ctx: AppContext, server: str) -> tuple[list[str], list[st
         except (TransportError, ProtocolError, ConflictError) as e:
             failed.append(f"{aid}: {e.detail}")
     return synced, failed
+
+
+def _db_has_pending(db) -> bool:
+    """Return True if *db* has uncommitted new, dirty, or deleted objects."""
+    return bool(db.new or db.dirty or db.deleted)

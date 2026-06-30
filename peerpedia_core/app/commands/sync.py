@@ -30,7 +30,7 @@ _NETWORK_ERRORS = (TransportError, ProtocolError, ConflictError, ConnectionError
 
 
 def _iter_local_syncable() -> list[str]:
-    """Return article IDs that have a local git repo."""
+    """Return article IDs that have a local git repo — content SOT."""
     return [d.name for d in ARTICLES_DIR.iterdir() if (d / ".git").is_dir()]
 
 
@@ -142,7 +142,7 @@ def announce_to_peers(transport: Transport, public_url: str) -> tuple[int, int]:
         try:
             merge_peers(transport, seed)
             seeds_merged += 1
-        except Exception:
+        except _NETWORK_ERRORS:
             _log.debug("Seed peer unreachable: %s", seed, exc_info=True)
 
     peers_announced = 0
@@ -150,7 +150,7 @@ def announce_to_peers(transport: Transport, public_url: str) -> tuple[int, int]:
         try:
             transport.push_peer_registration(peer, public_url)
             peers_announced += 1
-        except Exception:
+        except _NETWORK_ERRORS:
             _log.debug("Peer registration failed: %s", peer, exc_info=True)
 
     return seeds_merged, peers_announced

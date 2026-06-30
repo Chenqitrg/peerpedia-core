@@ -24,6 +24,13 @@ from peerpedia_core.exceptions import ConflictError, ProtocolError, TransportErr
 
 
 class TestIterLocalSyncable:
+    """_iter_local_syncable scans the filesystem for article git repos.
+
+    This is intentional: the filesystem is the content SOT — you cannot
+    sync content without a local git repo.  The DB is the metadata SOT;
+    both iteration mechanisms serve different purposes.
+    """
+
     def test_empty_dir(self, articles_dir):
         with patch("peerpedia_core.app.commands.sync.ARTICLES_DIR", articles_dir):
             assert _iter_local_syncable() == []

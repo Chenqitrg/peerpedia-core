@@ -71,8 +71,8 @@ class TestSyncPull:
         assert mock_sync.call_count == 2
         # Both article IDs appear (order depends on list_all_article_ids)
         synced_ids = set(result.data["synced"])
-        assert a1.data["id"][:8] in synced_ids
-        assert a2.data["id"][:8] in synced_ids
+        assert a1.data["id"] in synced_ids
+        assert a2.data["id"] in synced_ids
 
     def test_sync_failure(self, ctx, articles_dir):
         """Failed syncs appear in failed list, don't crash the loop."""

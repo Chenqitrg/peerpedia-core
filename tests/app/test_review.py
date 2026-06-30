@@ -101,7 +101,9 @@ class TestSubmitReview:
                    comment=comment)
         assert r.code == "REVIEW_SUBMITTED"
 
-    def test_submit_without_invite_rejected(self, ctx, articles_dir):
+    def test_submit_without_invite_succeeds(self, ctx, articles_dir):
+        """Reviews don't require invitation — any user can review a
+        sedimentation/published article."""
         from peerpedia_core.app.commands.article import create, publish
         from peerpedia_core.app.commands.review import submit
         alice = login(ctx, "Alice")
@@ -110,9 +112,9 @@ class TestSubmitReview:
         publish(alice, article_ref=a.data["id"],
                 scores_str="orig=4,rigor=4,comp=4,ped=4,imp=4")
 
-        import pytest
-        from peerpedia_core.exceptions import NotAuthorizedError
-        with pytest.raises(NotAuthorizedError):
-            submit(stranger, article_ref=a.data["id"],
+        r = submit(stranger, article_ref=a.data["id"],
                    scores_str="orig=3,rigor=3,comp=3,ped=3,imp=3",
-                   comment="x" * 200)
+                   comment="This is an unsolicited review from a stranger. "
+                           "Review does not require invitation — anyone can "
+                           "submit a review on a sedimentation article. " * 2)
+        assert r.code == "REVIEW_SUBMITTED"

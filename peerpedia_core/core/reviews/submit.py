@@ -9,7 +9,7 @@ from peerpedia_core.storage.db import Session
 from peerpedia_core.config.params import params
 from peerpedia_core.rules.articles import assert_can_submit_review, assert_not_folded
 from peerpedia_core.rules.reviews import assert_valid_review
-from peerpedia_core.storage.db.guards import require_article, require_invitation, require_user
+from peerpedia_core.storage.db.guards import require_article, require_user
 from peerpedia_core.storage.db.crud_article import list_author_ids
 from peerpedia_core.storage.db.crud_review import (
     get_accepted_invitation, update_review_status, upsert_review,
@@ -47,8 +47,6 @@ def submit_review(
     article = require_article(db, article_id)
     assert_not_folded(article, threshold=params.reputation.fold_score_threshold)
     assert_can_submit_review(article)
-    if article.status == "sedimentation":
-        require_invitation(db, article_id, reviewer_id)
 
     # ── Identity ──
     dir_id, display_name, email = _resolve_review_identity(

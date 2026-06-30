@@ -24,7 +24,6 @@ from peerpedia_core.core import (
     list_articles, search_articles,
 )
 from peerpedia_core.repl.state import ensure_db as _ensure_db
-from peerpedia_core.types import short_id
 from peerpedia_core.repl.state import (
     _EMBER_THEME, _EMBER_STYLE, _PARCHMENT_THEME, _PARCHMENT_STYLE,
     console,
@@ -44,13 +43,13 @@ def _meta_user(name):
             t.add_column("ID", style="accent", width=10)
             t.add_column("Affiliation", style="muted")
             for i, user in enumerate(users, 1):
-                t.add_row(str(i), short_id(user.id), user.affiliation or "—")
+                t.add_row(str(i), user.id, user.affiliation or "—")
             console.print(t)
             console.print(f"[muted]Use [accent]:user <id prefix>[/] to pick.[/]")
             return
     if u:
         _st._repl_user = name
-        console.print(f"[success]✓[/] UserStorage set to [accent]{u.name}[/] [muted]({short_id(u.id)})[/]")
+        console.print(f"[success]✓[/] UserStorage set to [accent]{u.name}[/] [muted]({u.id})[/]")
     else:
         console.print(f"[error]✗[/] UserStorage '{name}' not found. [muted]register --name {name}[/] to create.[/]")
 
@@ -73,7 +72,7 @@ def _meta_article(ref: str):
     elif len(candidates) > 1:
         console.print(f"[warning]{len(candidates)} articles match '{ref}':[/]")
         for a in candidates[:20]:
-            console.print(f"  {short_id(a.id)}  {a.title}")
+            console.print(f"  {a.id}  {a.title}")
         return
     else:
         console.print(f"[error]✗[/] ArticleMetaStorage '{ref}' not found.")
@@ -93,7 +92,7 @@ def _meta_article(ref: str):
         bar_filled = min(total, max(0, elapsed))
         bar = "█" * bar_filled + "░" * (total - bar_filled)
         sink_info = f"  [{_st.theme.styles['muted']}]{bar}[/] {remaining}d left"
-    console.print(f"[success]▸[/] {article.title} [muted]({short_id(article.id)}{commit_str})[/]{sink_info}")
+    console.print(f"[success]▸[/] {article.title} [muted]({article.id}{commit_str})[/]{sink_info}")
 
 
 def _meta_theme(mode: str):

@@ -77,6 +77,26 @@ def _json_out(data: dict | list) -> None:
     print(json.dumps(data, indent=2, default=str))
 
 
+def _render_data(data) -> None:
+    """Render a data-only (empty-code) result in Rich mode.
+
+    Emitted when an ``AppResult("", data=...)`` reaches the CLI.
+    Prints key-value pairs for dicts, bullet list for lists.
+    """
+    if isinstance(data, dict):
+        for k, v in data.items():
+            if v is not None and v != "":
+                console.print(f"  [bold]{k}[/]: {v}")
+    elif isinstance(data, list):
+        for item in data:
+            if isinstance(item, dict):
+                console.print("  — " + ", ".join(
+                    f"[bold]{k}[/]: {v}" for k, v in item.items()
+                    if v is not None and v != ""))
+            else:
+                console.print(f"  — {item}")
+
+
 # ── Core dispatch ────────────────────────────────────────────────────────
 
 
@@ -93,7 +113,7 @@ def _out(args, code: str, data=None, /, **fmt):
 
     # ── Error ──
     if m.kind == Kind.ERROR:
-        _render_error_out(m, use_json, fmt)
+        _render_error_out(code, m, use_json, fmt)
         sys.exit(1)
 
     # ── Notify ──
@@ -104,7 +124,7 @@ def _out(args, code: str, data=None, /, **fmt):
 
     # ── Success ──
     if use_json:
-        payload: dict = {"code": m.code}
+        payload: dict = {"code": code}
         if isinstance(data, dict):
             payload.update(data)
         elif isinstance(data, list):
@@ -115,16 +135,18 @@ def _out(args, code: str, data=None, /, **fmt):
         sys.exit(0)
     if m.text:
         _ok(_format(m.text, fmt))
+    elif data is not None:
+        _render_data(data)
 
 
-def _render_error_out(m, use_json: bool, fmt: dict) -> None:
+def _render_error_out(code: str, m, use_json: bool, fmt: dict) -> None:
     """Render an ERROR message — shared by ``_out()`` and ``_render_error()``."""
     msg = _format(m.text, fmt)
     suggestion = _format(m.suggestion, fmt) if m.suggestion else ""
     see_also = m.see_also
 
     if use_json:
-        payload: dict = {"error": m.code, "message": msg}
+        payload: dict = {"error": code, "message": msg}
         if suggestion:
             payload["suggestion"] = suggestion
         if see_also:
@@ -161,9 +183,12 @@ def _render_error(args, error) -> None:
     Delegates to ``_render_error_out`` — the single error renderer.
     ``error.context`` becomes format parameters for the message template.
     """
-    _, m = _lookup(error.code)
+    code, m = _lookup(error.code)
     use_json = args is not None and getattr(args, "json", False)
-    _render_error_out(m, use_json, getattr(error, "context", {}))
+    ctx = dict(getattr(error, "context", {}))
+    if hasattr(error, "detail") and error.detail:
+        ctx.setdefault("detail", str(error.detail))
+    _render_error_out(code, m, use_json, ctx)
 
 
 # ── Logging (no args, no exit) ───────────────────────────────────────────
@@ -184,6 +209,16 @@ def _log(code: str, *, level: str = "info", **fmt):
 def _format(template: str, fmt: dict) -> str:
     """Format a template string with *fmt* parameters.
 
-    Returns the raw template when *fmt* is empty.
+    Missing keys are left as-is (e.g. ``{name}`` stays ``{name}``)
+    instead of raising KeyError — the message template and the
+    exception context may not always agree on key names.
     """
-    return template.format(**fmt) if fmt else template
+    if not fmt:
+        return template
+    import string
+    return string.Formatter().vformat(template, (), _SafeDict(fmt))
+
+
+class _SafeDict(dict):
+    def __missing__(self, key):
+        return f"{{{key}}}"

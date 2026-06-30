@@ -31,7 +31,6 @@ from peerpedia_core.core import (
 from peerpedia_core.core.sync_social import discover_articles
 from peerpedia_core.exceptions import BadRequestError
 from peerpedia_core.storage.db._validators import require_draft_status
-from peerpedia_core.types import short_id
 
 
 def show(ctx: AppContext, *, article_ref: str) -> AppResult:
@@ -108,7 +107,7 @@ def create(ctx: AppContext, *, title: str, format: str = "markdown",
         )
     ctx.db.commit()
     return AppResult("ARTICLE_CREATED", data=result,
-        params={"id_short": short_id(result["id"]), "title": result["title"]})
+        params={"id": result["id"], "title": result["title"]})
 
 
 def edit(ctx: AppContext, *, article_ref: str, content: str | None = None,
@@ -126,7 +125,7 @@ def edit(ctx: AppContext, *, article_ref: str, content: str | None = None,
     )
     ctx.db.commit()
     return AppResult("ARTICLE_UPDATED", data=result,
-        params={"id_short": short_id(article.id), "title": result.get("title", "")})
+        params={"id": article.id, "title": result.get("title", "")})
 
 
 def publish(ctx: AppContext, *, article_ref: str, scores_str: str) -> AppResult:
@@ -145,7 +144,7 @@ def publish(ctx: AppContext, *, article_ref: str, scores_str: str) -> AppResult:
     )
     ctx.db.commit()
     return AppResult("ARTICLE_PUBLISHED", data=result,
-        params={"id_short": short_id(article.id)})
+        params={"id": article.id})
 
 
 def delete(ctx: AppContext, *, article_ref: str) -> AppResult:
@@ -158,7 +157,7 @@ def delete(ctx: AppContext, *, article_ref: str) -> AppResult:
     ctx.db.commit()
     return AppResult("ARTICLE_DELETED",
         data={"id": article.id, "deleted": True},
-        params={"id_short": short_id(article.id)})
+        params={"id": article.id})
 
 
 def scan(ctx: AppContext) -> AppResult:

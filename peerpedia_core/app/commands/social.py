@@ -17,7 +17,6 @@ from peerpedia_core.core import (
     set_alias, list_aliases, remove_alias,
     unfollow_user,
 )
-from peerpedia_core.types import short_id
 
 
 # ── Follow / Unfollow ────────────────────────────────────────────────────
@@ -87,7 +86,7 @@ def unbookmark(ctx: AppContext, *, article_ref: str) -> AppResult:
     # ── Execute ──
     remove_bookmark(ctx.db, user_id, article.id)
     ctx.db.commit()
-    return AppResult("BOOKMARK_REMOVED", params={"id_short": short_id(article.id)})
+    return AppResult("BOOKMARK_REMOVED", params={"id": article.id})
 
 
 # ── Share ────────────────────────────────────────────────────────────────
@@ -139,7 +138,7 @@ def alias(ctx: AppContext, *, user_ref: str, alias: str) -> AppResult:
     # ── Execute ──
     set_alias(ctx.db, user_id, target.id, alias)
     ctx.db.commit()
-    return AppResult("ALIAS_SET", params={"alias": alias, "target_id": short_id(target.id)})
+    return AppResult("ALIAS_SET", params={"alias": alias, "target_id": target.id})
 
 
 def alias_list(ctx: AppContext) -> AppResult:
@@ -159,7 +158,7 @@ def unalias(ctx: AppContext, *, user_ref: str) -> AppResult:
     # ── Execute ──
     remove_alias(ctx.db, user_id, target.id)
     ctx.db.commit()
-    return AppResult("ALIAS_REMOVED", params={"target_id": short_id(target.id)})
+    return AppResult("ALIAS_REMOVED", params={"target_id": target.id})
 
 
 # ── School ───────────────────────────────────────────────────────────────

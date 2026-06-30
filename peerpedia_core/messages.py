@@ -43,26 +43,26 @@ class Msg:
 REGISTRY: dict[str, Msg] = {
     # ── Success ──────────────────────────────────────────────────────────
     "OK": Msg("✓ {msg}"),
-    "REGISTERED": Msg("Registered [accent]{name}[/] ({id_short})",
+    "REGISTERED": Msg("Registered [accent]{name}[/] ({id})",
         see_also=("account login", "article create")),
-    "LOGGED_IN": Msg("Logged in as [accent]{name}[/] ({id_short})",
+    "LOGGED_IN": Msg("Logged in as [accent]{name}[/] ({id})",
         see_also=("article list", "school", "sync pull")),
-    "RECOVERED": Msg("Recovered key for [accent]{name}[/] ({id_short})",
+    "RECOVERED": Msg("Recovered key for [accent]{name}[/] ({id})",
         see_also=("article list", "sync pull")),
-    "BOOTSTRAPPED": Msg("Bootstrapped user [accent]{name}[/] ({id_short})\n"
-        "Now run: [accent]peerpedia account recover --user-id {id_short}[/]",
+    "BOOTSTRAPPED": Msg("Bootstrapped user [accent]{name}[/] ({id})\n"
+        "Now run: [accent]peerpedia account recover --user-id {id}[/]",
         see_also=("account recover",)),
     "ACCOUNT_DELETED": Msg("Account [accent]{name}[/] deleted. Goodbye.",
         see_also=("account register", "account login")),
     "NOT_LOGGED_IN": Msg("[muted]Not logged in. Use register or login.[/]",
         see_also=("account register", "account login")),
-    "ARTICLE_CREATED": Msg("[dim]Created [accent]{id_short}[/] \"{title}\" (draft)[/]",
+    "ARTICLE_CREATED": Msg("[dim]Created [accent]{id}[/] \"{title}\" (draft)[/]",
         see_also=("article edit", "article publish")),
-    "ARTICLE_UPDATED": Msg("Updated [accent]{id_short}[/] — {title}",
+    "ARTICLE_UPDATED": Msg("Updated [accent]{id}[/] — {title}",
         see_also=("article publish", "article diff")),
-    "ARTICLE_PUBLISHED": Msg("Published [accent]{id_short}[/] to sedimentation pool",
+    "ARTICLE_PUBLISHED": Msg("Published [accent]{id}[/] to sedimentation pool",
         see_also=("review invite", "share add")),
-    "ARTICLE_DELETED": Msg("Deleted [accent]{id_short}[/]",
+    "ARTICLE_DELETED": Msg("Deleted [accent]{id}[/]",
         see_also=("article create", "article list")),
     "N_COMPILED": Msg("Compiled to [accent]{fmt}[/]", kind=Kind.NOTIFY),
     "N_COMPILED_PATH": Msg("  [dim]{path}[/]", kind=Kind.NOTIFY),
@@ -78,17 +78,17 @@ REGISTRY: dict[str, Msg] = {
         see_also=("school", "article list")),
     "UNFOLLOWED": Msg("Stopped following [accent]{name}[/]",
         see_also=("school", "article list --feed")),
-    "FORKED": Msg("Forked → [accent]{id_short}[/] ({title})",
+    "FORKED": Msg("Forked → [accent]{id}[/] ({title})",
         see_also=("article edit", "merge propose")),
-    "MERGE_PROPOSED": Msg("Merge proposed [accent]{id_short}[/] → target {target_id}",
+    "MERGE_PROPOSED": Msg("Merge proposed [accent]{id}[/] → target {target_id}",
         see_also=("merge accept",)),
-    "MERGE_ACCEPTED": Msg("Merge accepted — [accent]{id_short}[/]",
+    "MERGE_ACCEPTED": Msg("Merge accepted — [accent]{id}[/]",
         see_also=("article list", "article show")),
-    "MERGE_WITHDRAWN": Msg("Proposal [accent]{id_short}[/] withdrawn",
+    "MERGE_WITHDRAWN": Msg("Proposal [accent]{id}[/] withdrawn",
         see_also=("merge propose",)),
     "BOOKMARKED": Msg("Bookmarked [accent]{name}[/]",
         see_also=("article list --bookmarked",)),
-    "BOOKMARK_REMOVED": Msg("Removed bookmark for [accent]{id_short}[/]",
+    "BOOKMARK_REMOVED": Msg("Removed bookmark for [accent]{id}[/]",
         see_also=("article list", "article search")),
     "SHARED": Msg("Shared [accent]{name}[/]{to_str}",
         see_also=("article list --feed", "share list")),
@@ -100,7 +100,7 @@ REGISTRY: dict[str, Msg] = {
         see_also=("alias list", "alias set")),
     "REVIEW_SUBMITTED": Msg("Review submitted",
         see_also=("review list", "review reply")),
-    "REVIEW_INVITED": Msg("Invited [accent]{name}[/] to review {id_short}",
+    "REVIEW_INVITED": Msg("Invited [accent]{name}[/] to review {id}",
         see_also=("review list",)),
     "INVITATION_ACCEPTED": Msg("Invitation accepted",
         see_also=("review submit",)),
@@ -108,7 +108,7 @@ REGISTRY: dict[str, Msg] = {
         see_also=("review invite",)),
     "HELPFULNESS_RATED": Msg("Helpfulness rated [accent]{score}[/]",
         see_also=("review list",)),
-    "W_REGISTER_SWITCH": Msg("[warning]⚠ Already logged in as [accent]{name}[/] (id: {id_short}). "
+    "W_REGISTER_SWITCH": Msg("[warning]⚠ Already logged in as [accent]{name}[/] (id: {id}). "
         "Registering will switch to the new user.[/]", kind=Kind.NOTIFY),
     "W_NO_KNOWN_PEERS": Msg("[dim]No known peers — auto-sync skipped. "
         "Set PEERPEDIA_SERVER or run 'sync discover'.[/]", kind=Kind.NOTIFY),
@@ -121,7 +121,7 @@ REGISTRY: dict[str, Msg] = {
     "N_NO_ARTICLES": Msg("[muted]No articles.[/]", kind=Kind.NOTIFY),
     "N_NO_EDIT_CHANGES": Msg("[muted]No changes — nothing to commit.[/]", kind=Kind.NOTIFY),
     "N_SAME_REVISION": Msg("[muted]These are the same revision — no changes to show.[/]", kind=Kind.NOTIFY),
-    "N_NO_CONTENT": Msg("[muted]No content yet. Use [accent]peerpedia article edit {id_short}[/] to add content.[/]", kind=Kind.NOTIFY),
+    "N_NO_CONTENT": Msg("[muted]No content yet. Use [accent]peerpedia article edit {id}[/] to add content.[/]", kind=Kind.NOTIFY),
     "EMPTY_SEARCH": Msg("[muted]No users match '{query}'.[/]", kind=Kind.NOTIFY),
     "EMPTY_REVIEWS": Msg("[muted]No reviews yet.[/]", kind=Kind.NOTIFY),
     "EMPTY_NOTIFICATIONS": Msg("[muted]No notifications.[/]", kind=Kind.NOTIFY),
@@ -140,7 +140,7 @@ REGISTRY: dict[str, Msg] = {
     "S_CANNOT_SAVE": Msg("[dim]⚠ Cannot save default server to {path}: {error}[/]", kind=Kind.NOTIFY),
 
     # ── Errors ───────────────────────────────────────────────────────────
-    "NOT_FOUND": Msg("{what} not found or ambiguous.", kind=Kind.ERROR,
+    "NOT_FOUND": Msg("Not found or ambiguous.", kind=Kind.ERROR,
         suggestion="Check the identifier and try again.",
         see_also=("article list", "sync pull")),
     "ARTICLE_NOT_FOUND": Msg("Article '{article_id}' not found or ambiguous.", kind=Kind.ERROR,
@@ -173,6 +173,7 @@ REGISTRY: dict[str, Msg] = {
     "UNAUTHORIZED": Msg("Not logged in.", kind=Kind.ERROR,
         suggestion="Run 'peerpedia account login' first.",
         see_also=("account login", "account register")),
+    "NOT_AUTHORIZED": Msg("{detail}", kind=Kind.ERROR),
     "UNSUPPORTED_KEY": Msg("User '{name}' was registered before key derivation was supported.",
         kind=Kind.ERROR,
         suggestion="Re-register: peerpedia account register --name {name}",
@@ -180,11 +181,11 @@ REGISTRY: dict[str, Msg] = {
     "DUPLICATE_NAME": Msg("A user named '{name}' already exists (ID: {ids}).", kind=Kind.ERROR,
         suggestion="Use 'account login --name <name>' to sign in, or pick a different name.",
         see_also=("account login", "account whoami")),
-    "DUPLICATE_USER_LOCAL": Msg("User '{name}' (id: {id_short}) already exists in local DB.",
+    "DUPLICATE_USER_LOCAL": Msg("User '{name}' (id: {id}) already exists in local DB.",
         kind=Kind.ERROR,
         suggestion="Use 'account login' if this is your account.",
         see_also=("account login",)),
-    "AMBIGUOUS_NAME": Msg("Multiple users named '{name}'.", kind=Kind.ERROR,
+    "AMBIGUOUS_NAME": Msg("Multiple matches for '{ids}'.", kind=Kind.ERROR,
         suggestion="Use --user-id to specify which one: {ids}",
         see_also=("account whoami",)),
     "AMBIGUOUS_ARGS": Msg("Specify either --name or --user-id.", kind=Kind.ERROR,
@@ -202,7 +203,7 @@ REGISTRY: dict[str, Msg] = {
         see_also=("article create",)),
     "EMPTY_COMMIT_MSG": Msg("Aborting: empty commit message.", kind=Kind.ERROR,
         suggestion="Write a short description of your changes and save the file."),
-    "EMPTY_REPLY": Msg("Aborting: empty reply.", kind=Kind.ERROR,
+    "EMPTY_REPLY": Msg("Aborting: empty reply.", kind=Kind.NOTIFY,
         suggestion="Write your reply below the # comment lines and save the file."),
     "INVALID_JSON": Msg("Invalid JSON: {error}", kind=Kind.ERROR,
         suggestion="Check the JSON syntax and try again.",
@@ -282,7 +283,7 @@ REGISTRY: dict[str, Msg] = {
     "OFFLINE": Msg("Server {server} unreachable.", kind=Kind.ERROR,
         suggestion="Check: (1) server running? (2) PEERPEDIA_SERVER set? (3) network up?",
         see_also=("sync status",)),
-    "NOT_CONFIGURED": Msg("No peer server configured.", kind=Kind.ERROR,
+    "NOT_CONFIGURED": Msg("No peer server configured.", kind=Kind.NOTIFY,
         suggestion="Set PEERPEDIA_SERVER or pass --server.",
         see_also=("sync status", "sync discover")),
     "CONFIG_ERROR": Msg("Cannot read default server from {path}: {error}", kind=Kind.ERROR,
@@ -377,9 +378,11 @@ REGISTRY: dict[str, Msg] = {
 def lookup(code: str) -> tuple[str, Msg]:
     """Return (code, msg) for *code*.
 
-    Unregistered codes get an ERROR-kind Msg with the code as text,
-    so they never silently pass as success or get ignored.
+    Empty codes are treated as SUCCESS — they carry data without a
+    display message.  Unregistered codes get an ERROR-kind Msg.
     """
+    if not code:
+        return code, Msg("", kind=Kind.SUCCESS)
     m = REGISTRY.get(code)
     if m is None:
         return code, Msg(code, kind=Kind.ERROR)

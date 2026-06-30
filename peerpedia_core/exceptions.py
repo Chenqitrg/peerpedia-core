@@ -72,6 +72,8 @@ class NotFoundError(PeerpediaError):
     code = "NOT_FOUND"
 
     def __init__(self, detail: str = "", resource_type: str = "", resource_id: str = "", **kwargs):
+        if resource_type and resource_id:
+            kwargs[f"{resource_type}_id"] = resource_id
         super().__init__(detail, resource_type=resource_type, resource_id=resource_id, **kwargs)
 
 

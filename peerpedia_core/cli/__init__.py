@@ -3,9 +3,9 @@
 
 r"""PeerPedia CLI — terminal-based frontend for the PeerPedia backend.
 
-**Hard constraint**: CLI never imports from ``storage/`` directly.  All
-data access goes through ``app/commands/``.  Command modules in ``cmds/``
-are thin adapters; ``dispatch.py`` lazy-loads them via ``_HANDLER_MAP``.
+**Hard constraint**: CLI never imports from ``storage/`` or ``core/``
+directly.  Data access goes through ``app/commands/``.  ``db_session``
+is the sole exception — it is infrastructure plumbing, not domain logic.
 
 Sub-packages:
   ``display``       — Rich terminal formatting (Layer 0)
@@ -21,23 +21,18 @@ import sys
 import warnings
 
 # Suppress SQLAlchemy deprecation warnings from user-facing output.
-# SAWarning about Subquery coercion is harmless and confusing to users.
 warnings.filterwarnings("ignore", category=Warning, module="sqlalchemy")
 
+from peerpedia_core.app.commands.dashboard import (
+    count_user_articles,
+    count_users,
+    publish_ready,
+)
 from peerpedia_core.cli.parser import build_parser
 from peerpedia_core.config.paths import DB_PATH, DB_URL
 from peerpedia_core.cli.info import console
-from peerpedia_core.core import db_session, count_articles, get_user, list_users, publish_ready_articles
+from peerpedia_core.core import db_session
 from peerpedia_core.cli.session import _read_session
-from peerpedia_core.types import short_id
-def _count_users() -> int:
-    """Return the number of users in the local DB.  Returns 0 on fresh install."""
-    try:
-        DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-        with db_session(DB_URL) as session:
-            return len(list_users(session))
-    except OSError:
-        return 0
 
 
 def _show_dashboard() -> None:
@@ -50,16 +45,14 @@ def _show_dashboard() -> None:
     if session:
         user_id = session.get("user_id", "")
         user_name = session.get("name", "?")
-        console.print(f"  Currently: [accent]{user_name}[/] ({short_id(user_id) if user_id else '?'})")
+        console.print(f"  Currently: [accent]{user_name}[/] ({user_id or '?'})")
 
         try:
             with db_session(DB_URL) as db:
-                drafts = count_articles(db, statuses={"draft"}, author_id=user_id)
-                in_review = count_articles(db, statuses={"sedimentation"}, author_id=user_id)
-                published = count_articles(db, statuses={"published"}, author_id=user_id)
-                console.print(f"    Drafts:      {drafts}")
-                console.print(f"    In review:   {in_review}")
-                console.print(f"    Published:   {published}")
+                stats = count_user_articles(db, user_id)
+                console.print(f"    Drafts:      {stats['draft']}")
+                console.print(f"    In review:   {stats['sedimentation']}")
+                console.print(f"    Published:   {stats['published']}")
         except Exception:
             import logging
             logging.getLogger(__name__).warning(
@@ -93,17 +86,22 @@ def _show_welcome() -> None:
     console.print()
 
 
-def main():
-    """CLI entry point — parse args and dispatch to handler.
+def _count_users() -> int:
+    """Return the number of users in the local DB.  Returns 0 on fresh install."""
+    try:
+        DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with db_session(DB_URL) as session:
+            return count_users(session)
+    except OSError:
+        return 0
 
-    The top-level router (``__main__.py``) calls this when subcommand
-    arguments are present; otherwise it launches the REPL directly.
-    ``cli/`` has zero knowledge of ``repl/`` — no circular dependency.
-    """
-    # Startup scan — publish any articles whose sink time has elapsed
+
+def main():
+    """CLI entry point — parse args and dispatch to handler."""
+    # Startup scan — publish any articles whose sink time has elapsed.
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     with db_session(DB_URL) as session:
-        publish_ready_articles(session)
+        publish_ready(session)
 
     parser = build_parser()
     try:
@@ -123,4 +121,4 @@ def main():
         parser.print_help()
 
 
-__all__ = ["main", "build_parser"]
+__all__ = ["main", "build_parser", "_count_users", "_show_dashboard", "_show_welcome"]

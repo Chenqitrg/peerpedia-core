@@ -19,7 +19,6 @@ from peerpedia_core.app.commands.display import (
     source_path,
 )
 from peerpedia_core.cli.info import console, _page
-from peerpedia_core.types import short_id
 from peerpedia_core.types.scores import SCORE_DIMENSIONS
 
 
@@ -71,7 +70,7 @@ def display_user(name: str, affiliation: str, expertise: list[str],
         body += f"\nExpertise: {', '.join(expertise)}"
     if reputation:
         body += f"\nReputation:\n{_stars(reputation)}"
-    body += f"\nID: [accent]{short_id(user_id)}[/]"
+    body += f"\nID: [accent]{user_id}[/]"
     _print_panel("User", body)
 
 
@@ -150,7 +149,7 @@ def display_full_content(raw: str, article_id: str = "") -> None:
         console.print("\n[bold]── Content ──[/]")
         _page(raw)
     elif article_id:
-        display_empty_article_list("N_NO_CONTENT", id_short=article_id[:8])
+        display_empty_article_list("N_NO_CONTENT", id=article_id)
 
 
 def display_empty_article_list(code: str, **fmt) -> None:

@@ -11,7 +11,6 @@ from peerpedia_core.app.result import AppResult
 from peerpedia_core.core import (
     accept_merge, create_merge_proposal, fork_article, withdraw_merge_proposal,
 )
-from peerpedia_core.types import short_id
 
 
 def fork(ctx: AppContext, *, article_ref: str) -> AppResult:
@@ -23,7 +22,7 @@ def fork(ctx: AppContext, *, article_ref: str) -> AppResult:
     result = fork_article(ctx.db, article.id, user_id)
     ctx.db.commit()
     return AppResult("FORKED", data=result,
-        params={"id_short": short_id(result["id"]), "title": result.get("title", "")})
+        params={"id": result["id"], "title": result.get("title", "")})
 
 
 def merge_propose(ctx: AppContext, *, fork_ref: str, target_ref: str) -> AppResult:
@@ -35,7 +34,7 @@ def merge_propose(ctx: AppContext, *, fork_ref: str, target_ref: str) -> AppResu
     mp = create_merge_proposal(ctx.db, fork_ref, target.id, user_id)
     ctx.db.commit()
     return AppResult("MERGE_PROPOSED", data={"id": mp.id, "status": mp.status},
-        params={"id_short": short_id(mp.id), "target_id": short_id(target.id)})
+        params={"id": mp.id, "target_id": target.id})
 
 
 def merge_accept(ctx: AppContext, *, proposal_ref: str, target_ref: str) -> AppResult:
@@ -47,10 +46,10 @@ def merge_accept(ctx: AppContext, *, proposal_ref: str, target_ref: str) -> AppR
     ctx.db.commit()
     if result.get("status") == "conflict":
         return AppResult("MERGE_ACCEPTED", data=result,
-            params={"id_short": short_id(result["id"])},
+            params={"id": result["id"]},
             notices=[AppResult.__new__(AppResult)])  # conflict notice
     return AppResult("MERGE_ACCEPTED", data=result,
-        params={"id_short": short_id(result["id"])})
+        params={"id": result["id"]})
 
 
 def merge_withdraw(ctx: AppContext, *, proposal_ref: str) -> AppResult:
@@ -61,4 +60,4 @@ def merge_withdraw(ctx: AppContext, *, proposal_ref: str) -> AppResult:
     result = withdraw_merge_proposal(ctx.db, proposal_ref, user_id)
     ctx.db.commit()
     return AppResult("MERGE_WITHDRAWN", data=result,
-        params={"id_short": short_id(proposal_ref)})
+        params={"id": proposal_ref})

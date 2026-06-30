@@ -12,7 +12,6 @@ from peerpedia_core.core import (
     add_maintainer_to_article, consent_to_publish,
     list_maintainers, remove_maintainer_from_article, revoke_publish_consent,
 )
-from peerpedia_core.types import short_id
 
 
 def add(ctx: AppContext, *, article_ref: str, target_ref: str) -> AppResult:

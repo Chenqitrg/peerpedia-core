@@ -21,7 +21,6 @@ from peerpedia_core.core import (
     parse_frontmatter as _parse_frontmatter,
 )
 from peerpedia_core.storage.db import Session
-from peerpedia_core.types import short_id
 
 
 # ── Author display ────────────────────────────────────────────────────────
@@ -35,7 +34,7 @@ def resolve_author_names(db: Session, author_ids: list[str]) -> list[str]:
         return []
     users = {u.id: u for u in _list_users_by_ids(db, set(author_ids))}
     return [
-        users[uid].name if uid in users else short_id(uid)
+        users[uid].name if uid in users else uid
         for uid in author_ids
     ]
 
@@ -63,8 +62,8 @@ def source_path(article_id: str) -> Path | None:
 
 
 def list_articles(db: Session, *, search_query: str | None = None,
-                  limit: int | None = None, statuses: set[str] | None = None,
-                  author_ids: set[str] | None = None) -> list:
+                  limit: int | None = None, status: str | None = None,
+                  author_id: str | None = None) -> list:
     """List article ORM objects with optional filters — for CLI display."""
     return _list_articles(db, search_query=search_query, limit=limit,
-                          statuses=statuses, author_ids=author_ids)
+                          status=status, author_id=author_id)

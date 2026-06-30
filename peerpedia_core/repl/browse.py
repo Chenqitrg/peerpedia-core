@@ -23,7 +23,6 @@ def _get_session_user_id() -> str:
     """Return the current user ID from session, or '' if not logged in."""
     s = read_session()
     return s["user_id"] if s else ""
-from peerpedia_core.types import short_id
 
 from peerpedia_core.repl.state import (
     console, repl_style,
@@ -118,10 +117,10 @@ def _browse_articles(db, viewer_id: str | None = None) -> str | None:
             if _st._repl_compact:
                 # One-line card: id + title-truncated + status + single-star
                 single = _formatted_score(int(a.score.get('originality', 0))) if a.score else "—"
-                lines.append((style, f"{prefix} {short_id(a.id)}  {a.title[:45]:<45} {status:<8} {single}\n"))
+                lines.append((style, f"{prefix} {a.id}  {a.title[:45]:<45} {status:<8} {single}\n"))
             else:
                 # Full card: header line + one line per score dimension
-                lines.append((style, f"{prefix} {short_id(a.id)}  {a.title}  {status}\n"))
+                lines.append((style, f"{prefix} {a.id}  {a.title}  {status}\n"))
                 for sl in star_lines:
                     lines.append((style, f"          {sl}\n"))
                 # Blank separator between cards
@@ -225,7 +224,7 @@ def _browse_reviews(db, article_id: str) -> str | None:
             style_class = "class:selected" if i == selected[0] else ""
             rid = r.reviewer_id if hasattr(r, 'reviewer_id') else "?"
             user = users_by_id.get(rid)
-            name = user.name if user else short_id(rid)
+            name = user.name if user else rid
             s = r.scores if hasattr(r, 'scores') and r.scores else {}
             avg = sum(s.values()) / len(s) if s else 0
             stars = "★" * int(avg) + "☆" * (5 - int(avg)) if avg else "  —  "
@@ -236,7 +235,7 @@ def _browse_reviews(db, article_id: str) -> str | None:
         r = reviews[selected[0]]
         rid = r.reviewer_id if hasattr(r, 'reviewer_id') else "?"
         user = users_by_id.get(rid)
-        name = user.name if user else short_id(rid)
+        name = user.name if user else rid
         return f" {selected[0]+1}/{n}  ▸ {name}  │  Enter: view  r: reply  q: back  ↑↓/wheel:scroll"
 
     kb = KeyBindings()

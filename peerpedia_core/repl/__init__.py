@@ -38,7 +38,6 @@ from peerpedia_core.cli.info import console, theme
 from peerpedia_core.app.context import read_session as _read_session
 from peerpedia_core.core import count_articles, publish_ready_articles
 from peerpedia_core.repl.state import close_db as _close_db, ensure_db as _ensure_db
-from peerpedia_core.types import short_id
 from peerpedia_core.cli.dispatch import get_cmd_map_for_parser as get_cmd_map
 from peerpedia_core.config.params import params
 from peerpedia_core.config.paths import REPL_HISTORY_FILE
@@ -91,7 +90,7 @@ def _show_startup_banner(db, session_data: dict | None) -> None:
         console.print(Panel(greeting, border_style="muted", padding=(0, 2)))
         user_line = Text()
         user_line.append(user_name, style=f"bold {theme.styles['accent']}")
-        user_line.append(f"  {short_id(user_id)}", style="muted")
+        user_line.append(f"  {user_id}", style="muted")
         console.print(f"  {user_line}")
         console.print(f"  [muted]{status_line}[/]")
     else:

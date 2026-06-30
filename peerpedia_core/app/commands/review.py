@@ -86,7 +86,7 @@ def invite_reviewer(ctx: AppContext, *, article_ref: str, user_ref: str) -> AppR
     result = _invite_reviewer(ctx.db, article.id, user_id, target.id)
     ctx.db.commit()
     return AppResult("REVIEW_INVITED", data=result,
-        params={"name": target.name, "id_short": article.id[:8]})
+        params={"name": target.name, "id": article.id})
 
 
 def accept(ctx: AppContext, *, article_ref: str) -> AppResult:

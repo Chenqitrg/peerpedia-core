@@ -21,7 +21,6 @@ from peerpedia_core.config.paths import DB_PATH, DB_URL
 from peerpedia_core.core import (
     count_unread_notifications, db_repl_setup, list_articles, list_users,
 )
-from peerpedia_core.types import short_id
 
 # ── REPL persistent DB session ───────────────────────────────────────────
 
@@ -146,7 +145,7 @@ def _prompt_text():
         badge = ""
     parts = [("class:prompt", f"{user}{badge}")]
     if _repl_article_id:
-        label = _repl_article_title or short_id(_repl_article_id)
+        label = _repl_article_title or _repl_article_id
         parts.append(("class:separator", f" ▸ {label}"))
         if _repl_article_commit:
             parts.append(("class:separator", f" @{_repl_article_commit[:7]}"))
@@ -163,7 +162,7 @@ def _refresh_completions():
         # ArticleMetaStorage title words and ID prefixes
         for a in list_articles(db, limit=50):
             if a.id:
-                words.append(short_id(a.id))
+                words.append(a.id)
             if a.title:
                 for w in a.title.split():
                     if len(w) > 2:
@@ -172,7 +171,7 @@ def _refresh_completions():
         for u in list_users(db):
             if u.name:
                 words.append(f"@{u.name}")
-                words.append(short_id(u.id))
+                words.append(u.id)
         _repl_completion_words = sorted(set(words))
     except Exception:
         import logging

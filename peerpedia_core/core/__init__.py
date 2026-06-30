@@ -55,8 +55,15 @@ from peerpedia_core.core.articles import (
 
 
 def search_articles(db: Session, query: str) -> list:
-    """Fuzzy-search articles by partial title, author, or ID prefix."""
-    return list_articles(db, search_query=query)
+    """Fuzzy-search articles by partial title or ID prefix.
+
+    Tries title match first; falls back to ID prefix match
+    so ``peerpedia article show abc12345`` works as expected.
+    """
+    results = list_articles(db, search_query=query)
+    if not results:
+        results = list_articles(db, id_prefix=query)
+    return results
 
 
 def merge_article_meta(db: Session, entries: list[dict]) -> int:

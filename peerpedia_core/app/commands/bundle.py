@@ -84,7 +84,7 @@ def _sync_all_articles(ctx: AppContext, server: str) -> tuple[list[str], list[st
         try:
             result = sync_article(ctx.db, ctx.transport, server, aid)
             if result.get("synced"):
-                synced.append(aid[:8])
+                synced.append(aid)
         except (TransportError, ProtocolError, ConflictError) as e:
-            failed.append(f"{aid[:8]}: {e.detail}")
+            failed.append(f"{aid}: {e.detail}")
     return synced, failed

@@ -17,7 +17,6 @@ from peerpedia_core.core import (
     require_authenticable_user, soft_delete_user, verify_user_password,
 )
 from peerpedia_core.crypto import derive_key_pair, new_salt
-from peerpedia_core.types import short_id
 
 
 def whoami(ctx: AppContext) -> AppResult:
@@ -45,7 +44,7 @@ def register(ctx: AppContext, *, name: str, password: str) -> AppResult:
     write_session(user.id, user.name, private_key_bytes.hex())
     return AppResult("REGISTERED",
         data={"id": user.id, "name": user.name, "pubkey": pubkey_hex},
-        params={"name": user.name, "id_short": short_id(user.id)})
+        params={"name": user.name, "id": user.id})
 
 
 def login(ctx: AppContext, *, name: str, password: str) -> AppResult:
@@ -75,7 +74,7 @@ def recover(ctx: AppContext, *, name: str | None = None, user_id: str | None = N
     write_session(user.id, user.name, private_key_bytes.hex())
     return AppResult("RECOVERED",
         data={"id": user.id, "name": user.name},
-        params={"name": user.name, "id_short": short_id(user.id)})
+        params={"name": user.name, "id": user.id})
 
 
 def delete_account(ctx: AppContext) -> AppResult:
@@ -106,7 +105,7 @@ def bootstrap(ctx: AppContext, *, from_json: str, peer: str | None = None) -> Ap
         notices.append(AppNotice("W_AUTO_SYNCING", params={"count": 1}))
     return AppResult("BOOTSTRAPPED",
         data={"id": user_id, "name": name},
-        params={"name": name, "id_short": short_id(user_id)},
+        params={"name": name, "id": user_id},
         notices=notices)
 
 
@@ -129,6 +128,6 @@ def _write_login_session(user, password: str) -> AppResult:
     write_session(user.id, user.name, private_key_bytes.hex())
     return AppResult("LOGGED_IN",
         data={"id": user.id, "name": user.name},
-        params={"name": user.name, "id_short": short_id(user.id)})
+        params={"name": user.name, "id": user.id})
 
 

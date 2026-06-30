@@ -9,7 +9,6 @@ from pathlib import Path
 import git
 
 from peerpedia_core.storage.git.read import is_ancestor
-from peerpedia_core.types import short_id
 
 
 def get_head(repo_path: Path) -> str:
@@ -62,7 +61,7 @@ def create_bundle(repo_path: Path, since_hash: str | None = None) -> bytes:
         raise FileNotFoundError("REPO_NOT_FOUND")
 
     if since_hash is not None and not is_ancestor(repo_path, since_hash):
-        raise ValueError(f"INVALID_SINCE_HASH: {short_id(since_hash)}")
+        raise ValueError(f"INVALID_SINCE_HASH: {since_hash}")
 
     repo = git.Repo(repo_path)
     rev_range = f"{since_hash}..HEAD" if since_hash else "HEAD"

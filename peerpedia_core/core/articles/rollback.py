@@ -18,7 +18,6 @@ from peerpedia_core.core.articles._helpers import reset_sink
 from peerpedia_core.core.reconcile import reconcile_authors, reconcile_score
 from peerpedia_core.storage.db.guards import authorize_article_action, require_signing_key
 from peerpedia_core.storage.git.guards import require_article_repo
-from peerpedia_core.types import short_id
 
 
 def rollback_article(
@@ -47,14 +46,14 @@ def rollback_article(
         return {
             "id": article.id, "title": article.title, "status": article.status,
             "commit_hash": get_head_hash(rp),
-            "message": f"Already at {short_id(target_hash)} (no changes needed)",
+            "message": f"Already at {target_hash} (no changes needed)",
         }
 
     # ── Commit ─────────────────────────────────────────────────────────────
     require_signing_key(signing_key_bytes, pubkey_hex, "rollback")
     with temp_signing_key(signing_key_bytes) as key_path:
         new_hash = commit_article(
-            rp, f"Rollback to {short_id(target_hash)}",
+            rp, f"Rollback to {target_hash}",
             user.name, make_peerpedia_email(user_id),
             signing_key=key_path, pubkey_hex=pubkey_hex,
         )
@@ -69,5 +68,5 @@ def rollback_article(
     return {
         "id": article.id, "title": article.title, "status": article.status,
         "commit_hash": new_hash,
-        "message": f"Rollback to {short_id(target_hash)}",
+        "message": f"Rollback to {target_hash}",
     }

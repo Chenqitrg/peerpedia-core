@@ -37,4 +37,4 @@ def mark_read_notification(ctx: AppContext, *, notification_id: str) -> AppResul
     require_notification(ctx.db, notification_id, user_id)
     mark_read(ctx.db, notification_id)
     ctx.db.commit()
-    return AppResult("OK", params={"msg": f"Notification {notification_id[:8]} marked as read"})
+    return AppResult("OK", params={"msg": f"Notification {notification_id} marked as read"})

@@ -140,17 +140,17 @@ def test_article_edit_content_changed(ctx):
 
 
 def test_article_edit_title_changed(ctx):
+    """Title-only edit auto-generates commit message, no editor prompt."""
     with mock_cmd(_MOD, '_article') as app:
         app.get_source_path.return_value = MagicMock(
             data={'content': 'same content'})
         with patch(f'{_MOD}._open_editor', return_value='same content'):
-            with patch(f'{_MOD}._prompt_commit_message', return_value='New title'):
-                call(_cmd_article_edit, ctx,
-                     Namespace(id='abc', content=None, title='New Title',
-                               no_editor=False))
+            call(_cmd_article_edit, ctx,
+                 Namespace(id='abc', content=None, title='New Title',
+                           no_editor=False))
     app.edit.assert_called_once_with(
         ctx, article_ref='abc', content='same content', title='New Title',
-        message='New title')
+        message='Title: New Title')
 
 
 # ── Publish / Delete / Scan ───────────────────────────────────────────────

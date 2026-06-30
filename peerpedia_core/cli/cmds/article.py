@@ -134,8 +134,13 @@ def _cmd_article_edit(ctx, args):
         _out(None, "N_NO_EDIT_CHANGES")
         return
 
-    message = _prompt_commit_message(
-        _compute_edit_diff(raw, new_content, args.title, content_changed))
+    if content_changed:
+        message = _prompt_commit_message(
+            _compute_edit_diff(raw, new_content, args.title, content_changed))
+    elif title_changed:
+        message = f"Title: {args.title}"
+    else:
+        message = "Edit article"
     return _article.edit(ctx, article_ref=article_ref,
         content=new_content, title=args.title, message=message)
 

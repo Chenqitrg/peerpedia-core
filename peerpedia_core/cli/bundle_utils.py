@@ -16,7 +16,6 @@ from peerpedia_core.config.params import PEERPEDIA_SERVER_ENV, params
 from peerpedia_core.config.paths import SERVER_DEFAULT_FILE
 from peerpedia_core.app.commands.sync import sync_all as _core_sync_all, sync_all_peers as _core_sync_all_peers
 from peerpedia_core.exceptions import ConflictError, ProtocolError, TransportError
-from peerpedia_core.time import validate_clock_skew
 from peerpedia_core.transport import Transport
 
 _TRANSPORT = Transport.from_http()
@@ -29,17 +28,6 @@ def _warn_no_server() -> None:
         return
     _no_server_warned = True
     _out(None, "W_NO_KNOWN_PEERS")
-
-
-def _require_online_server(args) -> str:
-    server = _resolve_server_url(args)
-    if not _TRANSPORT.is_online(server):
-        _out(None, "OFFLINE", server=server)
-    skew = _TRANSPORT.check_clock_skew(server)
-    err = validate_clock_skew(skew)
-    if err:
-        _out(args, "CLOCK_SKEW", server=server, error=err)
-    return server
 
 
 # ── Error → message mapping ──────────────────────────────────────────────────

@@ -46,6 +46,7 @@ def list_articles(
     author_id: str | None = None,
     viewer_id: str | None = None,
     bookmarked_by: str | None = None,
+    id_prefix: str | None = None,
     limit: int | None = None,
     offset: int = 0,
 ) -> list:
@@ -55,7 +56,7 @@ def list_articles(
     return _list(
         db, statuses=statuses, search_query=search_query,
         author_ids=author_ids, viewer_id=viewer_id,
-        bookmarked_by=bookmarked_by,
+        bookmarked_by=bookmarked_by, id_prefix=id_prefix,
         limit=limit, offset=offset,
     )
 

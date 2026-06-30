@@ -23,7 +23,6 @@ from peerpedia_core.storage.db import Session
 from peerpedia_core.storage.db.guards import require_article as _lower_require_article
 from peerpedia_core.storage.db.guards import require_user as _lower_require_user
 from peerpedia_core.storage.db.models import ArticleMetaStorage, NotificationStorage, UserStorage
-from peerpedia_core.types import short_id
 
 
 def require_user(ctx: AppContext) -> str:
@@ -89,7 +88,7 @@ def guard_user_id_available(db: Session, user_id: str) -> None:
     existing = _get_user(db, user_id)
     if existing is not None:
         raise BadRequestError(code="DUPLICATE_USER_LOCAL",
-            name=existing.name, id_short=short_id(user_id))
+            name=existing.name, id=user_id)
 
 
 def require_user_by_name(db: Session, name: str | None) -> UserStorage:
@@ -126,15 +125,15 @@ def _ambiguous(ids: str, **extra) -> BadRequestError:
 
 
 def format_article_candidates(articles: list[ArticleMetaStorage]) -> str:
-    return ", ".join(f"{short_id(a.id)} ({a.title})" for a in articles)
+    return ", ".join(f"{a.id} ({a.title})" for a in articles)
 
 
 def format_user_candidates(users: list[UserStorage]) -> str:
-    return ", ".join(f"{short_id(u.id)} ({u.name})" for u in users)
+    return ", ".join(f"{u.id} ({u.name})" for u in users)
 
 
 def _format_user_id_candidates(users: list[UserStorage]) -> str:
-    return ", ".join(short_id(u.id) for u in users)
+    return ", ".join(u.id for u in users)
 
 
 def format_user_candidates_multiline(users: list[UserStorage]) -> str:

@@ -15,7 +15,6 @@ import shlex
 import sys
 
 from peerpedia_core.repl.state import ensure_db as _ensure_db
-from peerpedia_core.types import short_id
 
 import peerpedia_core.repl.state as _st
 from peerpedia_core.repl.bridge import execute as _run_cli
@@ -202,7 +201,7 @@ def _try_browse_intercept(cmd: str, args_list: list[str], parser) -> bool | None
                     reviewer_id = result.split(":", 1)[1]
                     return _dispatch(f"review reply {aid} --to {reviewer_id}", parser)
                 else:
-                    console.print(f"[accent]{short_id(result)}[/]")
+                    console.print(f"[accent]{result}[/]")
             return True
 
     return None  # not an intercept — continue to CLI

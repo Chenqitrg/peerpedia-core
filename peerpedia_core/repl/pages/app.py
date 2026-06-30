@@ -102,9 +102,13 @@ class ReplApplication:
             else:
                 page = self.current_page
                 if page:
-                    new_page = page.handle_key("enter")
-                    if new_page:
-                        self.push(new_page)
+                    if page.filter_query.startswith(":"):
+                        self._handle_page_command(page.filter_query)
+                        page.filter_query = ""
+                    else:
+                        new_page = page.handle_key("enter")
+                        if new_page:
+                            self.push(new_page)
 
         @kb.add("escape")
         def _(event):
@@ -149,8 +153,15 @@ class ReplApplication:
                 else:
                     page = self.current_page
                     if page:
-                        page.filter_query += ch
-                        page.focus_index = 0
+                        # : prefix → page-mode command (not filter)
+                        if ch == ":" and not page.filter_query:
+                            page.filter_query = ":"
+                        elif page.filter_query.startswith(":"):
+                            page.filter_query += ch
+                            # :command completed on Enter
+                        else:
+                            page.filter_query += ch
+                            page.focus_index = 0
 
         @kb.add("backspace")
         def _(event):
@@ -187,6 +198,13 @@ class ReplApplication:
             import sys
             sys.exit(0)
 
+        if cmd == "editor":
+            self._show_editor()
+            return
+        if cmd.startswith("editor "):
+            self._set_editor(cmd[7:].strip())
+            return
+
         if cmd in ("mine", "feed"):
             self._open_article_list(cmd)
         elif cmd == "school":
@@ -195,6 +213,46 @@ class ReplApplication:
             self.push(PlaceholderPage())  # Phase 6 will replace
         else:
             _execute_command(cmd)
+
+    # ── Page-mode : commands ──────────────────────────────────────────────
+
+    def _handle_page_command(self, query: str) -> None:
+        """Dispatch a :command entered in page mode."""
+        page = self.current_page
+        if page is None:
+            return
+        cmd = query.lstrip(":")
+        item = page.focused_item()
+        if item is None:
+            return
+        aid = item.get("id", "")
+
+        if cmd == "edit" and aid:
+            _execute_command(f"article edit {aid}")
+        elif cmd == "publish" and aid:
+            _execute_command(f"article publish {aid}")
+        elif cmd == "review" and aid:
+            _execute_command(f"review submit {aid}")
+        elif cmd == "bookmark" and aid:
+            _execute_command(f"bookmark add {aid}")
+        elif cmd == "fork" and aid:
+            _execute_command(f"fork {aid}")
+        elif cmd == "share" and aid:
+            _execute_command(f"share add {aid}")
+        elif cmd == "follow" and aid:
+            _execute_command(f"follow {aid}")
+        elif cmd == "history" and aid:
+            _execute_command(f"article diff {aid}")
+
+    def _show_editor(self) -> None:
+        import os
+        editor = os.environ.get("EDITOR", "vim")
+        console.print(f"[info]Editor: {editor}[/]")
+
+    def _set_editor(self, path: str) -> None:
+        import os
+        os.environ["EDITOR"] = path
+        console.print(f"[info]Editor set to {path}[/]")
 
     def _open_article_list(self, cmd: str) -> None:
         """Execute an article listing command and open the ArticleList page."""

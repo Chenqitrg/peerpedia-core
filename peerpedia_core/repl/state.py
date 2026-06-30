@@ -20,7 +20,6 @@ from rich.theme import Theme
 
 logger = logging.getLogger(__name__)
 
-from peerpedia_core.presentation.rich.components import abbrev_commit
 from peerpedia_core.app.context import read_session
 from peerpedia_core.config.paths import DB_PATH, DB_URL
 from peerpedia_core.core import (
@@ -114,31 +113,14 @@ console = Console(theme=theme)
 
 @dataclass
 class ReplSession:
-    """All mutable REPL state in one place.  pgcli/IPython pattern."""
+    """All mutable REPL state in one place."""
 
-    user: str | None = None
-    article_id: str | None = None
-    article_title: str = ""
-    article_commit: str = ""
     compact: bool = False
     completion_words: list[str] = field(default_factory=list)
     theme_name: str = "parchment"
 
 
 session = ReplSession()
-
-
-# ── Public setters — write through to session ────────────────────────────────
-
-
-def set_article_context(article_id: str | None, title: str = "", commit: str = "") -> None:
-    session.article_id = article_id
-    session.article_title = title
-    session.article_commit = commit
-
-
-def set_user(name: str) -> None:
-    session.user = name
 
 
 def set_compact(compact: bool) -> None:
@@ -205,25 +187,15 @@ def _get_notification_badge() -> str:
 
 
 def _prompt_user_badge() -> tuple[str, str]:
-    """Prompt fragment: 'alice (3)'."""
-    return "class:prompt", f"{session.user or 'guest'}{_get_notification_badge()}"
-
-
-def _prompt_article_segment() -> list[tuple[str, str]]:
-    """Prompt fragments for current article context, e.g. ' ▸ My Paper @abc1234'."""
-    if not session.article_id:
-        return []
-    label = session.article_title or session.article_id
-    parts: list[tuple[str, str]] = [("class:separator", f" ▸ {label}")]
-    if session.article_commit:
-        parts.append(("class:separator", f" @{abbrev_commit(session.article_commit)}"))
-    return parts
+    """Prompt fragment: 'alice (3)' or 'guest'."""
+    sid = read_session()
+    name = sid.get("name", "guest") if sid else "guest"
+    return "class:prompt", f"{name}{_get_notification_badge()}"
 
 
 def _prompt_text():
-    """Build the REPL prompt line with user badge, article context, notifications."""
+    """Build the REPL prompt line with user badge and notifications."""
     parts = [_prompt_user_badge()]
-    parts.extend(_prompt_article_segment())
     parts.append(("class:separator", "> "))
     return parts
 

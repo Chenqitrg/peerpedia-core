@@ -13,7 +13,6 @@ from prompt_toolkit.document import Document
 
 import peerpedia_core.repl.state as _st
 from peerpedia_core.app.commandspec import COMMAND_GROUPS, TOP_LEVEL_COMMANDS
-from peerpedia_core.repl.dispatch import _META_COMMANDS
 
 LAST_TOKEN_RE = re.compile(r"\S+$")
 EXTRA_REPL_FLAGS = ("--json", "--rich")
@@ -58,11 +57,7 @@ def build_command_list() -> list[str]:
     for command in TOP_LEVEL_COMMANDS:
         commands.add(command.cmd_id)
 
-    result = sorted(commands)
-    for mc in _META_COMMANDS:
-        if mc not in commands:
-            result.append(mc)
-    return result
+    return sorted(commands)
 
 
 def _last_token(text: str) -> str | None:

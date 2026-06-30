@@ -13,17 +13,13 @@ from __future__ import annotations
 from rich.table import Table
 from rich.text import Text
 
-from peerpedia_core.app.result import AppResult
-from peerpedia_core.exceptions import PeerpediaError
 from peerpedia_core.messages import lookup as _lookup
 from peerpedia_core.presentation.rich.components import (
     data_table,
-    error_lines,
     notification_table as _notification_table,
     score_lines as _shared_score_lines,
     user_line_text,
 )
-from peerpedia_core.repl.state import console
 
 # ── Thin wrappers ─────────────────────────────────────────────────────────────
 
@@ -60,55 +56,5 @@ def _format_result_data(data: dict | list) -> list[Table | Text]:
     return result
 
 
-def format_result(result: AppResult) -> list[Text | Table]:
-    """Format an AppResult into renderables.  Does NOT print."""
-    renderables: list[Text | Table] = []
-
-    for notice in result.notices:
-        code, m = _lookup(notice.code)
-        if m.text:
-            text = m.text.format(**notice.params) if notice.params else m.text
-            renderables.append(Text(text))
-
-    code, m = _lookup(result.code)
-    if m.kind.name in ("SUCCESS", "INFO") and m.text:
-        msg = m.text.format(**result.params) if result.params else m.text
-        renderables.append(Text("✓ " + msg))
-    elif result.data:
-        renderables.extend(_format_result_data(result.data))
-
-    return renderables
-
-
-def format_error(error: PeerpediaError) -> list[Text]:
-    """Format a PeerpediaError into renderables.  Does NOT print."""
-    code, m = _lookup(error.code)
-    detail = (m.text.format(**error.context)
-              if hasattr(error, 'context') and error.context
-              else str(error))
-    return [Text(line) for line in error_lines(
-        detail, suggestion=m.suggestion or "",
-        see_also=m.see_also or (),
-    )]
-
-
-# ── Print: renderables → console (the I/O step) ──────────────────────────────
-
-
-def print_result(renderables: list[Text | Table]) -> None:
-    """Print formatted renderables to the REPL console."""
-    for r in renderables:
-        console.print(r)
-
-
-# ── Legacy compatibility (thin wrappers that print) ──────────────────────────
-
-
-def render_result(result: AppResult) -> None:
-    """Render and print an AppResult.  Legacy wrapper around format+print."""
-    print_result(format_result(result))
-
-
-def render_error(error: PeerpediaError) -> None:
-    """Render and print a PeerpediaError.  Legacy wrapper around format+print."""
-    print_result(format_error(error))
+# format_result, format_error, print_result, render_result, render_error
+# removed in Phase 0 — replaced by page-based rendering in repl/pages/.

@@ -24,9 +24,6 @@ from peerpedia_core.presentation.rich.components import (
     repl_cancelled_msg, repl_internal_error, repl_parse_error,
     repl_unavailable_cmd, repl_unknown_cmd,
 )
-from peerpedia_core.repl.display import (
-    format_error, format_result, print_result,
-)
 from peerpedia_core.repl.state import console, session_scope
 
 _log = logging.getLogger(__name__)
@@ -159,7 +156,7 @@ def execute(cmd_str: str) -> bool:
     try:
         args = _parse_args(rest, spec)
     except PeerpediaError as e:
-        print_result(format_error(e))
+        console.print(f"[error]✗ {e.detail}[/]")
         return True
 
     # ── Interactive password prompt ───────────────────────────────────────
@@ -173,17 +170,15 @@ def execute(cmd_str: str) -> bool:
     try:
         with session_scope() as db:
             ctx = build_context(db)
-            result = spec.handler(ctx, args)
+            spec.handler(ctx, args)
     except PeerpediaError as e:
-        print_result(format_error(e))
+        console.print(f"[error]✗ {e.detail}[/]")
         return True
     except Exception as e:
         _log.exception("REPL command failed: %s", cmd_str)
         console.print(repl_internal_error(e))
         return True
 
-    # ── Format + Print ────────────────────────────────────────────────────
-    print_result(format_result(result))
     return True
 
 

@@ -30,7 +30,6 @@ from peerpedia_core.repl.banner import show_startup_banner
 from peerpedia_core.repl.completer import (
     FLAGS, build_command_list, make_completer,
 )
-from peerpedia_core.repl.dispatch import _dispatch_meta
 from peerpedia_core.repl.engine import execute as _execute_command
 from peerpedia_core.repl.meta import _meta_theme
 from peerpedia_core.repl.state import (
@@ -60,8 +59,6 @@ def _startup() -> None:
     db = new_session()
     try:
         session_data = _read_session()
-        if session_data and _st.session.user is None:
-            _st.set_user(session_data.get("name", ""))
         _detect_theme_from_env()
         show_startup_banner(db, session_data)
     finally:
@@ -112,12 +109,7 @@ def _build_prompt_session(static_words: frozenset[str]) -> PromptSession:
 
 
 def _post_command_cycle(last_scan: float) -> float:
-    """Sync session user, refresh completions, auto-publish.  Returns new timestamp."""
-    sid = _read_session()
-    if sid:
-        name = sid.get("name", "")
-        if name and name != _st.session.user:
-            _st.set_user(name)
+    """Refresh completions, auto-publish.  Returns new timestamp."""
     _refresh_completions()
     return _maybe_auto_publish(last_scan)
 
@@ -147,11 +139,7 @@ def run():
                 console.print(repl_bye_msg())
                 break
 
-            if cmd.startswith(":"):
-                if not _dispatch_meta(cmd):
-                    break
-            else:
-                _execute_command(cmd)
+            _execute_command(cmd)
 
             _last_scan = _post_command_cycle(_last_scan)
     finally:

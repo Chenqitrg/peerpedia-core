@@ -11,6 +11,7 @@ expect — without needing a running server.
 from unittest.mock import Mock
 
 from peerpedia_core.transport import Transport
+from peerpedia_core.transport.http.factory import from_http
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -21,7 +22,7 @@ from peerpedia_core.transport import Transport
 class TestTransportFactory:
     def test_from_http_returns_transport(self):
         """from_http() MUST return a Transport with all callbacks wired."""
-        t = Transport.from_http()
+        t = from_http()
         assert isinstance(t, Transport)
         # Every callback slot is filled
         assert callable(t.fetch_head)

@@ -5,7 +5,10 @@
 
 from __future__ import annotations
 
+from peerpedia_core.app.result import AppResult
 from peerpedia_core.cli.decorators import with_context
+from peerpedia_core.cli.display import display_user
+from peerpedia_core.cli.info import console
 from peerpedia_core.editor import get_password as _get_password
 import peerpedia_core.app.commands.account as _account
 
@@ -41,7 +44,19 @@ def _cmd_account_recover(ctx, args):
 @with_context
 def _cmd_account_whoami(ctx, args):
     """Show current login status."""
-    return _account.whoami(ctx)
+    result = _account.whoami(ctx)
+    # Render as a user panel instead of raw key-value dump
+    d = result.data
+    display_user(
+        d.get("name", "?"),
+        d.get("id", "?"),
+        affiliation=d.get("affiliation", ""),
+        expertise=d.get("expertise"),
+        reputation=d.get("reputation"),
+        public_key=d.get("public_key"),
+        created_at=str(d.get("created_at", "")) if d.get("created_at") else "",
+    )
+    return AppResult(code="", data=None, params=result.params, notices=result.notices)
 
 
 @with_context
@@ -62,4 +77,14 @@ def _cmd_account_delete(ctx, args):
 @with_context
 def _cmd_account_search(ctx, args):
     """Search users by name (case-insensitive)."""
-    return _account.search_users(ctx, query=getattr(args, "query", ""))
+    result = _account.search_users(ctx, query=getattr(args, "query", ""))
+    items = result.data.get("items", [])
+    if not items:
+        console.print(f"[muted]No users match '{args.query}'.[/]")
+        return AppResult(code="", data=None, params=result.params, notices=result.notices)
+    for u in items:
+        display_user(
+            u["name"],
+            u["user_id"],
+        )
+    return AppResult(code="", data=None, params=result.params, notices=result.notices)

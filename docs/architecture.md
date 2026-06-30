@@ -1,136 +1,205 @@
 # PeerPedia Core — Architecture
 
+> **Note**: This architecture was refactored in v0.5.x. The previous flat `commands/`, `policies/`, `bundle/`, `social/` directories were reorganized into `cli/` → `app/` → `core/` with `server/` separated from `transport/`. The `workflow/` directory was renamed to `compute/`. See git history for the full migration.
+
+## Layer Stack
+
+```
+cli/          User commands — thin pass-through to app/; imports core/ + transport/, never storage/
+  ↓
+app/          Command facades — context building, ref resolution, result formatting (AppResult)
+  ↓
+core/         Orchestration — business logic merging transport + storage (sync_article, publish, review…)
+  ↓
+transport/    P2P protocol — Transport dataclass bundles HTTP callbacks
+  http/       HTTP implementation — ONLY layer importing httpx (_core.py)
+storage/      Git backend (git/) + DB (db/) + local files (peers.py)
+server/       HTTP server — Starlette routes + middleware; imports core/, never transport/http/
+config/       Constants + tunable params (params.py)
+compute/      Pure compute — scoring, reputation, sedimentation (no IO)
+types/        Domain type definitions — scores, status, entities (zero deps)
+```
+
 ## File Tree
 
 ```
 peerpedia_core/
-├── __main__.py                # Top-level router — routes to CLI or REPL
+├── __main__.py                # Top-level router — CLI or REPL (only module aware of both)
 ├── compiler.py               # Compiler backend (Markdown/Typst → HTML/PDF/SVG/PNG)
 ├── crypto.py                  # Ed25519 key derivation, signing, verification
-├── exceptions.py              # Semantic exceptions (NotFound, NotAuthorized, Conflict, MergeConflict, etc.)
+├── editor.py                  # $EDITOR integration + commit message prompts
+├── exceptions.py              # Semantic exceptions
 ├── frontmatter.py             # YAML frontmatter parse/build
-├── names.py                   # Anonymous name generation
+├── messages.py               # Centralized message registry (176 user-facing messages)
+├── names.py                   # Anonymous reviewer display names
+├── time.py                    # Clock utilities (skew detection, monotonic time)
 
 ├── config/
-│   ├── paths.py               # Centralised filesystem paths (PEERPEDIA_HOME env override)
+│   ├── paths.py               # Filesystem paths (PEERPEDIA_HOME env override)
 │   ├── git.py                 # Git config helpers (gitignore, SSH signing env)
-│   └── params.py              # Tunable parameters (sink days, score weights)
+│   └── params.py              # Tunable parameters (sink days, score weights, rate limits)
 
 ├── types/
 │   ├── scores.py              # FiveDimScores, ReputationScores, SCORE_DIMENSIONS
-│   └── status.py              # Article/workflow status enums (Draft, Published, etc.)
+│   ├── status.py              # Article/workflow status constants
+│   └── entities.py            # ArticleRecord, ReviewRecord, UserStub dataclasses
 
-├── policies/
-│   └── articles.py            # Permission checks (read/write/fork/publish/rollback/sync/review/reply/merge)
+├── rules/                     # Authorization — permission checks, no IO
+│   ├── articles.py            # Article permissions (read/write/fork/publish/review/merge)
+│   └── reviews.py             # Review permissions (submit/rate/reply)
 
-├── storage/                   # Local persistence
-│   ├── git_backend.py         #   Git operations (init/commit/history/diff/merge/clone/verify)
-│   ├── locks.py               #   File-based lock for concurrent git writes
-│   └── db/
-│       ├── engine.py            #   SQLAlchemy engine, JSONList/JSONDict types, migrations
-│       ├── models.py            #   ORM: Article, User, Review, Follow, Alias, Share,
-│       │                        #        Bookmark, MergeProposal, Citation, Notification
-│       ├── session_utils.py     #   Transaction lifecycle (commit/rollback/close)
-│       ├── crud_article.py    #   Article CRUD + publish_consents
-│       ├── crud_user.py       #   User, Follow, anonymous names
-│       ├── crud_review.py     #   Review score cache
-│       ├── crud_maintainer.py #   Maintainer membership
-│       ├── crud_merge.py      #   MergeProposal CRUD
-│       ├── crud_citation.py   #   Citation edge CRUD
-│       ├── crud_bookmark.py   #   Bookmark CRUD
-│       ├── crud_share.py      #   Share CRUD
-│       ├── crud_alias.py      #   Alias CRUD (local nicknames)
-│       └── crud_notification.py # Notification CRUD
+├── app/                       # Command facade layer — context, refs, result types
+│   ├── context.py             #   AppContext (db + transport + session)
+│   ├── parsers.py             #   Input parsers (scores, refs)
+│   ├── refs.py                #   require_article, require_user, require_user_by_ref
+│   ├── result.py              #   AppResult / AppNotice dataclasses
+│   └── commands/
+│       ├── account.py         #     register, login, whoami, search_users, bootstrap
+│       ├── article.py         #     create, show, list, edit, publish, delete, diff, fork
+│       ├── bundle.py          #     sync status, push, pull, discover
+│       ├── dashboard.py       #     count_user_articles, count_users, publish_ready
+│       ├── display.py         #     Data lookups for CLI rendering (never from core/ directly)
+│       ├── fork.py            #     fork + merge proposal operations
+│       ├── maintainer.py      #     add/remove/list maintainers, consent/revoke
+│       ├── notification.py    #     list/mark_read notifications
+│       ├── review.py          #     submit, list, reply, invite, accept, decline, rate
+│       ├── social.py          #     follow, unfollow, following, followers, school, bookmark, share, alias
+│       └── sync.py            #     sync_and_discover orchestration
 
-├── commands/                  # Orchestration — only layer touching both git and db
-│   ├── __init__.py            #   Facade: re-exports all public functions
+├── core/                      # Business logic — imports transport/ + storage/
+│   ├── __init__.py            #   Facade: re-exports all public functions + db_session
 │   ├── users.py               #   User lifecycle + follow/unfollow
-│   ├── notifications.py       #   Notification facade
-│   ├── discover.py            #   P2P social graph merge (users, follows, articles, shares)
-│   ├── views.py               #   Response-ready dicts for API
-│   ├── integrity.py           #   Article integrity verification (commit signatures, DB/git consistency)
-│   ├── workflow.py            #   publish_ready_articles, recompute_article_score, recompute_author_reputation
-│   ├── bundle.py              #   apply_sync_bundle, sync_reviews_from_worktree
-│   ├── reviews.py             #   submit_review, submit_reply, write_review_to_git, _write_thread_message
-│   ├── merge.py               #   accept_merge, create_merge_proposal, withdraw_merge_proposal
-│   ├── maintainers.py         #   add/remove/list maintainers, consent_to_publish, revoke_publish_consent
-│   ├── bookmarks.py           #   add/remove/list bookmarks
-│   ├── shares.py              #   add/remove/list shares
-│   ├── trailers.py            #   Commit trailer helpers (signing, review markers)
-│   └── articles/
-│       ├── __init__.py        #     Read wrappers + re-exports
-│       ├── _helpers.py        #     rebuild_article_authors
-│       ├── create.py          #     create_article_with_content
-│       ├── update.py          #     update_article_content
-│       ├── publish.py         #     publish_article
-│       ├── fork.py            #     fork_article
-│       ├── rollback.py        #     rollback_article
-│       ├── delete.py          #     delete_article
-│       └── diff.py            #     diff_article + resolve_commit_ref
+│   ├── views.py               #   Response-ready dicts (get_user_view, get_following_views, …)
+│   ├── guards.py              #   Shared guard helpers
+│   ├── bookmarks.py           #   Bookmark operations
+│   ├── shares.py              #   Share operations
+│   ├── maintainers.py         #   Maintainer operations
+│   ├── merge.py               #   Merge proposal lifecycle
+│   ├── notifications.py       #   Notification operations
+│   ├── sync_article.py        #   Article sync orchestration (k-exponential probe protocol)
+│   ├── sync_social.py         #   Social graph sync (discover_following, discover_followers)
+│   ├── articles/
+│   │   ├── __init__.py        #     Read wrappers + re-exports
+│   │   ├── _helpers.py        #     require_article, rebuild_article_authors, _reset_sink
+│   │   ├── create.py          #     create_article_with_content
+│   │   ├── update.py          #     update_article_content
+│   │   ├── publish.py         #     publish_article
+│   │   ├── fork.py            #     fork_article
+│   │   ├── rollback.py        #     rollback_article
+│   │   ├── delete.py          #     delete_article
+│   │   ├── diff.py            #     diff_article + resolve_commit_ref
+│   │   └── sink.py            #     publish_ready_articles (sedimentation timer)
+│   ├── reviews/
+│   │   ├── __init__.py        #     Review read wrappers
+│   │   ├── submit.py          #     submit_review (git-first: write → commit → DB cache)
+│   │   ├── invite.py          #     invite_reviewer, accept_invitation, decline_invitation
+│   │   └── thread.py          #     submit_reply, thread management
+│   └── reconcile/
+│       ├── __init__.py        #     Integrity verification facade
+│       ├── mirror.py          #     Git→DB mirror (read canonical state from git, write to DB)
+│       └── score.py           #     Score reconciliation from git review data
 
-├── workflow/                  # Pure compute — zero storage dependencies
+├── compute/                   # Pure compute — zero storage/IO dependencies
 │   ├── scoring.py             #   aggregate_review_scores (weighted average)
 │   ├── sedimentation.py       #   is_ready_to_publish, apply_no_review_penalty
-│   ├── reputation.py          #   compute_reputation, blend_reputation, get_reviewer_weight
+│   ├── reputation.py          #   compute_reputation, blend_reputation
+│   ├── bfs.py                 #   Graph traversal (social graph discovery)
+│   ├── monotonic.py           #   k-exponential monotonic search (ancestor probe)
 │   └── state.py               #   Frozen dataclass serialization
 
-├── bundle/                    # Git bundle protocol (push/pull/tar.gz/base64)
-│   ├── client.py              #   sync_article, build_push_bundle, pull_incremental
-│   ├── git_bundle.py          #   Low-level git bundle create/apply
-│   ├── monotonic.py           #   Monotonic clock for bundle ordering
-│   ├── pending.py             #   Offline operation queue (add/list/remove/clear)
-│   └── server.py              #   Server-side bundle handlers
+├── storage/                   # Local persistence
+│   ├── locks.py               #   File-based lock for concurrent git writes
+│   ├── peers.py               #   Known peers registry (JSON file)
+│   ├── git/                   #   Git backend — articles as independent git repos
+│   │   ├── __init__.py        #     Re-exports all git operations
+│   │   ├── ops.py             #     init, commit, status, diff, clone
+│   │   ├── read.py            #     read_source, get_head, history, authors
+│   │   ├── bundle.py          #     create_bundle, ingest_bundle
+│   │   ├── merge.py           #     merge_git_repos (fork → mainline)
+│   │   ├── ancestor.py        #     is_ancestor check
+│   │   ├── archive.py         #     tar.gz pack/unpack (first-time upload)
+│   │   ├── trailers.py        #     Commit trailer parsing (Closes:, Pubkey:)
+│   │   └── guards.py          #     require_article_repo guard
+│   └── db/                    #   SQLite — metadata cache (only layer importing sqlalchemy)
+│       ├── engine.py          #     SQLAlchemy engine, JSONList/JSONDict types, migrations
+│       ├── models.py          #     ORM: Article, User, Review, Follow, MergeProposal, …
+│       ├── session_utils.py   #     Transaction lifecycle
+│       ├── guards.py          #     DB-level guards
+│       ├── state.py           #     DB state extraction for workflow snapshots
+│       ├── crawler.py         #     P2P social graph crawler
+│       ├── ingest.py          #     Data ingestion from peer sync
+│       ├── _validators.py     #     Input validation
+│       ├── crud_article.py    #     Article CRUD + publish_consents
+│       ├── crud_user.py       #     User, Follow, anonymous names
+│       ├── crud_review.py     #     Review score cache
+│       ├── crud_maintainer.py #     Maintainer membership
+│       ├── crud_merge.py      #     MergeProposal CRUD
+│       ├── crud_citation.py   #     Citation edge CRUD
+│       ├── crud_bookmark.py   #     Bookmark CRUD
+│       ├── crud_share.py      #     Share CRUD
+│       ├── crud_alias.py      #     Alias CRUD
+│       └── crud_notification.py # Notification CRUD
 
-├── social/                    # P2P social graph exchange
-│   ├── __init__.py            #   Package marker
-│   ├── discovery.py           #   discover peers and their articles
-│   └── exchange.py            #   discover_following, discover_followers, discover_articles
-
-├── transport/                 # HTTP — only layer importing httpx/starlette
-│   ├── _http_core.py          #   Shared: client pool, signed get/post, helpers
-│   ├── http_articles.py       #   Article sync: head, bundle, repo, source, search
-│   ├── http_social.py         #   Social graph: follow, share, peers, school, key rotation
-│   ├── http_client.py         #   Facade: re-exports all fetch_* / push_* functions
-│   ├── http_server.py         #   Starlette app with create_app()
+├── transport/                 # P2P protocol — abstract HTTP callbacks
+│   ├── __init__.py            #   Transport dataclass (bundle of fetch_*/push_* callbacks)
 │   ├── auth.py                #   Ed25519 auth header signing/verification
-│   ├── shared.py              #   Shared HTTP utilities
-│   ├── health.py              #   Health check endpoint
-│   └── middleware/
-│       ├── auth.py            #     Auth middleware (PEERPEDIA_SKIP_AUTH bypass)
-│       ├── db.py              #     DB session middleware
-│       ├── logging.py         #     Request logging
-│       └── ratelimit.py       #     Rate limiter
-│   └── routes/
-│       ├── articles.py        #     REST routes for articles, search, sync, push
-│       ├── peers.py           #     REST routes for peer info and discovery
-│       └── users.py           #     REST routes for users, social, key rotation
+│   ├── guards.py              #   Transport-level guards
+│   └── http/                  #   HTTP implementation — ONLY layer importing httpx
+│       ├── __init__.py        #     Re-exports
+│       ├── _core.py           #     Shared: client pool, signed get/post
+│       ├── articles.py        #     Article sync: head, bundle, repo, source, search
+│       ├── social.py          #     Social graph: follow, share, peers, school
+│       ├── factory.py         #     Transport factory (build from config)
+│       └── health.py          #     Health check + clock skew
 
-├── repl/                       # Interactive REPL — pure UI, only imports from cli/
+├── server/                    # HTTP server — Starlette; imports core/, never transport/http/
+│   ├── app.py                 #   create_app() — Starlette app factory
+│   ├── shared.py              #   Shared route utilities
+│   ├── middleware/
+│   │   ├── __init__.py        #     Re-exports
+│   │   ├── auth.py            #     Auth middleware (PEERPEDIA_SKIP_AUTH bypass)
+│   │   ├── db.py              #     DB session middleware
+│   │   ├── logging.py         #     Request audit logging
+│   │   └── ratelimit.py       #     Rate limiter
+│   └── routes/
+│       ├── __init__.py        #     ALL_ROUTES aggregation
+│       ├── articles.py        #     REST routes: head, bundle, sync, ancestor, repo, source, search
+│       ├── peers.py           #     Peer registration + discovery
+│       └── users.py           #     User profile, social graph, key rotation
+
+├── repl/                      # Interactive REPL — pure UI, only imports from cli/
 │   ├── __init__.py            #   run() entry point, dashboard, periodic scan
 │   ├── state.py               #   Theme defs, session vars, prompt, completions
-│   ├── commands.py            #   Meta-commands (:help, :user, …) + dispatch
+│   ├── dispatch.py            #   Meta-commands (:help, :user, :theme, …) + dispatch
+│   ├── bridge.py              #   CLI execution bridge
 │   ├── browse.py              #   Full-screen article/user/review browsers
-│   └── typography.py          #   Unicode pseudo-font rendering
+│   ├── help.py                #   REPL help system
+│   ├── meta.py                #   Meta-command handlers
+│   └── wizards.py             #   Interactive input wizards
 
-└── cli/                       # Terminal UI — never imports repl/; may import storage.db.models
-    ├── __init__.py            #   main() — parse args, dispatch handler (no REPL logic)
-    ├── parser.py              #   Argparse builder + command table
-    ├── helpers.py             #   Shared: _with_db, _ensure_db, session, editor, user resolution
-    ├── display.py             #   Rich-powered output: panels, tables, diff, stars
-    ├── bundle_utils.py        #   Auto-push helpers
-    └── handlers/
-        ├── account.py         #     register, login, recover, bootstrap, whoami, search
-        ├── articles.py        #     create, show, list, edit, publish, delete, scan, diff
-        ├── bundle.py          #     sync status, push, pull
-        ├── compile_.py        #     compile
+└── cli/                       # Terminal UI — never imports repl/; imports app/ + core/
+    ├── __init__.py            #   main() — parse args, dispatch handler
+    ├── parser.py              #   Command table + argparse builder
+    ├── decorators.py          #   @with_context: DB session + result rendering + auto-sync
+    ├── dispatch.py            #   Command dispatch table
+    ├── display.py             #   Rich-powered output: panels, tables, diff, stars, display_user
+    ├── info.py                #   _out() / _render_result() / _render_error()
+    ├── session.py             #   Session read/write
+    ├── bundle_utils.py        #   Auto-sync helpers
+    ├── schema_build.py        #   JSON Schema builder
+    └── cmds/
+        ├── account.py         #     register, login, recover, whoami, bootstrap, search
+        ├── article.py         #     create, show, list, edit, publish, delete, scan, diff
+        ├── fork.py            #     fork, merge propose/accept/withdraw
         ├── help.py            #     Inline help pages
         ├── maintainers.py     #     add, remove, list, consent, revoke
-        ├── mother.py          #     ?Mother guide
+        ├── mother.py          #     Interactive user guide
         ├── notifications.py   #     list, read
-        ├── reviews.py         #     submit, list, reply
+        ├── reviews.py         #     submit, list, reply, invite, accept, decline, rate
         ├── schema.py          #     Database schema inspection
         ├── server.py          #     server start
-        └── social.py          #     follow, unfollow, bookmark, alias, share, fork, merge
+        ├── social.py          #     follow, unfollow, following, followers, school, bookmark, alias, share
+        └── sync.py            #     sync status, push, pull, discover
 ```
 
 ## Module Reference
@@ -749,25 +818,31 @@ peerpedia_core/
 ```
 __main__      ──import──►  cli/
 __main__      ──import──►  repl/           (lazy: prompt_toolkit is heavy)
-repl/         ──import──►  cli/            (helpers, display, parser — nothing else)
-CLI handlers  ──import──►  commands/       (facade)
-CLI helpers   ──import──►  storage.db.models  (ORM entities only)
-Transport     ──import──►  commands/       (facade)
-Commands      ──import──►  storage/db/     (CRUD)
-Commands      ──import──►  storage/        (git_backend)
-Workflow      ──import──►  (nothing)       (pure compute)
-Policies      ──import──►  storage/db/     (models only)
-Bundle        ──import──►  storage/        (git_backend)
+repl/         ──import──►  cli/            (display, parser, dispatch — nothing else)
+cli/cmds/     ──import──►  app/            (command facades)
+cli/cmds/     ──import──►  core/           (orchestration functions)
+app/          ──import──►  core/           (business logic facade)
+core/         ──import──►  storage/        (git + db)
+core/         ──import──►  transport/      (P2P protocol)
+server/       ──import──►  core/           (business logic — never transport/http/)
+transport/http/ ─import──►  httpx          (ONLY layer touching HTTP primitives)
+storage/db/   ──import──►  sqlalchemy      (ONLY layer touching SQLite)
+compute/      ──import──►  (nothing)       (pure compute — zero dependencies)
+config/       ──import──►  (nothing)       (foundation)
+types/        ──import──►  (nothing)       (foundation)
+rules/        ──import──►  storage/db/     (models only, for type hints)
 ```
 
 - `cli/` never imports from `repl/` — **zero circular dependency**
-- `repl/` only imports from `cli/` — no direct `commands/` or `storage/` access
-- `cli/` may import `storage.db.models` (ORM entities) but nothing else from `storage/` — all data access goes through `commands/`
-- `transport/` is the only layer importing `httpx`/`starlette`
+- `repl/` only imports from `cli/` — no direct `core/` or `storage/` access
+- `cli/` imports `core/` + `transport/`, never `storage/` directly
+- `app/` imports `core/` + `config/`, never `server/`
+- `core/` imports `transport/` (protocol) + `storage/` (git, db). Never imports `server/`
+- `server/` imports `core/`. Never imports `transport/http/` directly
+- `transport/http/` is the only layer importing `httpx`
 - `storage/db/` is the only layer importing `sqlalchemy`
-- `commands/` + `storage/db/` only: import from `storage/db/crud_*.py`
-- Foundation modules (config, policies, storage, workflow, types) never import bundle/social/transport
-- All import rules enforced by `tests/test_architecture.py` (26 AST-based tests)
+- Foundation (`config/`, `crypto.py`, `time.py`, `exceptions.py`, `types/`, `compute/`) import nothing from other layers
+- All import rules enforced by `tests/test_architecture.py`
 
 ## Key Design Decisions
 

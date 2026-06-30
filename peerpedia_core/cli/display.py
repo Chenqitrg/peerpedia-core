@@ -61,17 +61,31 @@ def display_article(title: str, status: str, authors: list[str],
     _print_panel("Article", body)
 
 
-def display_user(name: str, affiliation: str, expertise: list[str],
-                 reputation: dict | None, user_id: str) -> None:
-    """Render user metadata panel — pure display, zero side effects."""
+def display_user(name: str, user_id: str, *,
+                 affiliation: str = "",
+                 expertise: list[str] | None = None,
+                 reputation: dict | None = None,
+                 follower_count: int | None = None,
+                 public_key: str | None = None,
+                 created_at: str | None = None) -> None:
+    """Render user metadata panel — pure display, zero side effects.
+
+    Callers pass whatever fields are available; only non-empty ones render.
+    """
     body = f"[bold info]{name}[/]"
+    if follower_count is not None:
+        body += f"      [muted]{follower_count} follower(s)[/]"
+    body += f"\n[accent]{user_id}[/]"
+    if public_key:
+        body += f"\nPublic key: [dim]{public_key[:16]}…[/]"
     if affiliation:
-        body += f"\nAffiliation: {affiliation}"
+        body += f"\nAffiliation: [info]{affiliation}[/]"
     if expertise:
         body += f"\nExpertise: {', '.join(expertise)}"
     if reputation:
         body += f"\nReputation:\n{_stars(reputation)}"
-    body += f"\nID: [accent]{user_id}[/]"
+    if created_at:
+        body += f"\nCreated: [dim]{created_at}[/]"
     _print_panel("User", body)
 
 

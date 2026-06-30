@@ -81,20 +81,42 @@ def _render_data(data) -> None:
     """Render a data-only (empty-code) result in Rich mode.
 
     Emitted when an ``AppResult("", data=...)`` reaches the CLI.
-    Prints key-value pairs for dicts, bullet list for lists.
+    Dicts → key-value Panel, lists of dicts → Table, scalars → inline.
     """
-    if isinstance(data, dict):
-        for k, v in data.items():
-            if v is not None and v != "":
-                console.print(f"  [bold]{k}[/]: {v}")
+    if isinstance(data, list) and data and isinstance(data[0], dict):
+        _render_table(data)
+    elif isinstance(data, dict):
+        _render_key_value_pairs(data)
     elif isinstance(data, list):
         for item in data:
-            if isinstance(item, dict):
-                console.print("  — " + ", ".join(
-                    f"[bold]{k}[/]: {v}" for k, v in item.items()
-                    if v is not None and v != ""))
-            else:
-                console.print(f"  — {item}")
+            console.print(f"  — {item}")
+    else:
+        console.print(data)
+
+
+def _render_table(rows: list[dict]) -> None:
+    """Render a list of dicts as a Rich Table."""
+    from rich.table import Table
+
+    # ── Infer columns from first row keys ──
+    keys = list(rows[0].keys())
+    table = Table(border_style="muted")
+    for k in keys:
+        table.add_column(k, style="bold" if k == keys[0] else "")
+    for row in rows:
+        table.add_row(*[str(row.get(k, "")) for k in keys])
+    console.print(table)
+
+
+def _render_key_value_pairs(data: dict) -> None:
+    """Render a dict as key-value pairs in a panel."""
+    from rich.panel import Panel
+    lines = []
+    for k, v in data.items():
+        if v is not None and v != "":
+            lines.append(f"[bold]{k}[/]: {v}")
+    if lines:
+        console.print(Panel("\n".join(lines), border_style="muted"))
 
 
 # ── Core dispatch ────────────────────────────────────────────────────────

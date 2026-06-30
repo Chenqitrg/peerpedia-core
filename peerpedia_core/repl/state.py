@@ -106,18 +106,6 @@ _notif_cache: tuple[float, int] = (0.0, 0)
 # so we only warn once per session when notification lookup fails.
 _notif_warned: bool = False
 
-# Cached parser — built once on first use.
-_build_parser = None
-
-
-def _get_parser():
-    global _build_parser
-    if _build_parser is None:
-        from peerpedia_core.cli import build_parser as bp
-        _build_parser = bp
-    return _build_parser()
-
-
 def _prompt_text():
     """Build the REPL prompt line with user badge, article context, notifications."""
     user = _repl_user or "guest"

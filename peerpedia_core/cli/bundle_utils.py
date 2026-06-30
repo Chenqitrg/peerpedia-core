@@ -20,15 +20,6 @@ from peerpedia_core.transport import Transport
 from peerpedia_core.transport.http.factory import from_http as _from_http
 
 _TRANSPORT = _from_http()
-_no_server_warned = False
-
-
-def _warn_no_server() -> None:
-    global _no_server_warned
-    if _no_server_warned:
-        return
-    _no_server_warned = True
-    _out(None, "W_NO_KNOWN_PEERS")
 
 
 # ── Error → message mapping ──────────────────────────────────────────────────
@@ -49,13 +40,12 @@ def _map_sync_error(e: Exception) -> str:
 
 
 def _resolve_or_skip(server: str | None = None) -> str | None:
-    """Resolve server URL.  Return None if offline — caller should skip."""
+    """Resolve server URL.  Return None if offline — caller should skip.
+    Auto-sync failures are silent — no warning for background operations."""
     srv = server or os.environ.get(PEERPEDIA_SERVER_ENV)
     if not srv:
-        _warn_no_server()
         return None
     if not _TRANSPORT.is_online(srv):
-        _out(None, "S_AUTO_SYNC_OFFLINE", server=srv)
         return None
     return srv
 

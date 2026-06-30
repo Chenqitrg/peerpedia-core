@@ -5,12 +5,16 @@
 **Git stores content; SQLite stores state.** Every article is an independent Git repository -- body text and reviews have full history, can be diffed/forked/merged. Metadata (status, scores, relationships) lives in SQLite for fast queries and aggregation.
 
 [![Tests](https://github.com/Chenqitrg/peerpedia-core/actions/workflows/test.yml/badge.svg)](https://github.com/Chenqitrg/peerpedia-core/actions/workflows/test.yml)
-661 tests | 69% coverage | Python 3.11+
+947 tests | Python 3.11+
 
 ## Installation
 
+PeerPedia Core is **not yet published on PyPI**. Install from source:
+
 ```bash
-pip install peerpedia-core
+git clone https://github.com/Chenqitrg/peerpedia-core.git
+cd peerpedia-core
+pip install -e .
 ```
 
 Dependencies: Python 3.11+, Git. SQLite database is created automatically at `~/.peerpedia/`.
@@ -220,13 +224,15 @@ Syncing uses a k-exponential probe protocol to find a common git ancestor, then 
 |---------|-------------|
 | `compile <id> [--format pdf\|svg\|png\|html]` | Compile an article to a rendered format |
 | `server start [--host <h>] [--port <p>]` | Start the HTTP peer server |
+| `mother` | Interactive user guide and walkthrough |
+| `schema [<command>]` | View the JSON Schema for any command |
 
 ### General flags
 
 | Flag | Description |
 |------|-------------|
-| `--json` | JSON output (default) |
-| `--rich` | Rich terminal output (human-readable panels) |
+| `--json` | JSON output (default for non-TTY; machine-readable) |
+| `--rich` | Rich terminal output (human-readable panels, tables, badges) |
 | `--version` | Show version |
 
 ## Scoring dimensions
@@ -256,32 +262,32 @@ All events generate local notifications viewable via `peerpedia notifications`:
 ## Architecture
 
 ```
-__main__.py             -- Top-level router: CLI or REPL (the ONLY module aware of both)
-
-cli/                    -- Single-shot commands: parse args, dispatch, commit()
-repl/                   -- Interactive REPL: same commands, persistent session, TTY UI
-    │                   (repl/ only imports from cli/ — pure UI layer, zero circular dep)
-    ▼
-commands/               -- Orchestration: the only layer touching both git and DB
-    │
-    +-- storage/        -- git_backend (content) + db/ (metadata), not aware of each other
-    +-- workflow/       -- Pure compute: scoring, reputation, sedimentation logic
-    +-- policies/       -- Authorization checks (maintainer-only, ownership, etc.)
-    +-- bundle/         -- P2P sync: git bundle protocol (probe, incremental bundles)
-    +-- transport/      -- HTTP client + server (httpx + starlette)
-    +-- social/         -- Social graph exchange (follow/unfollow propagation)
+cli/          User commands — thin pass-through to app/; imports core/ + transport/, never storage/
+  ↓
+app/          Command facades — context building, ref resolution, result formatting (AppResult)
+  ↓
+core/         Orchestration — business logic merging transport + storage (sync_article, publish, review…)
+  ↓
+transport/    P2P protocol — Transport dataclass bundles HTTP callbacks
+  http/       HTTP implementation — ONLY layer importing httpx (_core.py)
+storage/      Git backend (git/) + DB (db/) + local files (peers.py)
+server/       HTTP server — Starlette routes + middleware; imports core/, never transport/http/
+config/       Constants + tunable params (params.py)
+compute/      Pure compute — scoring, reputation, sedimentation (no IO)
+types/        Domain type definitions — scores, status, entities (zero deps)
 ```
 
 Key dependency rules:
-- `__main__.py` routes to `cli/` or `repl/` — the only place that knows about both
-- `cli/` never imports from `repl/` — **zero circular dependency**
-- `repl/` only imports from `cli/` (helpers, display, parser) — no direct `commands/` or `storage/` access
-- `cli/` may import `storage.db.models` (ORM entities) but nothing else from `storage/`
-- `transport/` is the only layer importing `httpx`/`starlette`
-- `storage/db/` is the only layer importing `sqlalchemy`
-- Foundation modules (`config/`, `policies/`, `types/`, `workflow/`, …) never import `bundle/`, `social/`, or `transport/`
+- `cli/` imports `core/` + `transport/`, never `storage/` directly
+- `app/` imports `core/` + `config/`, never `server/`
+- `core/` imports `transport/` (protocol) + `storage/` (git, db). Never imports `server/`
+- `server/` imports `core/`. Never imports `transport/http/` directly
+- `transport/http/` imports `httpx`. Only this directory touches HTTP primitives
+- `storage/db/` imports `sqlalchemy`. Only this directory touches SQLite
+- Foundation (`config/`, `crypto.py`, `time.py`, `exceptions.py`, `types/`, `compute/`) import nothing from other layers
+- `repl/` only imports from `cli/` — zero circular dependency
 
-These rules are enforced by architecture tests in `tests/test_architecture.py` — every import boundary is checked via AST parsing.
+These rules are enforced by architecture tests in `tests/test_architecture.py`.
 
 ## Data directory
 
@@ -320,27 +326,23 @@ These rules are enforced by architecture tests in `tests/test_architecture.py` �
 ## Using as a Python library
 
 ```python
-from peerpedia_core.commands import (
+from peerpedia_core.core import (
     create_article_with_content,
     publish_article,
     submit_review,
     submit_reply,
     invite_reviewer,
-    rate_review_helpfulness,
-    create_user_stub,
-    create_notification,
-    create_merge_proposal,
-    accept_merge,
     fork_article,
     follow_user,
     unfollow_user,
 )
-from peerpedia_core.crypto import derive_keypair, sign_message, verify_signature
-from peerpedia_core.types import UserStub, ArticleRecord, ReviewRecord
+from peerpedia_core.crypto import derive_key_pair, sign_detached, verify_signature
 from peerpedia_core.exceptions import NotFoundError, NotAuthorizedError, BadRequestError
+from peerpedia_core.types.scores import FiveDimScores
+from peerpedia_core.types.entities import ArticleRecord, ReviewRecord
 ```
 
-All commands take an SQLAlchemy `Session` as the first parameter, making them testable and embeddable.
+Public API surface is `peerpedia_core.core.*` — all orchestration functions are exported there. See `docs/architecture.md` for the full module reference.
 
 ## Development
 
@@ -348,11 +350,11 @@ All commands take an SQLAlchemy `Session` as the first parameter, making them te
 git clone https://github.com/Chenqitrg/peerpedia-core.git
 cd peerpedia-core
 pip install -e ".[dev]"
-pytest tests/ -v           # 661 tests
+pytest tests/ -v           # 947 tests
 pytest tests/ -x --lf      # Re-run failures only (fast feedback)
 ```
 
-Architecture import rules are verified by `tests/test_architecture.py` -- run it before opening a PR.
+Architecture import rules are verified by `tests/test_architecture.py` — run it before opening a PR.
 
 ## License
 

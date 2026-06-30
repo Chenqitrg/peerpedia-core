@@ -33,19 +33,18 @@ from rich.panel import Panel
 from rich.text import Text
 
 import peerpedia_core.repl.state as _st
-from peerpedia_core.cli import build_parser
 from peerpedia_core.cli.info import console, theme
 from peerpedia_core.app.context import read_session as _read_session
 from peerpedia_core.core import count_articles, publish_ready_articles
 from peerpedia_core.repl.state import close_db as _close_db, ensure_db as _ensure_db
-from peerpedia_core.cli.dispatch import get_cmd_map_for_parser as get_cmd_map
 from peerpedia_core.config.params import params
 from peerpedia_core.config.paths import REPL_HISTORY_FILE
 
-from peerpedia_core.repl.dispatch import _dispatch, _META_COMMANDS
+from peerpedia_core.repl.dispatch import _META_COMMANDS, _dispatch_meta
+from peerpedia_core.repl.engine import COMMAND_TABLE, execute as _execute_command
 from peerpedia_core.repl.meta import _meta_theme
 from peerpedia_core.repl.state import (
-    _get_parser, _prompt_text, _refresh_completions,
+    _prompt_text, _refresh_completions,
     repl_style,
 )
 
@@ -108,9 +107,8 @@ def run():
     # Gracefully exit if stdin is not a TTY — scripting/piping should use
     # the CLI directly (peerpedia <command>), not the REPL.
     if not sys.stdin.isatty():
-        parser = build_parser()
-        parser.print_help()
-        print("\n[muted]REPL requires a terminal. Use 'peerpedia <command>' for scripting.[/]")
+        console.print("[bold]PeerPedia REPL[/] requires a terminal.")
+        console.print("Use [accent]peerpedia <command>[/] for scripting, or [accent]peerpedia --help[/] for the command list.")
         return
 
     db = _ensure_db()
@@ -133,7 +131,13 @@ def run():
 
     # ── REPL session setup ──────────────────────────────────────────────
     REPL_HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
-    COMMANDS = sorted(get_cmd_map().keys()) + _META_COMMANDS
+    # Build command list from engine COMMAND_TABLE + meta-commands
+    _repl_commands: list[str] = []
+    for (group, action) in COMMAND_TABLE:
+        if action:
+            _repl_commands.append(f"{group} {action}")
+        _repl_commands.append(group)
+    COMMANDS = sorted(set(_repl_commands)) + _META_COMMANDS
     # Static completion words — computed once, never change.
     _STATIC_WORDS = frozenset(COMMANDS + FLAGS)
     _refresh_completions()
@@ -195,7 +199,6 @@ def run():
         lexer=PygmentsLexer(BashLexer),
     )
 
-    parser = _get_parser()
     _last_scan = 0.0
 
     try:
@@ -209,7 +212,13 @@ def run():
                 console.print("\n[muted]Bye.[/]")
                 break
 
-            should_continue = _dispatch(cmd, parser)
+            # Meta-commands (:help, :quit, :theme, …) — handled locally
+            if cmd.startswith(":"):
+                should_continue = _dispatch_meta(cmd, db)
+                if not should_continue:
+                    break
+            else:
+                should_continue = _execute_command(cmd, db)
 
             # Sync REPL user with session file (register/login may change it).
             sid = _read_session()

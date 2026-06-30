@@ -75,8 +75,8 @@ class TestReviewWorkflow:
         assert len(reviews) >= 1
         assert any(r.reviewer_id == reviewer.id for r in reviews)
 
-    def test_cannot_submit_without_invitation(self, db, articles_dir):
-        """Submitting a review without invitation MUST raise."""
+    def test_anyone_can_submit_review(self, db, articles_dir):
+        """Reviews don't require invitation — any user can submit."""
         from peerpedia_core.core import publish_article
         from peerpedia_core.core.reviews import submit_review
 
@@ -90,7 +90,10 @@ class TestReviewWorkflow:
                         signing_key_bytes=key, pubkey_hex=pubkey)
 
         key2, pubkey2 = make_signing_key("stranger@peerpedia")
-        with pytest.raises(NotAuthorizedError, match="NO_INVITATION"):
-            submit_review(db, a["id"], stranger.id, _build_scores(),
-                          comment="x" * 200,
-                          signing_key_bytes=key2, pubkey_hex=pubkey2)
+        comment = ("This is an unsolicited review from a stranger. "
+                   "Reviews do not require invitation — anyone can "
+                   "submit a review on a sedimentation article. " * 2)
+        result = submit_review(db, a["id"], stranger.id, _build_scores(),
+                               comment=comment,
+                               signing_key_bytes=key2, pubkey_hex=pubkey2)
+        assert result is not None

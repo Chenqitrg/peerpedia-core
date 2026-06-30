@@ -5,8 +5,11 @@
 
 from __future__ import annotations
 
+from peerpedia_core.app.result import AppResult
 from peerpedia_core.cli.bundle_utils import _resolve_server_url
 from peerpedia_core.cli.decorators import with_context
+from peerpedia_core.cli.display import display_user
+from peerpedia_core.cli.info import console
 import peerpedia_core.app.commands.social as _social
 
 
@@ -24,16 +27,39 @@ def _cmd_unfollow(ctx, args):
     return _social.unfollow(ctx, target_ref=args.user_identifier)
 
 
+def _render_user_panels(items: list[dict]) -> None:
+    """Render a list of user dicts as individual Rich panels."""
+    for u in items:
+        display_user(
+            u.get("name", "?"),
+            u.get("id") or u.get("user_id", "?"),
+            affiliation=u.get("affiliation", ""),
+            expertise=u.get("expertise"),
+            reputation=u.get("reputation"),
+            follower_count=u.get("follower_count"),
+            public_key=u.get("public_key"),
+            created_at=u.get("created_at"),
+        )
+
+
 @with_context
 def _cmd_following(ctx, args):
     """List users that *user_id* follows."""
-    return _social.list_following(ctx, user_ref=args.user)
+    result = _social.list_following(ctx, user_ref=args.user)
+    items = result.data.get("items", [])
+    if items:
+        _render_user_panels(items)
+    return AppResult(code=result.code, data=None, params=result.params, notices=result.notices)
 
 
 @with_context
 def _cmd_followers(ctx, args):
     """List followers of *user_id*."""
-    return _social.list_followers(ctx, user_ref=args.user)
+    result = _social.list_followers(ctx, user_ref=args.user)
+    items = result.data.get("items", [])
+    if items:
+        _render_user_panels(items)
+    return AppResult(code=result.code, data=None, params=result.params, notices=result.notices)
 
 
 # ── Alias ─────────────────────────────────────────────────────────────────
@@ -100,4 +126,16 @@ def _cmd_school(ctx, args):
     limit = getattr(args, "limit", 20) or 20
     local = getattr(args, "local", False)
     server = _resolve_server_url(args) if not local else ""
-    return _social.school(ctx, limit=limit, local=local, server=server)
+    result = _social.school(ctx, limit=limit, local=local, server=server)
+    items = result.data.get("items", [])
+    if not items:
+        console.print("[muted]No users found.[/]")
+        return AppResult(code="", data=None, params=result.params, notices=result.notices)
+    # items are ORM objects (local) or dicts (remote) — normalize to dicts
+    if hasattr(items[0], "name"):
+        users = [{"name": u.name, "id": u.id,
+                  "follower_count": getattr(u, "follower_count", 0)} for u in items]
+    else:
+        users = items
+    _render_user_panels(users)
+    return AppResult(code="", data=None, params=result.params, notices=result.notices)

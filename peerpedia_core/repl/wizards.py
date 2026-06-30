@@ -3,9 +3,8 @@
 
 """Interactive REPL wizards — guided workflows that call back into dispatch.
 
-Each wizard receives a *dispatch_fn* callback instead of importing
-``_dispatch`` directly — this avoids a circular import since
-``dispatch.py`` imports from this module.
+Each wizard receives an *execute* callback ``(cmd_str, db) -> bool``
+instead of importing dispatch directly — this avoids a circular import.
 """
 
 from __future__ import annotations
@@ -18,9 +17,9 @@ import peerpedia_core.repl.state as _st
 from peerpedia_core.repl.state import console
 
 
-def _meta_write(dispatch_fn, parser) -> bool:
+def _meta_write(execute, db) -> bool:
     """Guided article creation wizard. Returns True to continue REPL."""
-    console.print(f"[bold {_st.theme.styles['info']}]▔▔▔ New ArticleMetaStorage ▔▔▔[/]")
+    console.print(f"[bold {_st.theme.styles['info']}]▔▔▔ New Article ▔▔▔[/]")
     try:
         title = Prompt.ask(f"  [{_st.theme.styles['accent']}]Title[/]")
     except (EOFError, KeyboardInterrupt):
@@ -47,21 +46,21 @@ def _meta_write(dispatch_fn, parser) -> bool:
         console.print("[muted]Created with empty content.[/]")
 
     # Build and dispatch — use shlex.quote for safe shell embedding.
-    cmd = f"create --title {shlex.quote(title)} --content {shlex.quote(content)}"
+    cmd = f"article create --title {shlex.quote(title)} --content {shlex.quote(content)}"
     console.print(f"  [dim]{cmd[:80]}...[/]")
-    result = dispatch_fn(cmd, parser)
+    execute(cmd, db)
 
     # Offer to publish
-    if result and _st._repl_article_id:
+    if _st._repl_article_id:
         try:
             pub = Prompt.ask(
                 f"  [{_st.theme.styles['accent']}]Publish now?[/] [muted][y/N][/]",
                 default="n"
             )
             if pub.lower() in ("y", "yes"):
-                return dispatch_fn(
-                    f'publish {_st._repl_article_id} --scores "orig=4,rig=3,comp=4,ped=3,imp=4"',
-                    parser
+                return execute(
+                    f'article publish {_st._repl_article_id} --scores "orig=4,rigor=3,comp=4,ped=3,imp=4"',
+                    db
                 )
         except (EOFError, KeyboardInterrupt):
             pass

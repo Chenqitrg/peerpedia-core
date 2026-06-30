@@ -7,6 +7,8 @@ from __future__ import annotations
 
 import logging
 
+_log = logging.getLogger(__name__)
+
 from peerpedia_core.storage.db import Session
 from peerpedia_core.config.paths import article_repo_path
 from peerpedia_core.exceptions import BadRequestError

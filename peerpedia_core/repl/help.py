@@ -17,8 +17,7 @@ from rich.table import Table
 from rich.text import Text
 
 import peerpedia_core.repl.state as _st
-from peerpedia_core.cli.parser import COMMANDS, CommandGroup
-from peerpedia_core.cli.dispatch import get_cmd_map_for_parser as get_cmd_map
+from peerpedia_core.repl.engine import COMMAND_TABLE
 from peerpedia_core.repl.state import console
 
 _CLI_HELP_DIR = Path(__file__).resolve().parent.parent / "cli" / "help"
@@ -80,12 +79,10 @@ def _show_topic_help(topic: str):
 
     Looks up the topic in three places (in order):
     1.  ``repl/help/<topic>.txt`` — REPL-specific concepts
-    2.  ``cli/help/<group>_<subcommand>.txt`` — CLI command help
+    2.  ``cli/help/<group>_<subcommand>.txt`` or ``cli/help/<topic>.txt``
     3.  Partial match — if *topic* is a group name, show its primary
         subcommand's help with a list of related subcommands.
     """
-    cmd_map = get_cmd_map()
-
     # ── 1. REPL-specific concept help ──────────────────────────────────
     repl_path = _REPL_HELP_DIR / f"{topic}.txt"
     if repl_path.is_file():
@@ -93,34 +90,31 @@ def _show_topic_help(topic: str):
         return
 
     # ── 2. Exact match in CLI help ─────────────────────────────────────
-    if topic in cmd_map:
-        mapping = cmd_map[topic]
-        cli_path = _cli_help_path(mapping)
-        if cli_path and cli_path.is_file():
-            _display_help_panel(cli_path.read_text(), title=topic)
-            return
-        # Fallback: generic description for commands without a help file
-        console.print(f"[muted]No detailed help file for [accent]{topic}[/] yet.[/]")
+    if " " in topic:
+        # Compound: "review submit" → cli/help/review_submit.txt
+        cli_path = _CLI_HELP_DIR / f"{topic.replace(' ', '_')}.txt"
+    else:
+        # Top-level: "fork" → cli/help/fork.txt
+        cli_path = _CLI_HELP_DIR / f"{topic}.txt"
+
+    if cli_path.is_file():
+        _display_help_panel(cli_path.read_text(), title=topic)
         return
 
     # ── 3. Topic is a group name (e.g. "review", "sync") ──────────────
-    # Show the primary subcommand's help + list related subcommands.
     group_subcommands = _find_subcommands_for_group(topic)
     if group_subcommands:
         primary = group_subcommands[0]
-        primary_key = f"{topic} {primary}" if f"{topic} {primary}" in cmd_map else primary
-        mapping = cmd_map.get(primary_key)
-        if mapping:
-            cli_path = _cli_help_path(mapping)
-            if cli_path and cli_path.is_file():
-                text = cli_path.read_text()
-                extra_lines: list[str] = []
-                if len(group_subcommands) > 1:
-                    others = ", ".join(f"[accent]{s}[/]" for s in group_subcommands[1:])
-                    extra_lines.append(f"\n\nOTHER {topic.upper()} COMMANDS\n  {others}\n")
-                    extra_lines.append(f"\n  Type [accent]:help {topic} <cmd>[/] for any of the above.")
-                _display_help_panel(text, title=topic, extra_markup=extra_lines)
-                return
+        primary_path = _CLI_HELP_DIR / f"{topic}_{primary}.txt"
+        if primary_path.is_file():
+            text = primary_path.read_text()
+            extra_lines: list[str] = []
+            if len(group_subcommands) > 1:
+                others = ", ".join(f"[accent]{s}[/]" for s in group_subcommands[1:])
+                extra_lines.append(f"\n\nOTHER {topic.upper()} COMMANDS\n  {others}\n")
+                extra_lines.append(f"\n  Type [accent]:help {topic} <cmd>[/] for any of the above.")
+            _display_help_panel(text, title=topic, extra_markup=extra_lines)
+            return
 
     # ── Not found ─────────────────────────────────────────────────────
     console.print(
@@ -132,25 +126,13 @@ def _show_topic_help(topic: str):
 # ── Internal helpers ──────────────────────────────────────────────────────
 
 
-def _cli_help_path(mapping: list[str]) -> Path | None:
-    """Build the ``cli/help/`` file path for a cmd_map entry.
-
-    ``["article", "create"]`` → ``cli/help/article_create.txt``
-    ``["fork"]``              → ``cli/help/fork.txt``
-    """
-    if len(mapping) == 2:
-        return _CLI_HELP_DIR / f"{mapping[0]}_{mapping[1]}.txt"
-    elif len(mapping) == 1:
-        return _CLI_HELP_DIR / f"{mapping[0]}.txt"
-    return None
-
-
 def _find_subcommands_for_group(group: str) -> list[str]:
     """Return subcommand names that belong to *group*."""
-    for item in COMMANDS:
-        if isinstance(item, CommandGroup) and item.name == group:
-            return [c.name for c in item.commands if c.name]
-    return []
+    subs: list[str] = []
+    for (g, a) in COMMAND_TABLE:
+        if g == group and a is not None:
+            subs.append(a)
+    return sorted(subs)
 
 
 def _is_section_header(line: str) -> bool:

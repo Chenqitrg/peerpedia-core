@@ -91,9 +91,9 @@ def guard_proposal_owner(mp, user_id: str) -> None:
 
 
 def require_signing_key_not_none(signing_key: bytes | None) -> None:
-    """Raise ValueError if *signing_key* is None."""
+    """Raise BadRequestError if *signing_key* is None."""
     if signing_key is None:
-        raise ValueError(code="MISSING_SIGNING_KEY")
+        raise BadRequestError(code="MISSING_SIGNING_KEY")
 
 
 def require_integrity_level(level: str) -> None:

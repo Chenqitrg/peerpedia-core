@@ -9,6 +9,7 @@ import difflib
 import sys
 from pathlib import Path
 
+from peerpedia_core.app.result import AppResult
 from peerpedia_core.app.commands.display import (
     list_articles as _list_articles_orm,
     list_author_ids_batch,
@@ -105,14 +106,16 @@ def _cmd_article_list(ctx, args):
             display_empty_article_list("N_NO_ARTICLES_MINE_HINT")
         else:
             display_empty_article_list("N_NO_ARTICLES")
-        return result
+        # Empty-state messages already rendered — suppress double-print
+        return AppResult(code="", data=None, params=result.params, notices=result.notices)
     # ── Display search results ──
     author_map = list_author_ids_batch(ctx.db, [a["id"] for a in items])
     item_ids = {a["id"] for a in items}
     for a in _list_articles_orm(ctx.db, limit=len(items)):
         if a.id in item_ids:
             display_article_meta(ctx.db, a, author_ids=author_map.get(a.id, []))
-    return result
+    # Rich already rendered — don't let _render_result double-print raw data
+    return AppResult(code="", data=None, params=result.params, notices=result.notices)
 
 
 # ── Edit ──────────────────────────────────────────────────────────────────

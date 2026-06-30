@@ -419,7 +419,7 @@ def build_parser() -> argparse.ArgumentParser:
             for cmd in item.commands:
                 _register(_target_parser(grp, sub, cmd), cmd)
         else:
-            _register(_target_parser(subs, None, item), item)
+            _register(_target_parser(subs, subs, item), item)
 
     return parser
 

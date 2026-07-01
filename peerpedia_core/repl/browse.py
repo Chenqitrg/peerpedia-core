@@ -21,7 +21,6 @@ from prompt_toolkit.layout.controls import FormattedTextControl
 import peerpedia_core.repl.state as _st
 from peerpedia_core.app.context import read_session
 from peerpedia_core.core import get_top_users_by_followers
-from peerpedia_core.presentation.rich.components import no_users_msg
 from peerpedia_core.repl.state import console
 
 T = TypeVar("T")
@@ -162,7 +161,7 @@ def _user_status_text(user, index: int, total: int, *, is_self: bool) -> str:
 def _browse_school(db) -> str | None:
     users = get_top_users_by_followers(db, limit=_SCHOOL_PAGE_SIZE)
     if not users:
-        console.print(no_users_msg())
+        console.print("[muted]No users found.[/]")
         return None
 
     current_user_id = _get_session_user_id()

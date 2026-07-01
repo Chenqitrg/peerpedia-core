@@ -116,6 +116,15 @@ class ShareExchange:
 
 
 @dataclass(frozen=True)
+class DiffResult:
+    """Unified diff between two commits — local display, not P2P."""
+    diff_text: str
+    files: tuple[str, ...] = ()
+    insertions: int = 0
+    deletions: int = 0
+
+
+@dataclass(frozen=True)
 class NotificationExchange:
     event: str
     message: str
@@ -123,9 +132,11 @@ class NotificationExchange:
     article_id: str = ""
     actor_id: str = ""
     read: bool = False
+    created_at: str = ""
 
     @classmethod
     def from_json(cls, d: dict) -> NotificationExchange:
         return cls(event=d["event"], message=d["message"],
                    id=d.get("id", ""), article_id=d.get("article_id", ""),
-                   actor_id=d.get("actor_id", ""), read=bool(d.get("read", False)))
+                   actor_id=d.get("actor_id", ""), read=bool(d.get("read", False)),
+                   created_at=d.get("created_at", ""))

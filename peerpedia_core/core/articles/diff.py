@@ -3,12 +3,15 @@
 
 """Article diff — compare two commits."""
 
+from __future__ import annotations
+
 from pathlib import Path
 
 from peerpedia_core.storage.git.guards import require_article_repo
 from peerpedia_core.storage.git import (
     get_commit_history, get_diff_between, get_head_hash,
 )
+from peerpedia_core.types.entities import DiffResult
 
 
 def _resolve_head(repo_path: Path) -> str:
@@ -53,8 +56,8 @@ def resolve_commit_ref(repo_path: Path, ref: str) -> str:
     return _resolve_hash_prefix(repo_path, ref)
 
 
-def diff_article(article_id: str, hash1: str, hash2: str) -> dict:
-    """Diff two commits of an article. Returns the same dict as ``get_diff_between``.
+def diff_article(article_id: str, hash1: str, hash2: str) -> DiffResult:
+    """Diff two commits of an article. Returns a ``DiffResult``.
 
     Raises FileNotFoundError if the article repo does not exist.
     """

@@ -74,7 +74,7 @@ class TestArticleLifecycle:
         first_commit = history[1]["hash"]
         last_commit = history[0]["hash"]
         diff = get_diff_between(rp, first_commit, last_commit)
-        assert "Data shows" in diff["diff_text"]
+        assert "Data shows" in diff.diff_text
 
         # ── Source ──
         content, fmt = read_article_source(rp)

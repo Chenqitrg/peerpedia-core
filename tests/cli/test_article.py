@@ -176,8 +176,11 @@ def test_article_scan_delegates(ctx):
 # ── Diff ──────────────────────────────────────────────────────────────────
 
 def test_article_diff_delegates(ctx):
+    from peerpedia_core.types.entities import DiffResult
     with mock_spec_handler(_MOD, 'article.diff') as h:
-        h.return_value = MagicMock(data={'diff_text': '-old\n+new', 'stats': {}})
+        h.return_value = MagicMock(data=DiffResult(
+            diff_text='-old\n+new', files=(), insertions=1, deletions=1,
+        ))
         call(_cmd_article_diff, ctx, Namespace(id='abc', hash1='~1', hash2='HEAD'))
     h.assert_called_once_with(
         ctx, {'id': 'abc', 'hash1': '~1', 'hash2': 'HEAD'})

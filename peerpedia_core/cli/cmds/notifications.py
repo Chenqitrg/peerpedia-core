@@ -10,7 +10,7 @@ from peerpedia_core.app.result import AppResult
 from peerpedia_core.cli.decorators import with_context
 from peerpedia_core.cli.display import _print_table
 from peerpedia_core.cli.info import console
-from peerpedia_core.presentation.rich.components import inbox_empty_msg
+from peerpedia_core.messages import cached_text
 
 
 @with_context
@@ -21,7 +21,7 @@ def _cmd_notifications(ctx, args):
     items = result.data.get("items", [])
     unread_count = result.data.get("unread_count", 0)
     if not items:
-        console.print(inbox_empty_msg())
+        console.print(cached_text("EMPTY_NOTIFICATIONS"))
         return AppResult(code="", data=None, params=result.params, notices=result.notices)
     _print_table(
         ["Event", "Message", "Read"],

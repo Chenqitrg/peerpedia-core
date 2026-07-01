@@ -19,7 +19,8 @@ from peerpedia_core.storage.git import (
 from peerpedia_core.core.guards import verify_new_commits
 from peerpedia_core.storage.git.guards import require_article_repo
 from peerpedia_core.core.reconcile.mirror import (
-    reconcile_integrity, reconcile_authors, reconcile_reviews, reconcile_status,
+    reconcile_integrity, reconcile_authors, reconcile_meta_from_frontmatter,
+    reconcile_reviews, reconcile_status,
 )
 from peerpedia_core.core.reconcile.score import (
     reconcile_all_reputations, reconcile_many_reputations, reconcile_reputation, reconcile_score,
@@ -37,6 +38,7 @@ def reconcile_all(db: Session, article_id: str) -> None:
     reconcile_authors(db, article_id)
     reconcile_reviews(db, article_id)
     reconcile_status(db, article_id)
+    reconcile_meta_from_frontmatter(db, article_id)
     reconcile_integrity(db, article_id, level="full")
     reconcile_score(db, article_id)
 

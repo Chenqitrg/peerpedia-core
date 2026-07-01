@@ -69,5 +69,3 @@ def list_articles(db: Session, *, search_query: str | None = None,
                           status=status, author_id=author_id)
 
 
-# Re-export from core — canonical implementation lives there.
-from peerpedia_core.core import resolve_article_meta, resolve_article_meta_batch  # noqa: F401

@@ -72,6 +72,11 @@ def ingest_articles(db: Session, entries: list[ArticleMetaExchange]) -> int:
     return added
 
 
+def ingest_articles_from_json(db: Session, entries: list[dict]) -> int:
+    """Insert article stubs from peer JSON dicts."""
+    return ingest_articles(db, [ArticleMetaExchange.from_json(e) for e in entries])
+
+
 def ingest_bookmarks(db: Session, user_id: str, entries: list[BookmarkExchange]) -> int:
     """Insert bookmarks discovered from a peer — lazy discovery."""
     for e in entries:

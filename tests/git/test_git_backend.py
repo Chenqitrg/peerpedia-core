@@ -123,10 +123,9 @@ class TestDiff:
         commit_article_signed(rp, "second", "A", "a@b.com")
         history = get_commit_history(rp)
         result = get_diff_between(rp, history[1]["hash"], history[0]["hash"])
-        assert "diff_text" in result
-        assert result["diff_text"]
-        assert "files" in result
-        assert "stats" in result
+        assert result.diff_text
+        assert result.files
+        assert result.insertions >= 0
 
     def test_diff_between_two_commits(self, articles_dir):
         from peerpedia_core.storage.git import (
@@ -143,8 +142,8 @@ class TestDiff:
         commit_article_signed(rp, "second", "A", "a@b.com")
         history = get_commit_history(rp)
         result = get_diff_between(rp, history[1]["hash"], history[0]["hash"])
-        assert "diff_text" in result
-        assert "line2" in result["diff_text"]
+        assert result.diff_text
+        assert "line2" in result.diff_text
 
     def test_diff_between_has_real_stats(self, articles_dir):
         """Bug 12: get_diff_between returns 'stats': {} — should compute real stats."""
@@ -163,11 +162,8 @@ class TestDiff:
         history = get_commit_history(rp)
         result = get_diff_between(rp, history[1]["hash"], history[0]["hash"])
         # Stats should not be empty dict
-        assert "stats" in result
-        assert result["stats"] != {}
-        # Should have at least some insertions or files
-        insertions = result["stats"].get("total", {}).get("insertions", 0)
-        assert insertions > 0
+        assert result.files
+        assert result.insertions > 0
 
 
 class TestBundleSync:

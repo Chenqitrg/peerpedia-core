@@ -9,8 +9,9 @@ import logging
 
 _log = logging.getLogger(__name__)
 
-from peerpedia_core.storage.db import Session
 from peerpedia_core.config.paths import article_repo_path
+from peerpedia_core.frontmatter import parse_frontmatter as _parse_frontmatter
+from peerpedia_core.storage.db import Session
 from peerpedia_core.exceptions import BadRequestError
 from peerpedia_core.storage.db.crud_article import (
     update_article_status, update_witnessed_at,
@@ -82,6 +83,20 @@ def reconcile_status(db: Session, article_id: str) -> None:
         update_article_status(db, article_id, status)
 
 
+def reconcile_meta_from_frontmatter(db: Session, article_id: str) -> None:
+    """Read title/abstract from YAML frontmatter, update DB."""
+    article = require_article(db, article_id)
+    rp = require_article_repo(article_id)
+    source = rp / "article.md"
+    if not source.exists():
+        return
+    fm = _parse_frontmatter(source.read_text())
+    if "title" in fm:
+        article.title = fm["title"]
+    if "abstract" in fm:
+        article.abstract = fm["abstract"]
+
+
 # ── Integrity check + repair ───────────────────────────────────────────────
 
 
@@ -117,6 +132,7 @@ def _repair_db_cache(db: Session, article_id: str, repo_path) -> None:
         reconcile_authors(db, article_id)
         reconcile_reviews(db, article_id)
         reconcile_status(db, article_id)
+        reconcile_meta_from_frontmatter(db, article_id)
         reconcile_score(db, article_id)
         return
 

@@ -10,7 +10,7 @@ from peerpedia_core.app.result import AppResult
 from peerpedia_core.cli.bundle_utils import _resolve_server_url
 from peerpedia_core.cli.decorators import with_context
 from peerpedia_core.cli.info import console
-from peerpedia_core.presentation.rich.components import no_users_msg, user_panels
+from peerpedia_core.presentation.rich.components import user_panels
 
 
 # ── Follow / Unfollow ─────────────────────────────────────────────────────
@@ -120,7 +120,7 @@ def _cmd_school(ctx, args):
     })
     items = result.data.get("items", [])
     if not items:
-        console.print(no_users_msg())
+        console.print("[muted]No users found.[/]")
         return AppResult(code="", data=None, params=result.params, notices=result.notices)
     if hasattr(items[0], "name"):
         users = [{"name": u.name, "id": u.id,

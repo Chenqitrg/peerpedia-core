@@ -87,11 +87,6 @@ from peerpedia_core.core.articles import (
     search_articles,
     update_article_content,
 )
-from peerpedia_core.core.views import (
-    merge_article_meta,
-    resolve_article_meta,
-    resolve_article_meta_batch,
-)
 
 # ── Reviews ──────────────────────────────────────────────────────────────────
 
@@ -148,7 +143,7 @@ from peerpedia_core.core.notifications import (
 
 from peerpedia_core.core.views import (
     get_article_view, get_follower_views, get_following_views,
-    get_user_view, list_article_views, list_user_article_views,
+    get_user_view, list_article_views,
 )
 
 # ── Discovery (P2P) ──────────────────────────────────────────────────────────
@@ -161,7 +156,7 @@ from peerpedia_core.core.sync_social import (
 # ── Ingest (P2P) ─────────────────────────────────────────────────────────────
 
 from peerpedia_core.storage.db.ingest import (
-    ingest_articles, ingest_bookmarks, ingest_followers, ingest_following,
+    ingest_articles, ingest_articles_from_json, ingest_bookmarks, ingest_followers, ingest_following,
     ingest_maintainers, ingest_notifications, ingest_shares, ingest_users,
     sync_followers, sync_following,
 )

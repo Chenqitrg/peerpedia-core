@@ -135,7 +135,7 @@ class TestArticleDiff:
         from peerpedia_core.exceptions import BadRequestError
         try:
             result = diff(alice, article_ref=aid, hash1="HEAD~1", hash2="HEAD")
-            assert "diff_text" in result.data
+            assert result.data.diff_text
         except BadRequestError:
             pass  # commit refs depend on git history depth
 

@@ -17,7 +17,6 @@ from peerpedia_core.cli.display import (
     display_empty_article_list, display_full_content,
 )
 from peerpedia_core.cli.info import _open_file, _out, _page, console
-from peerpedia_core.presentation.rich.components import cli_compiling_msg
 from peerpedia_core.compiler import compile_article
 from peerpedia_core.editor import (
     open_editor as _open_editor,
@@ -113,7 +112,7 @@ def _cmd_article_list(ctx, args):
         _show_empty_article_state(args)
         return AppResult(code="", data=None, params=result.params, notices=result.notices)
 
-    display_article_list(ctx.db, items)
+    display_article_list(items)
     return AppResult(code="", data=None, params=result.params, notices=result.notices)
 
 
@@ -183,11 +182,11 @@ def _cmd_article_diff(ctx, args):
     result = spec_for_cmd_id("article.diff").handler(ctx, {
         "id": args.id, "hash1": args.hash1, "hash2": args.hash2,
     })
-    diff_text = result.data.get("diff_text", "")
-    if not diff_text.strip():
+    diff = result.data
+    if not diff.diff_text.strip():
         _out(None, "N_SAME_REVISION")
     else:
-        display_diff(diff_text, result.data.get("stats", {}))
+        display_diff(diff)
     return result
 
 
@@ -216,7 +215,7 @@ def _cmd_compile(ctx, args):
         _out(args, "SOURCE_NOT_FOUND", article_id=args.id)
         return
 
-    with console.status(cli_compiling_msg(), spinner="dots"):
+    with console.status("Compiling...", spinner="dots"):
         result = compile_article(Path(source_path), args.format)
 
     if not result.success:

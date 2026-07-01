@@ -11,6 +11,8 @@ from typing import TypedDict
 
 import git
 
+from peerpedia_core.types.entities import DiffResult
+
 from peerpedia_core.config.params import (
     ARTICLE_EXTENSIONS, article_ext_to_format, article_filename, article_format_to_ext,
     extract_user_id_from_email,
@@ -151,22 +153,19 @@ def _count_diff_lines(patch: str) -> tuple[int, int]:
     return ins, dels
 
 
-def get_diff_between(repo_path: Path, hash1: str, hash2: str) -> dict[str, object]:
-    """Get the diff between two arbitrary commits.
+def get_diff_between(repo_path: Path, hash1: str, hash2: str) -> DiffResult:
+    """Return a typed diff between two arbitrary commits.
 
     hash1 is the "old" commit, hash2 is the "new" commit.
     """
-    # ── Resolve commits ──
     repo = git.Repo(repo_path)
     c1 = repo.commit(hash1)
     c2 = repo.commit(hash2)
 
-    # ── Walk diff ──
     files_changed: list[str] = []
     diff_parts: list[str] = []
     total_insertions = 0
     total_deletions = 0
-    diff_files: dict[str, dict[str, int]] = {}
 
     for d in c1.diff(c2, create_patch=True):
         fname = d.a_path or d.b_path or ""
@@ -179,23 +178,15 @@ def get_diff_between(repo_path: Path, hash1: str, hash2: str) -> dict[str, objec
 
         diff_parts.append(patch)
         ins, dels = _count_diff_lines(patch)
-        diff_files[fname] = {"insertions": ins, "deletions": dels}
         total_insertions += ins
         total_deletions += dels
 
-    # ── Build result ──
-    return {
-        "diff_text": "\n".join(diff_parts),
-        "files": files_changed,
-        "stats": {
-            "total": {
-                "insertions": total_insertions,
-                "deletions": total_deletions,
-                "lines": total_insertions + total_deletions,
-            },
-            "files": list(diff_files.keys()),
-        },
-    }
+    return DiffResult(
+        diff_text="\n".join(diff_parts),
+        files=tuple(files_changed),
+        insertions=total_insertions,
+        deletions=total_deletions,
+    )
 
 
 # ── HEAD ───────────────────────────────────────────────────────────────────

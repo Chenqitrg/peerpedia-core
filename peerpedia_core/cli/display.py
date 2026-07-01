@@ -12,12 +12,8 @@ from __future__ import annotations
 from rich.panel import Panel
 from rich.text import Text
 
-from peerpedia_core.app.readmodels.articles import (
-    resolve_article_meta,
-    resolve_article_meta_batch,
-)
 from peerpedia_core.cli.info import console, _page
-from peerpedia_core.types.entities import ArticleMetaExchange
+from peerpedia_core.types.entities import ArticleMetaExchange, DiffResult, UserExchange
 from peerpedia_core.messages import lookup as _lookup
 from peerpedia_core.presentation.rich.components import (
     SCORE_DIM_NAMES,
@@ -56,23 +52,14 @@ def display_article(meta: ArticleMetaExchange) -> None:
     _shared_article_meta_panel(console, meta)
 
 
-def display_user(name: str, user_id: str, *,
-                 affiliation: str = "",
-                 expertise: list[str] | None = None,
-                 reputation: dict | None = None,
-                 follower_count: int | None = None,
-                 public_key: str | None = None,
-                 created_at: str | None = None) -> None:
-    """Render user metadata panel — delegates to presentation."""
-    _shared_display_user(console, name, user_id,
-                         affiliation=affiliation, expertise=expertise,
-                         reputation=reputation, follower_count=follower_count,
-                         public_key=public_key, created_at=created_at)
+def display_user(user: UserExchange) -> None:
+    """Render user metadata panel from an exchange object."""
+    _shared_display_user(console, user)
 
 
-def display_diff(diff_text: str, stats: dict) -> None:
-    """Render a unified diff — delegates to presentation."""
-    _shared_diff_panel(console, diff_text, stats)
+def display_diff(diff: DiffResult) -> None:
+    """Render a unified diff from a DiffResult."""
+    _shared_diff_panel(console, diff)
 
 
 # ── Score display component ──────────────────────────────────────────────
@@ -107,15 +94,9 @@ def display_empty_article_list(code: str, **fmt) -> None:
         console.print(m.text.format(**fmt) if fmt else m.text)
 
 
-# ── Article meta ─────────────────────────────────────────────────────────
+# ── Article list ──────────────────────────────────────────────────────────
 
 
-def display_article_meta(db, article, *,
-                         author_ids: list[str] | None = None) -> None:
-    """Resolve article metadata then display via article_meta_panel."""
-    display_article(resolve_article_meta(db, article, author_ids=author_ids))
-
-
-def display_article_list(db, items: list[ArticleMetaExchange]) -> None:
+def display_article_list(items: list[ArticleMetaExchange]) -> None:
     """Render Rich article meta panels for a batch of article views."""
     article_panels(console, items)

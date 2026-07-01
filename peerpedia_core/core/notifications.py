@@ -3,8 +3,11 @@
 
 """Notification commands — thin facade over CRUD."""
 
+from __future__ import annotations
+
 from peerpedia_core.storage.db import Session
 from peerpedia_core.storage.db.models import NotificationStorage
+from peerpedia_core.types.entities import NotificationExchange
 from peerpedia_core.storage.db.crud_notification import (
     count_unread_notifications as _count_unread_notifications,
     create_notification as _create,
@@ -44,21 +47,9 @@ def count_unread_notifications(db: Session, user_id: str) -> int:
     return _count_unread_notifications(db, user_id)
 
 
-def get_notifications_for_user(db: Session, user_id: str) -> list[dict]:
-    """Return notifications for a user as dicts, newest first."""
-    notifs = _get(db, user_id)
-    return [
-        {
-            "id": n.id,
-            "event": n.event,
-            "message": n.message,
-            "article_id": n.article_id,
-            "actor_id": n.actor_id,
-            "read": bool(n.read),
-            "created_at": str(n.created_at) if n.created_at else None,
-        }
-        for n in notifs
-    ]
+def get_notifications_for_user(db: Session, user_id: str) -> list[NotificationExchange]:
+    """Return notifications for a user as exchange objects, newest first."""
+    return [n.to_exchange() for n in _get(db, user_id)]
 
 
 def merge_notifications(

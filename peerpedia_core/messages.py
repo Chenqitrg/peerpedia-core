@@ -395,3 +395,13 @@ def log_text(code: str, **fmt) -> str:
     _, m = lookup(code)
     template = m.log_text or m.text
     return template.format(**fmt) if fmt else template
+
+
+_MSG_CACHE: dict[str, str] = {}
+
+
+def cached_text(code: str, **fmt) -> str:
+    """Return cached, formatted Rich-markup text for a message code."""
+    if code not in _MSG_CACHE:
+        _MSG_CACHE[code] = lookup(code)[1].text
+    return _MSG_CACHE[code].format(**fmt) if fmt else _MSG_CACHE[code]

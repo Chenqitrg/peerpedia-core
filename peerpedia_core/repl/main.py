@@ -22,8 +22,9 @@ from peerpedia_core.core import publish_ready_articles
 from peerpedia_core.repl.state import close_db as _close_db, new_session
 from peerpedia_core.config.params import params
 from peerpedia_core.config.paths import REPL_HISTORY_FILE
+from peerpedia_core.messages import cached_text
 from peerpedia_core.presentation.rich.components import (
-    auto_publish_msg, repl_bye_msg, repl_interrupt_msg, repl_tty_required,
+    repl_bye_msg, repl_interrupt_msg, repl_tty_required,
 )
 
 from peerpedia_core.repl.banner import show_startup_banner
@@ -75,7 +76,7 @@ def _maybe_auto_publish(last_scan: float) -> float:
         count = publish_ready_articles(db)
         db.commit()
         if count > 0:
-            console.print(auto_publish_msg(count))
+            console.print(cached_text("ARTICLE_SCANNED", count=count))
     finally:
         db.close()
     return now

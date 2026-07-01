@@ -23,7 +23,7 @@ class TestViews:
         a = _make_article(db, articles_dir, author, title="A Paper")
         view = get_article_view(db, a["id"])
         assert view.title == "A Paper"
-        assert list(view.authors) == ["Author"]
+        assert view.authors == ()
 
     def test_list_article_views(self, db, articles_dir):
         from peerpedia_core.core.views import list_article_views

@@ -10,7 +10,7 @@ from peerpedia_core.app.result import AppResult
 from peerpedia_core.cli.decorators import with_context
 from peerpedia_core.cli.display import display_user
 from peerpedia_core.cli.info import console
-from peerpedia_core.presentation.rich.components import cli_no_users_msg
+from peerpedia_core.messages import cached_text
 from peerpedia_core.editor import get_password as _get_password
 
 
@@ -53,13 +53,7 @@ def _cmd_account_recover(ctx, args):
 def _cmd_account_whoami(ctx, args):
     """Show current login status."""
     result = spec_for_cmd_id("account.whoami").handler(ctx, {})
-    u = result.data
-    display_user(
-        u.name,
-        u.id,
-        affiliation=u.address,
-        reputation=u.reputation,
-    )
+    display_user(result.data)
     return AppResult(code="", data=None, params=result.params, notices=result.notices)
 
 
@@ -87,8 +81,8 @@ def _cmd_account_search(ctx, args):
     })
     items = result.data.get("items", [])
     if not items:
-        console.print(cli_no_users_msg(args.query))
+        console.print(cached_text("EMPTY_SEARCH", query=args.query))
         return AppResult(code="", data=None, params=result.params, notices=result.notices)
     for u in items:
-        display_user(u.name, u.id)
+        display_user(u.to_exchange())
     return AppResult(code="", data=None, params=result.params, notices=result.notices)

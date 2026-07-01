@@ -108,5 +108,5 @@ class TestArticleDiff:
         h3 = history[0]["hash"]
 
         result = diff_article(a["id"], h2, h3)
-        assert "diff_text" in result
-        assert "line2" in result["diff_text"]
+        assert result.diff_text
+        assert "line2" in result.diff_text

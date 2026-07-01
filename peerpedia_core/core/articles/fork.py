@@ -25,16 +25,7 @@ from peerpedia_core.storage.git.guards import require_article_repo
 
 
 def fork_article(db: Session, article_id: str, user_id: str) -> dict[str, object]:
-    """Fork an article: clone its git repo and create a new ArticleMetaStorage record.
-
-    Returns:
-        {"id": <fork_id>, "forked_from": <original_id>, "status": "draft"}
-
-    Raises:
-        NotFoundError: user not found in DB
-        NotAuthorizedError: article not forkable (policy)
-        ConflictError: user already forked this article
-    """
+    """Fork an article: clone its git repo and create a new ArticleMetaStorage record."""
     reconcile_integrity(db, article_id, level="light")
 
     user, original, maintainer_ids = authorize_article_action(db, article_id, user_id)
@@ -42,7 +33,7 @@ def fork_article(db: Session, article_id: str, user_id: str) -> dict[str, object
     assert_can_fork_article(original, existing_fork, user=user, maintainer_ids=maintainer_ids)
 
     fork_id = str(uuid.uuid4())
-    src = require_article_repo(article_id)  # validates repo exists on disk
+    src = require_article_repo(article_id)
     dst = article_repo_path(fork_id)
 
     clone_article_repo(src, dst)

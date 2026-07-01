@@ -312,12 +312,14 @@ class NotificationStorage(Base):
     def from_exchange(cls, e: NotificationExchange) -> dict[str, object]:
         return {"event": e.event, "message": e.message,
                 "id": e.id or None, "article_id": e.article_id or None,
-                "actor_id": e.actor_id or None, "read": 1 if e.read else 0}
+                "actor_id": e.actor_id or None, "read": 1 if e.read else 0,
+                "created_at": e.created_at or None}
 
     def to_exchange(self) -> NotificationExchange:
         return NotificationExchange(event=self.event, message=self.message,
                                     id=self.id, article_id=self.article_id or "",
-                                    actor_id=self.actor_id or "", read=bool(self.read))
+                                    actor_id=self.actor_id or "", read=bool(self.read),
+                                    created_at=str(self.created_at) if self.created_at else "")
 
 
 # ── MergeProposalStorage ────────────────────────────────────────────────────────

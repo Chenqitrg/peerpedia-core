@@ -148,4 +148,4 @@ class TestDiff:
         a = create(alice, title="Diff Paper", content="# V1")
         head = get_head_hash(article_repo_path(a.data["id"]))
         d = diff(alice, article_ref=a.data["id"], hash1=head, hash2=head)
-        assert "diff_text" in d.data
+        assert d.data.diff_text is not None

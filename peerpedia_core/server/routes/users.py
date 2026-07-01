@@ -27,7 +27,7 @@ from peerpedia_core.core import (
     get_shares_for_user,
     get_top_users_by_followers,
     get_user,
-    list_user_article_views,
+    list_article_views,
     remove_share,
     unfollow_user,
     update_user_public_key,
@@ -106,8 +106,9 @@ async def _articles(request: Request) -> JSONResponse:
     # The author sees all their own articles.
     requester = getattr(request.state, "user_id", None)
     status = None if requester == user_id else PUBLIC_READABLE_STATUSES
-    return JSONResponse(list_user_article_views(
-        request.state.db, user_id, status=status, limit=limit, offset=offset,
+    return JSONResponse(list_article_views(
+        request.state.db, author_id=user_id, status=status,
+        limit=limit, offset=offset,
     ))
 
 

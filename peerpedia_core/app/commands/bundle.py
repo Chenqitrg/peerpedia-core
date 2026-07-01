@@ -8,7 +8,7 @@ from __future__ import annotations
 from peerpedia_core.app.context import AppContext
 from peerpedia_core.app.refs import require_user
 from peerpedia_core.app.result import AppNotice, AppResult
-from peerpedia_core.core import list_all_article_ids, merge_article_meta
+from peerpedia_core.core import ingest_articles_from_json, list_all_article_ids
 from peerpedia_core.core.sync_article import pull_new_article, sync_article
 from peerpedia_core.core.sync_social import discover_network
 from peerpedia_core.exceptions import ConflictError, ProtocolError, TransportError
@@ -77,7 +77,7 @@ def _discover_new_articles(ctx: AppContext, server: str, user_id: str) -> None:
     local_ids = set(list_all_article_ids(ctx.db))
     for entry in server_articles:
         if entry["id"] not in local_ids:
-            merge_article_meta(ctx.db, [entry])
+            ingest_articles_from_json(ctx.db, [entry])
             pull_new_article(ctx.db, ctx.transport, server, entry["id"])
 
 

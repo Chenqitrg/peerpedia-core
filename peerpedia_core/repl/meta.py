@@ -15,8 +15,9 @@ from peerpedia_core.config.params import params
 
 from peerpedia_core.app.context import read_session as _read_session
 from peerpedia_core.core import get_notifications_for_user
+from peerpedia_core.messages import cached_text
 from peerpedia_core.presentation.rich.components import (
-    guest_hint, inbox_empty_msg, notification_table, progress_bar,
+    guest_hint, notification_table, progress_bar,
     sink_progress_label, theme_label, theme_unknown,
 )
 from peerpedia_core.repl.state import console, new_session
@@ -55,7 +56,7 @@ def _show_inbox():
             return
         notifications = get_notifications_for_user(db, session_data["user_id"])
         if not notifications:
-            console.print(inbox_empty_msg())
+            console.print(cached_text("EMPTY_NOTIFICATIONS"))
             return
         console.print(notification_table(notifications[:20]))
     finally:

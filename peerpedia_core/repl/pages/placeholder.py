@@ -16,6 +16,12 @@ class PlaceholderPage(Page):
 
     title = "Hello"
 
+    def _render(self):
+        return [
+            ("class:prompt", "Hello, REPL!\n\n"),
+            ("", "Press Esc to go back.\n"),
+        ]
+
     def render_layout(self):
         from prompt_toolkit.layout import Layout
 

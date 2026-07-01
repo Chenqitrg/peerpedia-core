@@ -30,7 +30,7 @@ class TestWhoami:
         from peerpedia_core.app.commands.account import whoami
         alice = login(ctx, "Alice")
         result = whoami(alice)
-        assert result.data["name"] == "Alice"
+        assert result.data.name == "Alice"
 
     def test_whoami_not_logged_in(self, ctx):
         from peerpedia_core.app.commands.account import whoami

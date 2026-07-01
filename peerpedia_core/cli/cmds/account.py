@@ -53,15 +53,12 @@ def _cmd_account_recover(ctx, args):
 def _cmd_account_whoami(ctx, args):
     """Show current login status."""
     result = spec_for_cmd_id("account.whoami").handler(ctx, {})
-    d = result.data
+    u = result.data
     display_user(
-        d.get("name", "?"),
-        d.get("id", "?"),
-        affiliation=d.get("affiliation", ""),
-        expertise=d.get("expertise"),
-        reputation=d.get("reputation"),
-        public_key=d.get("public_key"),
-        created_at=str(d.get("created_at", "")) if d.get("created_at") else "",
+        u.name,
+        u.id,
+        affiliation=u.address,
+        reputation=u.reputation,
     )
     return AppResult(code="", data=None, params=result.params, notices=result.notices)
 
@@ -93,5 +90,5 @@ def _cmd_account_search(ctx, args):
         console.print(cli_no_users_msg(args.query))
         return AppResult(code="", data=None, params=result.params, notices=result.notices)
     for u in items:
-        display_user(u["name"], u["user_id"])
+        display_user(u.name, u.id)
     return AppResult(code="", data=None, params=result.params, notices=result.notices)

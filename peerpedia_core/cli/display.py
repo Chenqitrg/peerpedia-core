@@ -12,8 +12,12 @@ from __future__ import annotations
 from rich.panel import Panel
 from rich.text import Text
 
-from peerpedia_core.core import resolve_article_meta, resolve_article_meta_batch
+from peerpedia_core.app.readmodels.articles import (
+    resolve_article_meta,
+    resolve_article_meta_batch,
+)
 from peerpedia_core.cli.info import console, _page
+from peerpedia_core.types.entities import ArticleMetaExchange
 from peerpedia_core.messages import lookup as _lookup
 from peerpedia_core.presentation.rich.components import (
     SCORE_DIM_NAMES,
@@ -47,13 +51,9 @@ def _status_badge(status: str) -> str:
     return _shared_status_badge(status)
 
 
-def display_article(title: str, status: str, authors: list[str],
-                    score: dict | None, abstract: str | None) -> None:
-    """Render article metadata panel — delegates to presentation."""
-    _shared_article_meta_panel(
-        console, title=title, status=status, authors=authors,
-        score=score, abstract=abstract,
-    )
+def display_article(meta: ArticleMetaExchange) -> None:
+    """Render article metadata panel from an exchange object."""
+    _shared_article_meta_panel(console, meta)
 
 
 def display_user(name: str, user_id: str, *,
@@ -113,11 +113,9 @@ def display_empty_article_list(code: str, **fmt) -> None:
 def display_article_meta(db, article, *,
                          author_ids: list[str] | None = None) -> None:
     """Resolve article metadata then display via article_meta_panel."""
-    display_article(**resolve_article_meta(db, article, author_ids=author_ids))
+    display_article(resolve_article_meta(db, article, author_ids=author_ids))
 
 
-def display_article_list(db, items: list[dict]) -> None:
-    """Render Rich article meta panels for a batch of article dicts."""
-    article_panels(console, resolve_article_meta_batch(
-        db, [a["id"] for a in items],
-    ))
+def display_article_list(db, items: list[ArticleMetaExchange]) -> None:
+    """Render Rich article meta panels for a batch of article views."""
+    article_panels(console, items)

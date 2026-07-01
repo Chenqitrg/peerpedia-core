@@ -22,8 +22,8 @@ class TestViews:
         author = make_user(db, "Author")
         a = _make_article(db, articles_dir, author, title="A Paper")
         view = get_article_view(db, a["id"])
-        assert view["title"] == "A Paper"
-        assert view["authors"] == [author.id]
+        assert view.title == "A Paper"
+        assert list(view.authors) == ["Author"]
 
     def test_list_article_views(self, db, articles_dir):
         from peerpedia_core.core.views import list_article_views
@@ -37,7 +37,7 @@ class TestViews:
         from peerpedia_core.core.views import get_user_view
         u = make_user(db, "ProfileUser")
         view = get_user_view(db, u.id)
-        assert view["name"] == "ProfileUser"
+        assert view.name == "ProfileUser"
 
     def test_get_following_follower_views(self, db):
         from peerpedia_core.core.views import get_following_views, get_follower_views
@@ -48,8 +48,8 @@ class TestViews:
 
         following = get_following_views(db, alice.id)
         assert len(following) == 1
-        assert following[0]["name"] == "Bob"
+        assert following[0].name == "Bob"
 
         followers = get_follower_views(db, bob.id)
         assert len(followers) == 1
-        assert followers[0]["name"] == "Alice"
+        assert followers[0].name == "Alice"

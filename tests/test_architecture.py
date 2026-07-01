@@ -158,6 +158,9 @@ def test_no_internal_peerpedia_imports():
         ("peerpedia_core/repl/engine.py",
          "peerpedia_core.editor"):
             "heavy: password prompting only needed for register/login/recover commands",
+        ("peerpedia_core/core/views.py",
+         "peerpedia_core.storage.db.ingest"):
+            "write-only: merge_article_meta is a sync path that shouldn't force ingest imports on read-only views",
     }
 
     for f in _all_modules():

@@ -21,7 +21,7 @@ class TestFollow:
         assert r.code == "FOLLOWING"
 
         following = list_following(alice, user_ref=alice.current_user_id)
-        names = [f["name"] for f in following.data["items"]]
+        names = [f.name for f in following.data["items"]]
         assert "Bob" in names
 
         r = unfollow(alice, target_ref=bob.current_user_id)
@@ -66,7 +66,7 @@ class TestListFollowers:
         bob = login(ctx, "Bob")
         follow(alice, target_ref=bob.current_user_id)
         result = list_followers(bob, user_ref=bob.current_user_id)
-        names = [f["name"] for f in result.data["items"]]
+        names = [f.name for f in result.data["items"]]
         assert "Alice" in names
 
 

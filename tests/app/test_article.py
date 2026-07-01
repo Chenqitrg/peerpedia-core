@@ -30,7 +30,7 @@ class TestShow:
         a = create(alice, title="Public", content="# X")
         # Unauthenticated viewer
         shown = show(ctx, article_ref=a.data["id"])
-        assert shown.data["title"] == "Public"
+        assert shown.data.title == "Public"
 
     def test_create_then_show(self, ctx, articles_dir):
         from peerpedia_core.app.commands.article import create, show
@@ -41,7 +41,7 @@ class TestShow:
         aid = result.data["id"]
 
         shown = show(alice, article_ref=aid)
-        assert shown.data["title"] == "My Paper"
+        assert shown.data.title == "My Paper"
 
 
 class TestList:
@@ -60,7 +60,7 @@ class TestList:
         create(bob, title="Bob's Paper", content="# B")
 
         result = list_articles(alice, mine=True)
-        titles = [a["title"] for a in result.data["items"]]
+        titles = [a.title for a in result.data["items"]]
         assert "Alice's Paper" in titles
         assert "Bob's Paper" not in titles
 
@@ -83,7 +83,7 @@ class TestCreate:
         alice = login(ctx, "Alice")
         result = create(alice, title="Draft", content="# Draft")
         shown = show(alice, article_ref=result.data["id"])
-        assert shown.data["status"] == "draft"
+        assert shown.data.status == "draft"
 
 
 class TestEdit:
@@ -94,7 +94,7 @@ class TestEdit:
         edit(alice, article_ref=a.data["id"], title="New Title",
              message="rename", user_id=alice.current_user_id)
         shown = show(alice, article_ref=a.data["id"])
-        assert shown.data["title"] == "New Title"
+        assert shown.data.title == "New Title"
 
     def test_edit_title(self, ctx, articles_dir):
         from peerpedia_core.app.commands.article import create, edit, show
@@ -103,7 +103,7 @@ class TestEdit:
         edit(alice, article_ref=a.data["id"], title="New Title",
              message="rename", user_id=alice.current_user_id)
         shown = show(alice, article_ref=a.data["id"])
-        assert shown.data["title"] == "New Title"
+        assert shown.data.title == "New Title"
 
 
 class TestPublish:
@@ -114,7 +114,7 @@ class TestPublish:
         r = publish(alice, article_ref=a.data["id"],
                     scores_str="orig=4,rigor=4,comp=4,ped=4,imp=4")
         assert r.code == "ARTICLE_PUBLISHED"
-        assert show(alice, article_ref=a.data["id"]).data["status"] == "sedimentation"
+        assert show(alice, article_ref=a.data["id"]).data.status == "sedimentation"
 
 
 class TestScan:

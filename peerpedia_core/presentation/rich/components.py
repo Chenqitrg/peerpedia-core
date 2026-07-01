@@ -19,6 +19,7 @@ from rich.table import Table
 from rich.text import Text
 
 from peerpedia_core.messages import lookup as _msg
+from peerpedia_core.types.entities import ArticleMetaExchange, UserExchange
 from peerpedia_core.types.scores import SCORE_DIMENSIONS
 
 
@@ -355,51 +356,38 @@ def user_line_text(u: dict) -> Text:
     return Text(f"{u.get('name', '?')} ({uid}){affiliation}")
 
 
-def user_panels(console: Console, items: list[dict]) -> None:
-    """Render a list of user dicts as Rich panels via ``display_user``."""
+def user_panels(console: Console, items: list[UserExchange]) -> None:
+    """Render a list of UserExchange objects as Rich panels."""
     for u in items:
         display_user(
             console,
-            u.get("name", "?"),
-            u.get("id") or u.get("user_id", "?"),
-            affiliation=u.get("affiliation", ""),
-            expertise=u.get("expertise"),
-            reputation=u.get("reputation"),
-            follower_count=u.get("follower_count"),
-            public_key=u.get("public_key"),
-            created_at=u.get("created_at"),
+            u.name,
+            u.id,
+            affiliation=u.address,
+            reputation=u.reputation,
         )
 
 
-def article_meta_panel(console: Console, *, title: str, status: str,
-                       authors: list[str], score: dict | None,
-                       abstract: str | None) -> None:
-    """Render article metadata as a Rich panel."""
+def article_meta_panel(console: Console, meta: ArticleMetaExchange) -> None:
+    """Render a single article as a Rich panel."""
     body = Text()
-    body.append(str(title), style="bold info")
-    body.append(f"      {status_badge(status)}\n")
-    body.append(f"Authors: {', '.join(str(a) for a in authors)}\n")
+    body.append(str(meta.title), style="bold info")
+    body.append(f"      {status_badge(meta.status)}\n")
+    body.append(f"Authors: {', '.join(meta.authors)}\n")
     body.append("Score:\n")
-    if score:
-        body.append(Text.from_markup(score_stars(score)))
+    if meta.score:
+        body.append(Text.from_markup(score_stars(meta.score)))
     else:
         body.append("no scores", style="muted")
-    if abstract:
-        body.append(f"\nAbstract: {str(abstract)}")
+    if meta.abstract:
+        body.append(f"\nAbstract: {meta.abstract}")
     print_panel(console, "Article", body)
 
 
-def article_panels(console: Console, items: list[dict]) -> None:
-    """Render a list of article dicts as Rich panels."""
+def article_panels(console: Console, items: list[ArticleMetaExchange]) -> None:
+    """Render a list of articles as Rich panels."""
     for a in items:
-        article_meta_panel(
-            console,
-            title=a.get("title", "?"),
-            status=a.get("status", "draft"),
-            authors=a.get("authors", []),
-            score=a.get("score"),
-            abstract=a.get("abstract"),
-        )
+        article_meta_panel(console, a)
 
 
 def diff_panel(console: Console, diff_text: str, stats: dict) -> None:

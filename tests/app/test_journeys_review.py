@@ -677,7 +677,7 @@ class TestFullArticleWithReview:
 
         _publish(alice, article_ref=aid)
         shown = show(alice, article_ref=aid)
-        assert shown.data["status"] == "sedimentation"
+        assert shown.data.status == "sedimentation"
 
         # ── Phase 2: External reviewer invited ───────────────────────────
         carol = login(ctx, "CarolReviewer")
@@ -717,7 +717,7 @@ class TestFullArticleWithReview:
 
         # ── Verify: article still in sedimentation ───────────────────────
         final = show(alice, article_ref=aid)
-        assert final.data["status"] == "sedimentation"
+        assert final.data.status == "sedimentation"
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

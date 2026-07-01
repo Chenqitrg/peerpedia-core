@@ -110,7 +110,7 @@ class TestFeed:
 
         # Alice's feed
         feed = list_articles(alice, feed=True).data["items"]
-        titles = {item["title"] for item in feed}
+        titles = {item.title for item in feed}
         assert "Bob's Paper" in titles
 
 
@@ -161,7 +161,7 @@ class TestScanPublish:
 
         # Article should now be published (if sedimentation period elapsed)
         shown = show(alice, article_ref=a.data["id"])
-        assert shown.data["status"] in ("sedimentation", "published")
+        assert shown.data.status in ("sedimentation", "published")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -188,7 +188,7 @@ class TestConcurrentCollab:
              message="b1", user_id=bob.current_user_id)
 
         shown = show(alice, article_ref=a.data["id"])
-        assert shown.data["title"] == "Bob's Edit"
+        assert shown.data.title == "Bob's Edit"
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

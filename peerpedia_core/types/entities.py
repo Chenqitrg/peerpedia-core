@@ -50,6 +50,7 @@ class ArticleMetaExchange:
     title: str
     status: str
     authors: tuple[str, ...] = ()
+    abstract: str | None = None
     score: dict[str, float] | None = None
     publish_consents: tuple[str, ...] | None = None
 
@@ -58,6 +59,7 @@ class ArticleMetaExchange:
         return cls(
             id=d["id"], title=d["title"], status=d["status"],
             authors=tuple(d.get("authors", [])),
+            abstract=d.get("abstract"),
             score=d.get("score"),
             publish_consents=tuple(d["publish_consents"]) if d.get("publish_consents") else None,
         )

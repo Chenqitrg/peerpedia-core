@@ -55,16 +55,16 @@ class TestThreeBodySocial:
 
         # Alice's following should be Bob + Carol (exactly 2)
         alice_following = list_following(alice, user_ref=alice.current_user_id).data["items"]
-        assert {f["name"] for f in alice_following} == {"Bob", "Carol"}
+        assert {f.name for f in alice_following} == {"Bob", "Carol"}
 
         # Carol's followers should be Bob + Alice (exactly 2)
         carol_followers = list_followers(carol, user_ref=carol.current_user_id).data["items"]
-        assert {f["name"] for f in carol_followers} == {"Alice", "Bob"}
+        assert {f.name for f in carol_followers} == {"Alice", "Bob"}
 
         # Unfollow and verify
         unfollow(alice, target_ref=bob.current_user_id)
         alice_after = list_following(alice, user_ref=alice.current_user_id).data["items"]
-        assert {f["name"] for f in alice_after} == {"Carol"}
+        assert {f.name for f in alice_after} == {"Carol"}
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -93,7 +93,7 @@ class TestCollaboration:
              message="Bob's contribution", user_id=bob.current_user_id)
 
         shown = show(alice, article_ref=a.data["id"])
-        assert shown.data["title"] == "Joint Paper v2"
+        assert shown.data.title == "Joint Paper v2"
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -159,7 +159,7 @@ class TestArticleSearch:
 
         # Search by keyword
         result = list_articles(alice, search_query="graphene", mine=True)
-        titles = {a["title"] for a in result.data["items"]}
+        titles = {a.title for a in result.data["items"]}
         assert "Quantum Entanglement in Graphene" in titles
         assert "Graphene Synthesis Methods" in titles
         assert "Classical Mechanics Review" not in titles
@@ -245,13 +245,13 @@ class TestArticleLifecycle:
 
         # ── Show ──
         shown = show(alice, article_ref=aid)
-        assert shown.data["title"] == "Draft Paper"
-        assert shown.data["status"] == "draft"
+        assert shown.data.title == "Draft Paper"
+        assert shown.data.status == "draft"
 
         # ── Edit ──
         edit(alice, article_ref=aid, title="Revised Paper", message="v2")
         shown2 = show(alice, article_ref=aid)
-        assert shown2.data["title"] == "Revised Paper"
+        assert shown2.data.title == "Revised Paper"
 
         # ── Delete (only from draft) ──
         d = delete(alice, article_ref=aid)
@@ -275,7 +275,7 @@ class TestPublishLifecycle:
         assert pub.code == "ARTICLE_PUBLISHED"
 
         shown = show(alice, article_ref=a.data["id"])
-        assert shown.data["status"] == "sedimentation"
+        assert shown.data.status == "sedimentation"
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -311,7 +311,7 @@ class TestBookmarkLifecycle:
         # ── List again ──
         bm_after = list_articles(alice, bookmarked=True).data["items"]
         assert len(bm_after) == 1
-        assert bm_after[0]["id"] == a2.data["id"]
+        assert bm_after[0].id == a2.data["id"]
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

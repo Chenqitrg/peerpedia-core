@@ -8,12 +8,10 @@ from __future__ import annotations
 from prompt_toolkit.layout import HSplit, Layout, Window
 from prompt_toolkit.layout.controls import FormattedTextControl
 
-from peerpedia_core.presentation.rich.components import (
-    article_meta_panel,
-    focused_panel,
-)
 from peerpedia_core.repl.pages import Page
-from peerpedia_core.repl.state import console
+from peerpedia_core.repl.pages.review_list import ReviewListPage
+from peerpedia_core.repl.pages.user_profile import _fetch_reviews
+from peerpedia_core.types.entities import ArticleMetaExchange
 
 
 class ArticleListPage(Page):
@@ -21,53 +19,82 @@ class ArticleListPage(Page):
 
     title = "Articles"
 
-    def __init__(self, articles: list[dict]):
+    def __init__(self, articles: list[ArticleMetaExchange]):
         super().__init__()
-        self.items = articles
+        self.items = articles  # type: ignore[assignment]
 
     def render_layout(self) -> Layout:
         return Layout(HSplit([Window(FormattedTextControl(self._render))]))
 
+    def handle_key(self, key: str) -> Page | None:
+        if key == "enter":
+            item: ArticleMetaExchange | None = self.focused_item()  # type: ignore[assignment]
+            if item is None:
+                return None
+            reviews = _fetch_reviews(item.id)
+            return ReviewListPage(reviews=reviews, article_id=item.id)
+        return None
+
+    # ── Rendering ─────────────────────────────────────────────────────────
+
     def _render(self):
         """Build Rich-markup fragments for the article list."""
-        fragments: list[tuple[str, str]] = [
-            ("class:prompt", f"  {self.title} ({len(self.filtered())} of {len(self._items)})\n\n"),
-        ]
-
-        for i, a in enumerate(self.filtered()):
-            is_focused = (i == self.focus_index)
-            prefix = "▌" if is_focused else " "
-            style = "class:prompt" if is_focused else ""
-
-            # Title line with focus indicator
-            title = a.get("title", a.get("id", "?"))
-            status = a.get("status", "draft")
-            fragments.append((style, f"{prefix} {title}  "))
-            fragments.append(("class:muted", f"[{status}]\n"))
-
-            # Authors line
-            authors = a.get("authors", [])
-            if authors:
-                names = ", ".join(authors if isinstance(authors, list) else [str(authors)])
-                fragments.append(("class:muted", f"   by {names}\n"))
-
-            # Abstract preview
-            abstract = a.get("abstract", "")
-            if abstract:
-                preview = abstract[:120] + ("…" if len(abstract) > 120 else "")
-                fragments.append(("", f"   {preview}\n"))
-
-            fragments.append(("", "\n"))
-
-        if not self.filtered():
+        fragments: list[tuple[str, str]] = []
+        fragments.extend(_render_header(self.title, len(self.filtered()), len(self._items)))
+        if self.filtered():
+            for i, a in enumerate(self.filtered()):
+                fragments.extend(_render_item(a, i == self.focus_index))
+        else:
             fragments.append(("class:muted", "  (no matching articles)\n"))
-
-        # Status bar
-        item = self.focused_item()
-        hint = ""
-        if item:
-            aid = item.get("id", "?")
-            hint = f"▸ {aid}  │  Enter:view  Esc:back"
-        fragments.append(("class:status-bar", f"\n  {hint}"))
-
+        fragments.extend(_render_status_bar(self.focused_item()))
         return fragments
+
+
+# ── Rendering helpers ────────────────────────────────────────────────────────
+
+
+def _render_header(title: str, filtered: int, total: int) -> list[tuple[str, str]]:
+    """Title line with filtered/total count."""
+    return [("class:prompt", f"  {title} ({filtered} of {total})\n\n")]
+
+
+def _render_item(article: ArticleMetaExchange, is_focused: bool) -> list[tuple[str, str]]:
+    """Render a single article panel (title, authors, abstract)."""
+    prefix = "▌" if is_focused else " "
+    style = "class:prompt" if is_focused else ""
+    result: list[tuple[str, str]] = []
+    result.extend(_render_title_line(article, prefix, style))
+    result.extend(_render_authors_line(article))
+    result.extend(_render_abstract_preview(article))
+    result.append(("", "\n"))
+    return result
+
+
+def _render_title_line(article: ArticleMetaExchange, prefix: str, style: str) -> list[tuple[str, str]]:
+    return [
+        (style, f"{prefix} {article.title}  "),
+        ("class:muted", f"[{article.status}]\n"),
+    ]
+
+
+def _render_authors_line(article: ArticleMetaExchange) -> list[tuple[str, str]]:
+    if not article.authors:
+        return []
+    names = ", ".join(article.authors)
+    return [("class:muted", f"   by {names}\n")]
+
+
+def _render_abstract_preview(article: ArticleMetaExchange) -> list[tuple[str, str]]:
+    if not article.abstract:
+        return []
+    preview = article.abstract[:120] + ("…" if len(article.abstract) > 120 else "")
+    return [("", f"   {preview}\n")]
+
+
+def _render_status_bar(item: ArticleMetaExchange | None) -> list[tuple[str, str]]:
+    """Bottom hint showing focused item ID and available keys."""
+    if item:
+        hint = f"▸ {item.id}  │  Enter:view  Esc:back"
+    else:
+        hint = ""
+    return [("class:status-bar", f"\n  {hint}")]

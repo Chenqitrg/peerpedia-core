@@ -81,6 +81,8 @@ class ArticleMetaStorage(Base):
     @classmethod
     def from_exchange(cls, e: ArticleMetaExchange) -> dict[str, object]:
         result: dict[str, object] = {"id": e.id, "title": e.title, "status": e.status}
+        if e.abstract is not None:
+            result["abstract"] = e.abstract
         if e.score is not None:
             result["score"] = e.score
         if e.publish_consents is not None:
@@ -90,6 +92,7 @@ class ArticleMetaStorage(Base):
     def to_exchange(self) -> ArticleMetaExchange:
         return ArticleMetaExchange(
             id=self.id, title=self.title, status=self.status,
+            abstract=self.abstract,
             score=self.score,
             publish_consents=tuple(self.publish_consents) if self.publish_consents else None,
         )

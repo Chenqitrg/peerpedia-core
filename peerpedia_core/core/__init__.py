@@ -83,31 +83,15 @@ from peerpedia_core.core.articles import (
     list_articles,
     publish_article,
     publish_ready_articles,
-    resolve_article_meta,
-    resolve_article_meta_batch,
     rollback_article,
+    search_articles,
     update_article_content,
 )
-
-
-def search_articles(db: Session, query: str) -> list:
-    """Fuzzy-search articles by partial title or ID prefix.
-
-    Tries title match first; falls back to ID prefix match
-    so ``peerpedia article show abc12345`` works as expected.
-    """
-    results = list_articles(db, search_query=query)
-    if not results:
-        results = list_articles(db, id_prefix=query)
-    return results
-
-
-def merge_article_meta(db: Session, entries: list[dict]) -> int:
-    """Merge article metadata from a peer into the local DB."""
-    from peerpedia_core.storage.db.ingest import ingest_articles
-    from peerpedia_core.types.entities import ArticleMetaExchange
-    return ingest_articles(db, [ArticleMetaExchange.from_json(e) for e in entries])
-
+from peerpedia_core.core.views import (
+    merge_article_meta,
+    resolve_article_meta,
+    resolve_article_meta_batch,
+)
 
 # ── Reviews ──────────────────────────────────────────────────────────────────
 

@@ -52,13 +52,13 @@ class TestNewUserJourney:
 
         # ── List mine ──
         mine = list_articles(newton, mine=True)
-        titles = {a["title"] for a in mine.data["items"]}
+        titles = {a.title for a in mine.data["items"]}
         assert titles == {"Principia", "Opticks"}
 
         # ── Show one ──
         view = show(newton, article_ref=a1.data["id"])
-        assert view.data["title"] == "Principia"
-        assert view.data["status"] == "draft"
+        assert view.data.title == "Principia"
+        assert view.data.status == "draft"
 
         # ── Delete ──
         d = delete(newton, article_ref=a1.data["id"])
@@ -94,10 +94,10 @@ class TestSocialNetwork:
         assert r.code == "FOLLOWING"
 
         # ── Verify mutual following ──
-        alice_following = {f["name"] for f in list_following(alice, user_ref=alice.current_user_id).data["items"]}
+        alice_following = {f.name for f in list_following(alice, user_ref=alice.current_user_id).data["items"]}
         assert "Bob" in alice_following
 
-        bob_followers = {f["name"] for f in list_followers(bob, user_ref=bob.current_user_id).data["items"]}
+        bob_followers = {f.name for f in list_followers(bob, user_ref=bob.current_user_id).data["items"]}
         assert "Alice" in bob_followers
 
         # ── Share article ──

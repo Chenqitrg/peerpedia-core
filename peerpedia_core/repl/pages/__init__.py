@@ -75,12 +75,17 @@ class Page:
 # ── Filter helper ────────────────────────────────────────────────────────────
 
 
-def _item_matches(item: dict, query: str) -> bool:
-    """Return True if *query* appears in any string value of *item*."""
-    for v in item.values():
+def _item_matches(item: object, query: str) -> bool:
+    """Return True if *query* appears in any string field of *item*."""
+    if isinstance(item, dict):
+        values = item.values()
+    else:
+        import dataclasses
+        values = (getattr(item, f.name) for f in dataclasses.fields(item))
+    for v in values:
         if isinstance(v, str) and query in v.lower():
             return True
-        if isinstance(v, list):
+        if isinstance(v, (list, tuple)):
             for sv in v:
                 if isinstance(sv, str) and query in sv.lower():
                     return True

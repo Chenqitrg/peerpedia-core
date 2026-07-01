@@ -19,6 +19,7 @@ from peerpedia_core.storage.db.crud_maintainer import add_maintainer
 from peerpedia_core.storage.git import commit_article, init_article_repo
 from peerpedia_core.crypto import temp_signing_key
 from peerpedia_core.storage.db.guards import require_authors_exist, require_title_nonempty, require_user
+from peerpedia_core.types.status import ArticleStatus
 
 
 def _write_initial_article(rp, *, title, content, abstract, keywords, categories, format) -> str:
@@ -41,7 +42,7 @@ def create_article_with_content(
     is signed via SSH and the pubkey is embedded in the commit message.
 
     Returns:
-        {"id": <article_id>, "title": ..., "status": "draft", "commit_hash": ...}
+        {"id": <article_id>, "title": ..., "status": ArticleStatus.DRAFT, "commit_hash": ...}
 
     Raises BadRequestError if the title is empty.
     Raises NotFoundError if any author is not found.
@@ -73,7 +74,7 @@ def create_article_with_content(
     a = create_article(
         db, id=article_id, title=title, abstract=abstract,
         keywords=keywords, categories=categories,
-        authors=author_ids, status="draft",
+        authors=author_ids, status=ArticleStatus.DRAFT,
     )
     a.last_author_rebuild_hash = commit_hash
 
@@ -81,4 +82,4 @@ def create_article_with_content(
     for aid in author_ids:
         add_maintainer(db, article_id, aid)
 
-    return {"id": article_id, "title": title, "status": "draft", "commit_hash": commit_hash}
+    return {"id": article_id, "title": title, "status": ArticleStatus.DRAFT, "commit_hash": commit_hash}

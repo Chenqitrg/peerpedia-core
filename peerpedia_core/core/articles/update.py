@@ -22,6 +22,7 @@ from peerpedia_core.core.articles._helpers import reset_sink
 from peerpedia_core.core.reconcile import reconcile_authors
 from peerpedia_core.storage.db.guards import authorize_article_action
 from peerpedia_core.storage.git.guards import require_article_repo
+from peerpedia_core.types.status import ArticleStatus
 
 def _rewrite_article_file(
     rp: Path, a, *, title, abstract, keywords, categories, content,
@@ -62,7 +63,7 @@ def update_article_content(
     old_status = a.status
 
     # ── Validation ─────────────────────────────────────────────────────────
-    if old_status == "sedimentation":
+    if old_status == ArticleStatus.SEDIMENTATION:
         guard_closes_trailer(message, article_id)
 
     # ── Write file ─────────────────────────────────────────────────────────
@@ -95,7 +96,7 @@ def update_article_content(
     reconcile_authors(db, article_id, since_hash=a.last_author_rebuild_hash)
 
     # ── Sink timer ─────────────────────────────────────────────────────────
-    if old_status in ("sedimentation", "published"):
+    if old_status in (ArticleStatus.SEDIMENTATION, ArticleStatus.PUBLISHED):
         extra = params.sink.edit_article_default_days
         reset_sink(db, article_id, rp, extra)
         if a.total_sink_days_accumulated + extra <= params.sink.max_total_sink_days:

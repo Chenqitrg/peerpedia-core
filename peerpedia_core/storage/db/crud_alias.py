@@ -6,16 +6,17 @@
 from sqlalchemy.orm import Session
 
 from peerpedia_core.storage.db._validators import require_alias_nonempty, require_not_same
-from peerpedia_core.storage.db.guards import require_following_for_alias
 from peerpedia_core.storage.db.models import AliasStorage, UserStorage
 
 
 def set_alias(session: Session, owner_id: str, target_id: str, alias: str) -> AliasStorage:
-    """Set or update an alias for *target_id*.  Upsert — overwrites if exists."""
+    """Set or update an alias for *target_id*.  Upsert — overwrites if exists.
+
+    Caller must validate via ``require_following_for_alias`` first.
+    """
     alias = alias.strip()
     require_alias_nonempty(alias)
     require_not_same(owner_id, target_id, label="alias")
-    require_following_for_alias(session, owner_id, target_id)
 
     a = session.query(AliasStorage).filter(
         AliasStorage.owner_id == owner_id, AliasStorage.target_id == target_id,
@@ -57,27 +58,33 @@ def list_aliases(session: Session, owner_id: str) -> list[AliasStorage]:
     )
 
 
-def resolve_username_or_alias(
-    session: Session, owner_id: str, name: str,
+def search_users_by_name_or_alias(
+    session: Session,
+    *,
+    name: str | None = None,
+    alias: str | None = None,
+    owner_id: str | None = None,
 ) -> list[UserStorage]:
-    """Find users by *name*, checking username first then aliases.
+    """Search users by name and/or alias.
 
-    Returns all matches (may be 0, 1, or multiple).  Caller handles
-    disambiguation — if multiple, prompt user to use UUID.
+    - If only *name* is given, returns users with that exact name.
+    - If only *alias* is given, returns users with that alias (scoped to
+      *owner_id* if provided, otherwise across all owners).
+    - If both are given, returns users matching both (intersection).
+    - If neither is given, returns an empty list.
     """
-    # Exact username match
-    by_name = (
-        session.query(UserStorage).filter(UserStorage.name == name).all()
-    )
-    if by_name:
-        return by_name
+    if name is None and alias is None:
+        return []
 
-    # Alias match — if owner_id is empty, search all users' aliases
-    q = (
-        session.query(UserStorage)
-        .join(AliasStorage, UserStorage.id == AliasStorage.target_id)
-        .filter(AliasStorage.alias == name)
-    )
-    if owner_id:
-        q = q.filter(AliasStorage.owner_id == owner_id)
+    q = session.query(UserStorage)
+
+    if name is not None:
+        q = q.filter(UserStorage.name == name)
+
+    if alias is not None:
+        q = q.join(AliasStorage, UserStorage.id == AliasStorage.target_id)
+        q = q.filter(AliasStorage.alias == alias)
+        if owner_id is not None:
+            q = q.filter(AliasStorage.owner_id == owner_id)
+
     return q.all()

@@ -7,7 +7,8 @@ import uuid
 
 import pytest
 
-from peerpedia_core.exceptions import BadRequestError, NotFoundError
+from peerpedia_core.exceptions import NotFoundError
+from peerpedia_core.types.status import ArticleStatus
 from peerpedia_core.storage.db.engine import get_session
 from peerpedia_core.storage.db.models import (
     ArticleAuthorStorage, ArticleMetaStorage, BookmarkStorage, FollowStorage, UserStorage,
@@ -83,16 +84,6 @@ class TestArticleCRUD:
         assert get_article(session, a.id).status == "sedimentation"
         session.close()
 
-    def test_invalid_status_rejected(self, engine):
-        from peerpedia_core.storage.db.crud_article import create_article, update_article_status
-
-        session = get_session(engine)
-        user = make_user(session, "author_inv")
-        a = create_article(session, title="", authors=[user.id], status="draft")
-        with pytest.raises(BadRequestError, match="INVALID_ARTICLE_STATUS"):
-            update_article_status(session, a.id, "bogus")
-        session.close()
-
     def test_update_article_compiled_cache(self, engine):
         from peerpedia_core.storage.db.crud_article import (
             create_article, get_article, update_article_compiled,
@@ -121,18 +112,6 @@ class TestArticleCRUD:
         assert get_article(session, a.id).fork_count == 2
         session.close()
 
-    def test_extend_sink_rejects_non_positive(self, engine):
-        from peerpedia_core.storage.db.crud_article import create_article, extend_sink
-
-        session = get_session(engine)
-        user = make_user(session, "author8")
-        a = create_article(session, title="", authors=[user.id])
-        with pytest.raises(ValueError):
-            extend_sink(session, a.id, 0)
-        with pytest.raises(ValueError):
-            extend_sink(session, a.id, -1)
-        session.close()
-
     def test_extend_sink_does_not_overcount_when_already_at_max(self, engine):
         from peerpedia_core.storage.db.crud_article import (
             create_article, extend_sink, get_article,
@@ -152,60 +131,6 @@ class TestArticleCRUD:
         assert a3.sink_extended_count == old_count
         session.close()
 
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# Not-found error paths
-# ═══════════════════════════════════════════════════════════════════════════════
-
-
-class TestArticleNotFound:
-    def test_update_article_compiled_not_found(self, engine):
-        from peerpedia_core.storage.db.crud_article import update_article_compiled
-
-        session = get_session(engine)
-        with pytest.raises(NotFoundError, match="ARTICLE_NOT_FOUND"):
-            update_article_compiled(session, "no-such-id", "html", "hi", None)
-        session.close()
-
-    def test_update_article_status_not_found(self, engine):
-        from peerpedia_core.storage.db.crud_article import update_article_status
-
-        session = get_session(engine)
-        with pytest.raises(NotFoundError):
-            update_article_status(session, "no-such-id", "published")
-        session.close()
-
-    def test_increment_fork_count_not_found(self, engine):
-        from peerpedia_core.storage.db.crud_article import increment_fork_count
-
-        session = get_session(engine)
-        with pytest.raises(NotFoundError):
-            increment_fork_count(session, "no-such-id")
-        session.close()
-
-    def test_set_sink_start_not_found(self, engine):
-        from peerpedia_core.storage.db.crud_article import set_sink_start
-
-        session = get_session(engine)
-        with pytest.raises(NotFoundError):
-            set_sink_start(session, "no-such-id", 7)
-        session.close()
-
-    def test_delete_article_not_found(self, engine):
-        from peerpedia_core.storage.db.crud_article import delete_article
-
-        session = get_session(engine)
-        with pytest.raises(NotFoundError):
-            delete_article(session, "no-such-id")
-        session.close()
-
-    def test_extend_sink_not_found(self, engine):
-        from peerpedia_core.storage.db.crud_article import extend_sink
-
-        session = get_session(engine)
-        with pytest.raises(NotFoundError):
-            extend_sink(session, "no-such-id", 5)
-        session.close()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

@@ -13,7 +13,7 @@ from peerpedia_core.rules.articles import assert_can_fork_article
 from peerpedia_core.core.reconcile import reconcile_integrity
 from peerpedia_core.storage.db.crud_article import (
     create_article,
-    get_article_by_fork_and_author,
+    is_article_forked_by_user,
     increment_fork_count,
 )
 from peerpedia_core.storage.db.crud_maintainer import add_maintainer
@@ -22,6 +22,7 @@ from peerpedia_core.storage.git import clone_article_repo, get_commit_authors
 
 from peerpedia_core.storage.db.guards import authorize_article_action
 from peerpedia_core.storage.git.guards import require_article_repo
+from peerpedia_core.types.status import ArticleStatus
 
 
 def fork_article(db: Session, article_id: str, user_id: str) -> dict[str, object]:
@@ -29,8 +30,8 @@ def fork_article(db: Session, article_id: str, user_id: str) -> dict[str, object
     reconcile_integrity(db, article_id, level="light")
 
     user, original, maintainer_ids = authorize_article_action(db, article_id, user_id)
-    existing_fork = get_article_by_fork_and_author(db, forked_from=article_id, author_id=user.id)
-    assert_can_fork_article(original, existing_fork, user=user, maintainer_ids=maintainer_ids)
+    already_forked = is_article_forked_by_user(db, original_article_id=article_id, user_id=user.id)
+    assert_can_fork_article(original, already_forked, user=user, maintainer_ids=maintainer_ids)
 
     fork_id = str(uuid.uuid4())
     src = require_article_repo(article_id)
@@ -43,9 +44,9 @@ def fork_article(db: Session, article_id: str, user_id: str) -> dict[str, object
     fork = create_article(
         db, id=fork_id, title=original.title, abstract=original.abstract,
         keywords=original.keywords, categories=original.categories,
-        authors=sorted(git_authors), status="draft", forked_from=article_id,
+        authors=sorted(git_authors), status=ArticleStatus.DRAFT, forked_from=article_id,
     )
     add_maintainer(db, fork_id, user_id)
     increment_fork_count(db, article_id)
 
-    return {"id": fork.id, "forked_from": article_id, "status": "draft"}
+    return {"id": fork.id, "forked_from": article_id, "status": ArticleStatus.DRAFT}

@@ -15,6 +15,7 @@ from peerpedia_core.app.commandspec.types import (
     ArgSpec, CommandSpec, CommandGroupSpec,
 )
 from peerpedia_core.types.scores import SCORE_FORMAT_EXAMPLE, _SCORE_DIMS_LIST
+from peerpedia_core.types.status import ArticleStatus
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Shared help strings
@@ -72,9 +73,9 @@ COMMAND_GROUPS: list[CommandGroupSpec] = [
         ]),
         CommandSpec("article.list", "article", "list", handler=_h.article_list, help_file="article_list", args=[
             ArgSpec("search", help="Fuzzy title search (case-insensitive)"),
-            ArgSpec("status", choices=["draft", "sedimentation", "published"], help="Filter by status"),
+            ArgSpec("status", choices=[ArticleStatus.DRAFT, ArticleStatus.SEDIMENTATION, ArticleStatus.PUBLISHED], help="Filter by status"),
             ArgSpec("feed", takes_value=False, help="Articles from followed users"),
-            ArgSpec("mine", takes_value=False, help="My articles"),
+            ArgSpec("mine", choices=["maintainer", "author"], help="My articles as maintainer (default) or author"),
             ArgSpec("bookmarked", takes_value=False, help="My bookmarked articles"),
             ArgSpec("user", help="Show articles by this user (requires --server for remote fetch)"),
             ArgSpec("server", help="Peer server URL for remote --user query"),

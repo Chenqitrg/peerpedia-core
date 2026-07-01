@@ -126,16 +126,17 @@ class TestShareCrud:
 
 class TestAliasCrud:
     def test_set_alias_requires_follow(self, db):
-        from peerpedia_core.storage.db.crud_alias import set_alias
+        from peerpedia_core.storage.db.guards import require_following_for_alias
 
         _make_user(db, "owner")
         _make_user(db, "target")
 
         from peerpedia_core.exceptions import BadRequestError
         with pytest.raises(BadRequestError, match="MUST_FOLLOW_FOR_ALIAS"):
-            set_alias(db, "owner", "target", "my-alias")
+            require_following_for_alias(db, "owner", "target")
 
     def test_set_alias_empty_raises(self, db):
+        from peerpedia_core.storage.db.guards import require_following_for_alias
         from peerpedia_core.storage.db.crud_alias import set_alias
         from peerpedia_core.storage.db.crud_follow import follow_user
 
@@ -147,6 +148,7 @@ class TestAliasCrud:
             set_alias(db, "owner", "target", "  ")
 
     def test_set_and_get_alias(self, db):
+        from peerpedia_core.storage.db.guards import require_following_for_alias
         from peerpedia_core.storage.db.crud_alias import set_alias, get_alias_for
         from peerpedia_core.storage.db.crud_follow import follow_user
 
@@ -158,6 +160,7 @@ class TestAliasCrud:
         assert get_alias_for(db, "owner", "target") == "bob"
 
     def test_set_alias_upserts(self, db):
+        from peerpedia_core.storage.db.guards import require_following_for_alias
         from peerpedia_core.storage.db.crud_alias import set_alias, get_alias_for
         from peerpedia_core.storage.db.crud_follow import follow_user
 
@@ -192,6 +195,7 @@ class TestAliasCrud:
         remove_alias(db, "owner", "target")  # should not raise
 
     def test_list_aliases(self, db):
+        from peerpedia_core.storage.db.guards import require_following_for_alias
         from peerpedia_core.storage.db.crud_alias import set_alias, list_aliases
         from peerpedia_core.storage.db.crud_follow import follow_user
 
@@ -207,9 +211,9 @@ class TestAliasCrud:
         assert len(aliases) == 2
         assert aliases[0].alias == "alice"  # sorted
 
-    def test_resolve_username_or_alias(self, db):
+    def test_search_users_by_name_or_alias(self, db):
         from peerpedia_core.storage.db.crud_alias import (
-            resolve_username_or_alias, set_alias,
+            search_users_by_name_or_alias, set_alias,
         )
         from peerpedia_core.storage.db.crud_follow import follow_user
 
@@ -218,19 +222,19 @@ class TestAliasCrud:
         follow_user(db, "owner", "target")
         set_alias(db, "owner", "target", "nick")
 
-        users = resolve_username_or_alias(db, "owner", "RealName")
+        users = search_users_by_name_or_alias(db, name="RealName")
         assert len(users) == 1
         assert users[0].id == "target"
 
-        users = resolve_username_or_alias(db, "owner", "nick")
+        users = search_users_by_name_or_alias(db, alias="nick", owner_id="owner")
         assert len(users) == 1
         assert users[0].id == "target"
 
-        users = resolve_username_or_alias(db, "owner", "nobody")
+        users = search_users_by_name_or_alias(db, name="nobody")
         assert len(users) == 0
 
-    def test_resolve_alias_requires_owner(self, db):
-        from peerpedia_core.storage.db.crud_alias import resolve_username_or_alias, set_alias
+    def test_search_alias_scoped_to_owner(self, db):
+        from peerpedia_core.storage.db.crud_alias import search_users_by_name_or_alias, set_alias
         from peerpedia_core.storage.db.crud_follow import follow_user
 
         _make_user(db, "owner")
@@ -239,5 +243,5 @@ class TestAliasCrud:
         follow_user(db, "owner", "target")
         set_alias(db, "owner", "target", "nick")
 
-        users = resolve_username_or_alias(db, "other", "nick")
+        users = search_users_by_name_or_alias(db, alias="nick", owner_id="other")
         assert len(users) == 0

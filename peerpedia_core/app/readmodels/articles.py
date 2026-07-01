@@ -17,7 +17,7 @@ from peerpedia_core.core import (
     list_articles as _list_articles,
     list_author_ids as _list_author_ids,
     list_author_ids_batch as _list_author_ids_batch,
-    list_users_by_ids as _list_users_by_ids,
+    map_user_ids_to_names as _map_user_ids_to_names,
     parse_frontmatter as _parse_frontmatter,
 )
 from peerpedia_core.storage.db import Session
@@ -26,17 +26,11 @@ from peerpedia_core.storage.db import Session
 # ── Author display ────────────────────────────────────────────────────────
 
 def resolve_author_names(db: Session, author_ids: list[str]) -> list[str]:
-    """Convert author UUIDs to display names.
-
-    UUIDs that can't be resolved are shown as 8-char prefixes.
-    """
+    """Convert author UUIDs to display names."""
     if not author_ids:
         return []
-    users = {u.id: u for u in _list_users_by_ids(db, set(author_ids))}
-    return [
-        users[uid].name if uid in users else uid
-        for uid in author_ids
-    ]
+    name_map = _map_user_ids_to_names(db, set(author_ids))
+    return [name_map[uid] for uid in author_ids]
 
 
 def list_author_ids(db: Session, article_id: str) -> list[str]:

@@ -20,6 +20,7 @@ from peerpedia_core.storage.db.crud_review import (
     get_pending_invitation, update_review_status,
 )
 from peerpedia_core.core.notifications import create_notification
+from peerpedia_core.types.status import ArticleStatus
 
 
 def invite_reviewer(
@@ -68,7 +69,7 @@ def _create_invitation(db, article_id: str, inviter_id: str, invited_id: str) ->
         article_id=article_id,
         commit_hash="pending",
         reviewer_id=invited_id,
-        scope="sedimentation",
+        scope=ArticleStatus.SEDIMENTATION,
         status="invited",
         scores={},
         invited_by=inviter_id,

@@ -5,12 +5,12 @@
 
 from datetime import datetime, timezone
 
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from peerpedia_core.exceptions import BadRequestError
 from peerpedia_core.storage.db._validators import require_merge_proposal_open, require_not_same
-from peerpedia_core.storage.db.models import MergeProposalStorage
+from peerpedia_core.storage.db.models import ArticleMetaStorage, MergeProposalStorage
+from peerpedia_core.types.status import ArticleStatus
 
 
 def create_merge_proposal(
@@ -19,11 +19,9 @@ def create_merge_proposal(
     target_id: str,
     proposer_id: str,
 ) -> MergeProposalStorage:
-    """Create a merge request from *fork_id* into *target_id*.
-
-    Raises BadRequestError if foreign key constraints fail (e.g. fork/target don't exist).
-    """
+    """Create a merge request from *fork_id* into *target_id*."""
     require_not_same(fork_id, target_id, label="merge")
+
     mp = MergeProposalStorage(
         fork_article_id=fork_id,
         target_article_id=target_id,
@@ -31,20 +29,7 @@ def create_merge_proposal(
         status="open",
     )
     session.add(mp)
-    try:
-        session.flush()
-    except IntegrityError as e:
-        session.rollback()
-        msg = str(e).lower()
-        if "foreign key" in msg:
-            raise BadRequestError(
-                "Cannot create merge proposal: one of the articles does not exist. "
-                "Check that both the fork and target article IDs are correct.",
-                field="fork_id" if "fork" in msg else "target_id",
-            ) from e
-        raise BadRequestError(
-            f"Cannot create merge proposal: {e}",
-        ) from e
+    session.flush()
     return mp
 
 
@@ -63,10 +48,8 @@ def get_merge_proposals_for_article(session: Session, article_id: str) -> list[M
     )
 
 
-def _resolve(session: Session, proposal_id: str, new_status: str) -> MergeProposalStorage:
+def _resolve(session: Session, proposal_id: str, new_status: ArticleStatus) -> MergeProposalStorage:
     mp = session.get(MergeProposalStorage, proposal_id)
-    if mp is None:
-        raise ValueError("MERGE_PROPOSAL_NOT_FOUND")
     require_merge_proposal_open(mp)
     mp.status = new_status
     mp.resolved_at = datetime.now(timezone.utc)
@@ -81,7 +64,7 @@ def accept_merge_proposal(session: Session, proposal_id: str) -> MergeProposalSt
 
 def reject_merge_proposal(session: Session, proposal_id: str) -> MergeProposalStorage:
     """Intentionally unwired — target maintainers cannot reject contributions."""
-    return _resolve(session, proposal_id, "rejected")
+    return _resolve(session, proposal_id, ArticleStatus.REJECTED)
 
 
 def withdraw_merge_proposal(session: Session, proposal_id: str) -> MergeProposalStorage:

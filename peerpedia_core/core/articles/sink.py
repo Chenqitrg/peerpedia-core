@@ -18,11 +18,12 @@ from peerpedia_core.storage.git import DEFAULT_ARTICLES_DIR, commit_status_marke
 from peerpedia_core.types.scores import FiveDimScores
 from peerpedia_core.compute.sedimentation import apply_no_review_penalty, is_ready_to_publish
 from peerpedia_core.core.reconcile import reconcile_many_reputations, reconcile_score
+from peerpedia_core.types.status import ArticleStatus
 
 
 def publish_ready_articles(db: Session) -> int:
     """Scan sedimentation pool, publish/reject articles whose sink has elapsed."""
-    articles = list_articles(db, statuses={"sedimentation"})
+    articles = list_articles(db, statuses={ArticleStatus.SEDIMENTATION})
 
     affected_authors: set[str] = set()
     processed = 0
@@ -103,12 +104,12 @@ def _publish(db: Session, article) -> None:
     """Graduate article to published — write git marker, compute score, update DB."""
     rp = DEFAULT_ARTICLES_DIR / article.id
     if (rp / ".git").is_dir():
-        commit_status_marker(rp, "published")
+        commit_status_marker(rp, ArticleStatus.PUBLISHED)
     score = reconcile_score(db, article.id)
     if score is None:
         score = apply_no_review_penalty(FiveDimScores().to_dict())
     update_article_score(db, article.id, score)
-    update_article_status(db, article.id, "published")
+    update_article_status(db, article.id, ArticleStatus.PUBLISHED)
 
 
 def _can_extend(article) -> bool:
@@ -129,8 +130,8 @@ def _reject(db: Session, article) -> None:
     """Reject the article — write git marker, update DB status."""
     rp = DEFAULT_ARTICLES_DIR / article.id
     if (rp / ".git").is_dir():
-        commit_status_marker(rp, "rejected")
-    update_article_status(db, article.id, "rejected")
+        commit_status_marker(rp, ArticleStatus.REJECTED)
+    update_article_status(db, article.id, ArticleStatus.REJECTED)
 
 
 # ── Review counting ─────────────────────────────────────────────────────────

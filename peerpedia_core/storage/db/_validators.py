@@ -14,6 +14,7 @@ from typing import Any
 
 from peerpedia_core.exceptions import BadRequestError
 from peerpedia_core.storage.db.models import ArticleMetaStorage, MergeProposalStorage
+from peerpedia_core.types.status import ArticleStatus
 
 
 # ── Self-reference ─────────────────────────────────────────────────────────
@@ -85,13 +86,13 @@ def validate_follow_entries(
 
 def require_draft_status(article: ArticleMetaStorage) -> None:
     """Raise BadRequestError if the article is not in draft status."""
-    if article.status != "draft":
+    if article.status != ArticleStatus.DRAFT:
         raise BadRequestError(code="VALIDATION_FAILED")
 
 
 def require_sedimentation(article: ArticleMetaStorage) -> None:
     """Raise BadRequestError if the article is not in sedimentation."""
-    if article.status != "sedimentation":
+    if article.status != ArticleStatus.SEDIMENTATION:
         raise BadRequestError(code="SEDIMENTATION_INVITE_ONLY")
 
 

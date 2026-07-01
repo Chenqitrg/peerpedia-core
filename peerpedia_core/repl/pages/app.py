@@ -359,7 +359,7 @@ class ReplApplication:
             ctx = build_context(db)
             spec = spec_for_cmd_id("article.list")
             result = spec.handler(ctx, {"search": "", "status": "",
-                                         "mine": cmd == "mine",
+                                         "mine": "maintainer" if cmd == "mine" else None,
                                          "feed": cmd == "feed"})
             articles = result.data.get("items", []) if result.data else []
         finally:

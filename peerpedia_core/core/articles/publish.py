@@ -25,6 +25,7 @@ from peerpedia_core.storage.db.crud_follow import get_followers
 from peerpedia_core.storage.git import commit_status_marker
 from peerpedia_core.core.reviews import write_review_to_git
 from peerpedia_core.core.notifications import create_notifications_batch
+from peerpedia_core.types.status import ArticleStatus
 
 
 def _build_publish_notifications(db: Session, article_id: str, a, user) -> list[dict]:
@@ -78,10 +79,10 @@ def publish_article(
         article_id, user_id, self_review, comment, user.name, make_peerpedia_email(user_id),
         signing_key_bytes=signing_key_bytes, pubkey_hex=pubkey_hex,
     )
-    commit_hash = commit_status_marker(article_repo_path(article_id), "sedimentation")
+    commit_hash = commit_status_marker(article_repo_path(article_id), ArticleStatus.SEDIMENTATION)
 
     # ── Update DB ──────────────────────────────────────────────────────────
-    update_article_status(db, article_id, "sedimentation")
+    update_article_status(db, article_id, ArticleStatus.SEDIMENTATION)
     upsert_review(
         db, article_id=article_id, commit_hash=commit_hash,
         reviewer_id=user_id, scores=self_review,

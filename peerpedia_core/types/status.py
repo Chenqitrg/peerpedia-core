@@ -3,7 +3,7 @@
 
 """Canonical article status values and status-tag parsing.
 
-Import from here instead of hardcoding status sets in individual modules.
+Import from here instead of hardcoding status strings in individual modules.
 The ``parse_status_tag`` function is the single parser for ``[status]``
 markers in platform commit messages — used by both ``app/commands/bundle.py``
 and integrity checking without creating a circular import.
@@ -11,9 +11,25 @@ and integrity checking without creating a circular import.
 
 from __future__ import annotations
 
+from enum import Enum
+
 from peerpedia_core.config.params import PLATFORM_EMAIL
 
-VALID_ARTICLE_STATUSES = frozenset({"draft", "sedimentation", "published", "rejected"})
+
+class ArticleStatus(str, Enum):
+    """Canonical article lifecycle statuses.
+
+    A ``str`` subclass so status values work as drop-in replacements for
+    the raw strings used in DB columns, JSON serialisation, and comparisons.
+    """
+
+    DRAFT = "draft"
+    SEDIMENTATION = "sedimentation"
+    PUBLISHED = "published"
+    REJECTED = "rejected"
+
+
+VALID_ARTICLE_STATUSES = frozenset(s.value for s in ArticleStatus)
 _VALID_STATUSES = set(VALID_ARTICLE_STATUSES)
 
 

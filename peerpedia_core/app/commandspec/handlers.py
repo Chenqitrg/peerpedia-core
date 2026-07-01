@@ -67,7 +67,7 @@ def article_list(ctx: AppContext, args: dict[str, Any]) -> AppResult:
     return _article.list_articles(ctx,
         search_query=args.get("search"),
         status_arg=args.get("status"),
-        mine=args.get("mine", False),
+        mine=args.get("mine"),
         feed=args.get("feed", False),
         bookmarked=args.get("bookmarked", False),
         user_ref=args.get("user"),

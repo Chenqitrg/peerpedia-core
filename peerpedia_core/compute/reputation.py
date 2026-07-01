@@ -148,6 +148,7 @@ Dimension mapping (5 article dims → 4 reputation dims, PLACEHOLDER)
 from peerpedia_core.config.params import params
 from peerpedia_core.types.scores import FiveDimScores, ReputationScores
 from peerpedia_core.compute.state import ReputationState
+from peerpedia_core.types.status import ArticleStatus
 
 # Field names derived from dataclasses — single source of truth, never hardcoded.
 _REP_FIELDS = tuple(ReputationScores.__dataclass_fields__.keys())
@@ -156,9 +157,9 @@ _ARTICLE_DIMS = set(FiveDimScores.__dataclass_fields__.keys())
 # Status-based weights for article scoring in reputation.
 # Published articles carry the most weight.
 _STATUS_WEIGHTS = {
-    "published": 1.0,
-    "sedimentation": 0.7,
-    "draft": 0.3,
+    ArticleStatus.PUBLISHED: 1.0,
+    ArticleStatus.SEDIMENTATION: 0.7,
+    ArticleStatus.DRAFT: 0.3,
 }
 
 # Mapping from the 5 article-score dimensions to the 4 reputation dimensions.

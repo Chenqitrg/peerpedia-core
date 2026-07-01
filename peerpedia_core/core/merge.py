@@ -63,6 +63,7 @@ from peerpedia_core.storage.git import (
     MergeConflictError, get_head_hash, merge_git_repos,
 )
 from peerpedia_core.core.reconcile import reconcile_authors
+from peerpedia_core.types.status import ArticleStatus
 
 
 def _notify_maintainers_except(db, target_id, proposer_id, proposer_name):
@@ -86,7 +87,7 @@ def accept_merge(db: Session, article_id: str, proposal_id: str, user_id: str) -
     assert_can_accept_merge(article, mids, user)
 
     mp = require_open_proposal(db, proposal_id, article_id)
-    was_published = article.status == "published"
+    was_published = article.status == ArticleStatus.PUBLISHED
 
     # ── Git merge ──────────────────────────────────────────────────────────
     target_repo = require_article_repo(article_id)

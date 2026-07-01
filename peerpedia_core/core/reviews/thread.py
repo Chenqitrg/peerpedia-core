@@ -22,6 +22,7 @@ from peerpedia_core.crypto import temp_signing_key
 from peerpedia_core.storage.git import commit_article
 from peerpedia_core.storage.locks import get_article_lock
 from peerpedia_core.core.notifications import create_notification
+from peerpedia_core.types.status import ArticleStatus
 
 
 def submit_reply(
@@ -105,7 +106,7 @@ def write_review_to_git(
 
 def _resolve_review_identity(article, user, reviewer_ref, *, signing_key_bytes):
     """Return (directory_id, display_name, email) for a review write."""
-    if article.status == "sedimentation":
+    if article.status == ArticleStatus.SEDIMENTATION:
         anon_id = _derive_anonymous_id(article.id, signing_key=signing_key_bytes)
         return anon_id, derive_anonymous_name(anon_id), make_peerpedia_email(f"anon-{anon_id}")
     return reviewer_ref, user.name, make_peerpedia_email(user.id)

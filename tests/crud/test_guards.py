@@ -314,7 +314,7 @@ class TestRequireOpenProposal:
         author = make_user(session, "author")
         forker = make_user(session, "forker")
         original = make_article(session, authors=[author.id])
-        fork = make_article(session, authors=[forker.id])
+        fork = make_article(session, authors=[forker.id], forked_from=original.id)
         mp = _make_merge_proposal(session, fork.id, original.id, forker.id)
         result = require_open_proposal(session, mp.id, original.id)
         assert result.status == "open"
@@ -332,7 +332,7 @@ class TestRequireOpenProposal:
         forker = make_user(session, "forker")
         a1 = make_article(session, authors=[author.id])
         a2 = make_article(session, authors=[author.id])
-        fork = make_article(session, authors=[forker.id])
+        fork = make_article(session, authors=[forker.id], forked_from=a1.id)
         mp = _make_merge_proposal(session, fork.id, a1.id, forker.id)
         with pytest.raises(BadRequestError, match="MERGE_PROPOSAL_WRONG_ARTICLE"):
             require_open_proposal(session, mp.id, a2.id)
@@ -343,7 +343,7 @@ class TestRequireOpenProposal:
         author = make_user(session, "author")
         forker = make_user(session, "forker")
         original = make_article(session, authors=[author.id])
-        fork = make_article(session, authors=[forker.id])
+        fork = make_article(session, authors=[forker.id], forked_from=original.id)
         mp = _make_merge_proposal(session, fork.id, original.id, forker.id, closed=True)
         with pytest.raises(BadRequestError, match="MERGE_PROPOSAL_CLOSED"):
             require_open_proposal(session, mp.id, original.id)

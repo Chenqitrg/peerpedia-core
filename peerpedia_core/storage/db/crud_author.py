@@ -6,10 +6,9 @@ r"""Article author CRUD — join table management, ``session.flush()`` only.
 Functions
 ---------
   add_article_authors       Insert ArticleAuthorStorage rows
-  set_article_authors       Replace all authors (delete + re-insert)
+  reset_article_authors     Delete all authors + re-insert
   list_author_ids           Ordered author list for one article
   list_author_ids_batch     Batch version for multiple articles
-  list_articles_by_author   All articles where user is an author
 """
 
 from __future__ import annotations
@@ -17,9 +16,7 @@ from __future__ import annotations
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from peerpedia_core.storage.db.models import (
-    ArticleMetaStorage, ArticleAuthorStorage,
-)
+from peerpedia_core.storage.db.models import ArticleAuthorStorage
 
 
 def add_article_authors(session: Session, article_id: str, author_ids: list[str]) -> None:
@@ -45,8 +42,8 @@ def add_article_authors(session: Session, article_id: str, author_ids: list[str]
         )
 
 
-def set_article_authors(session: Session, article_id: str, author_ids: list[str]) -> None:
-    """Replace all author rows for an article (delete + re-insert)."""
+def reset_article_authors(session: Session, article_id: str, author_ids: list[str]) -> None:
+    """Delete all author rows for *article_id* and re-insert *author_ids*."""
     session.query(ArticleAuthorStorage).filter(ArticleAuthorStorage.article_id == article_id).delete()
     add_article_authors(session, article_id, author_ids)
 
@@ -75,13 +72,3 @@ def list_author_ids_batch(session: Session, article_ids: list[str]) -> dict[str,
     for r in rows:
         result[r.article_id].append(r.author_id)
     return result
-
-
-def list_articles_by_author(session: Session, author_id: str) -> list[ArticleMetaStorage]:
-    """List all articles where *author_id* is an author."""
-    return (
-        session.query(ArticleMetaStorage)
-        .join(ArticleAuthorStorage, ArticleMetaStorage.id == ArticleAuthorStorage.article_id)
-        .filter(ArticleAuthorStorage.author_id == author_id)
-        .all()
-    )

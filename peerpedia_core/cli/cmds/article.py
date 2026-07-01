@@ -75,7 +75,7 @@ def _show_empty_article_state(args) -> AppResult | None:
     if getattr(args, "feed", False):
         display_empty_article_list("N_NO_ARTICLES_FEED")
         display_empty_article_list("N_NO_ARTICLES_FEED_HINT")
-    elif getattr(args, "mine", False):
+    elif getattr(args, "mine", None):
         display_empty_article_list("N_NO_ARTICLES_MINE")
         display_empty_article_list("N_NO_ARTICLES_MINE_HINT")
     else:
@@ -100,7 +100,7 @@ def _cmd_article_list(ctx, args):
     result = _article.list_articles(ctx,
         search_query=args.search or None,
         status_arg=getattr(args, "status", None),
-        mine=getattr(args, "mine", False),
+        mine=getattr(args, "mine", None),
         feed=getattr(args, "feed", False),
         bookmarked=getattr(args, "bookmarked", False),
         user_ref=getattr(args, "user", None),

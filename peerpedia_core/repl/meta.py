@@ -22,11 +22,12 @@ from peerpedia_core.presentation.rich.components import (
 )
 from peerpedia_core.repl.state import console, new_session
 import peerpedia_core.repl.state as _st
+from peerpedia_core.types.status import ArticleStatus
 
 
 def _format_sink_bar(article) -> str:
     """Compute sedimentation progress, return Rich-markup label or ''."""
-    if article.status != "sedimentation" or not article.sink_start:
+    if article.status != ArticleStatus.SEDIMENTATION or not article.sink_start:
         return ""
     now = datetime.now(timezone.utc)
     start = article.sink_start.replace(tzinfo=timezone.utc) if article.sink_start.tzinfo is None else article.sink_start

@@ -48,11 +48,11 @@ class TestUserSearch:
         assert len(result) == 1
         assert result[0].name == "Alice Johnson"
 
-    def test_list_newest_first(self, db):
-        from peerpedia_core.core.users import create_user, list_users
+    def test_list_recent_users_newest_first(self, db):
+        from peerpedia_core.core.users import create_user, list_recent_users
         create_user(db, name="Older", public_key="00" * 32)
         create_user(db, name="Newer", public_key="11" * 32)
-        assert list_users(db)[0].name == "Newer"
+        assert list_recent_users(db, limit=10)[0].name == "Newer"
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

@@ -18,8 +18,8 @@ upsert_review(session, article_id, commit_hash, reviewer_id, scores) → Review
     ``sync_reviews_from_worktree`` (sync).
 
     Scope is set to ``article.status`` at the time of the call — so
-    reviews written during sedimentation are tagged ``scope="sedimentation"``
-    and reviews written after publish are tagged ``scope="published"``.
+    reviews written during sedimentation are tagged ``scope=ArticleStatus.SEDIMENTATION``
+    and reviews written after publish are tagged ``scope=ArticleStatus.PUBLISHED``.
 
 get_reviews_for_article(session, article_id) → list[ReviewMetaStorage]
     All cached reviews for an article, newest first.  Used by
@@ -37,8 +37,8 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from peerpedia_core.exceptions import NotFoundError
 from peerpedia_core.storage.db.models import ArticleMetaStorage, ReviewMetaStorage
+from peerpedia_core.types.status import ArticleStatus
 
 
 def upsert_review(
@@ -50,20 +50,14 @@ def upsert_review(
 ) -> ReviewMetaStorage:
     """Create or update the scores cache for a review.
 
-    Called AFTER review files are committed to git.  Scope is the
-    article's current status.  Uses
+    Called AFTER review files are committed to git.  The caller MUST
+    have validated that *article_id* exists (``require_article`` in the
+    orchestration layer).
+
+    Scope is the article's current status.  Uses
     (article_id, reviewer_id, scope, commit_hash) as the unique key.
-
-    Raises ValueError if the article is not found.
     """
-    from sqlalchemy.orm import load_only  # noqa: PLC0415
-
-    article = session.get(
-        ArticleMetaStorage, article_id,
-        options=[load_only(ArticleMetaStorage.status)],
-    )
-    if article is None:
-        raise NotFoundError(code="ARTICLE_NOT_FOUND", resource_type="article", resource_id=article_id)
+    article = session.get(ArticleMetaStorage, article_id)
 
     existing = (
         session.query(ReviewMetaStorage)
@@ -143,7 +137,7 @@ def get_accepted_invitation(
 def update_review_status(
     session: Session,
     review: ReviewMetaStorage,
-    status: str,
+    status: ArticleStatus,
 ) -> None:
     """Update the status of a ReviewMetaStorage row and flush.
 

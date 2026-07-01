@@ -32,6 +32,7 @@ from peerpedia_core.core.sync_social import discover_articles
 from peerpedia_core.exceptions import BadRequestError
 from peerpedia_core.rules.articles import visible_statuses_for_user
 from peerpedia_core.storage.db._validators import require_draft_status
+from peerpedia_core.types.status import ArticleStatus
 
 
 def show(ctx: AppContext, *, article_ref: str) -> AppResult:
@@ -53,7 +54,7 @@ def list_articles(
     ctx: AppContext, *,
     search_query: str | None = None,
     status_arg: str | None = None,
-    mine: bool = False,
+    mine: str | None = None,
     feed: bool = False,
     bookmarked: bool = False,
     user_ref: str | None = None,
@@ -166,7 +167,7 @@ def scan(ctx: AppContext) -> AppResult:
     count = publish_ready_articles(ctx.db)
     ctx.db.commit()
     code = "ARTICLE_SCANNED" if count else "ARTICLE_SCANNED_EMPTY"
-    return AppResult(code, data={"published": count}, params={"count": count})
+    return AppResult(code, data={ArticleStatus.PUBLISHED: count}, params={"count": count})
 
 
 def diff(ctx: AppContext, *, article_ref: str, hash1: str | None = None,
@@ -208,7 +209,7 @@ def _resolve_user_ref(ctx: AppContext, user_ref: str | None) -> str | None:
 def _article_list_filters(
     ctx: AppContext, *,
     status_arg: str | None = None,
-    mine: bool = False,
+    mine: str | None = None,
     feed: bool = False,
     bookmarked: bool = False,
     user_ref: str | None = None,
@@ -217,12 +218,17 @@ def _article_list_filters(
     me = ctx.current_user_id or ""
 
     author_id = user_ref
+    maintainer_id: str | None = None
+    is_mine = bool(mine)
     if mine:
-        author_id = me
+        if mine == "author":
+            author_id = me
+        else:
+            maintainer_id = me  # "maintainer" or bare --mine flag
 
-    if status_arg == "draft" and not mine:
-        mine = True
-    if mine:
+    if status_arg == ArticleStatus.DRAFT and not is_mine:
+        is_mine = True
+    if is_mine:
         status = status_arg or None
     elif status_arg:
         status = status_arg
@@ -230,12 +236,13 @@ def _article_list_filters(
         user_obj = get_user(ctx.db, me) if me else None
         status = visible_statuses_for_user(user_obj)
 
-    if feed and not mine:
-        status = status - {"draft"} if status else None
+    if feed and not is_mine:
+        status = status - {ArticleStatus.DRAFT} if status else None
 
     return {
         "status": status,
         "author_id": author_id,
+        "maintainer_id": maintainer_id,
         "viewer_id": me if feed else None,
         "bookmarked_by": (user_ref or me) if bookmarked else None,
     }

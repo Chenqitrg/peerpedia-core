@@ -100,8 +100,9 @@ from peerpedia_core.core.reviews import (
 from peerpedia_core.core.users import (
     create_user, create_user_stub, find_users, follow_user,
     get_followers, get_following, get_top_users_by_followers,
-    get_user, list_users_by_name, increment_failed_login, is_following,
-    list_users, require_authenticable_user, reset_failed_login,
+    get_user, list_active_users, list_recent_users, list_users_by_name,
+    increment_failed_login, is_following,
+    require_authenticable_user, reset_failed_login,
     search_users, soft_delete_user, unfollow_user, update_user_public_key,
     update_user_salt, verify_user_password,
 )
@@ -109,8 +110,8 @@ from peerpedia_core.core.users import (
 # ── Maintainers ──────────────────────────────────────────────────────────────
 
 from peerpedia_core.core.maintainers import (
-    add_maintainer_to_article, consent_to_publish, list_maintainers,
-    remove_maintainer_from_article, revoke_publish_consent,
+    add_maintainer_to_article, consent_to_publish, list_articles_by_maintainer,
+    list_maintainers, remove_maintainer_from_article, revoke_publish_consent,
 )
 
 # ── Merge ────────────────────────────────────────────────────────────────────
@@ -165,9 +166,9 @@ from peerpedia_core.storage.db.ingest import (
 
 from peerpedia_core.storage.db.crud_article import create_article_from_orm; from peerpedia_core.storage.db.crud_author import list_author_ids_batch
 from peerpedia_core.storage.db.crud_alias import (
-    list_aliases, remove_alias, resolve_username_or_alias, set_alias,
+    list_aliases, remove_alias, search_users_by_name_or_alias, set_alias,
 )
-from peerpedia_core.storage.db.crud_user import list_users_by_ids
+from peerpedia_core.storage.db.crud_user import list_users_by_ids, map_user_ids_to_names
 from peerpedia_core.storage.git import (
     get_commit_history, get_head_hash, read_article_source,
 )

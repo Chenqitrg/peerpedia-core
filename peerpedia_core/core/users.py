@@ -15,9 +15,10 @@ from peerpedia_core.storage.db.models import FollowStorage, UserStorage
 from peerpedia_core.storage.db.crud_user import (
     create_user as _create,
     create_user_stub as _create_stub,
-    get_user as _get,
+    get_user_by_id as _get,
     increment_failed_login as _increment_failed,
-    list_users as _list_users,
+    list_active_users as _list_active_users,
+    list_recent_users as _list_recent_users,
     list_users_by_name as _get_by_name,
     reset_failed_login as _reset_failed,
     search_users as _search_users,
@@ -137,14 +138,19 @@ def search_users(db: Session, query: str, limit: int | None = None, offset: int 
     return _search_users(db, query, limit=limit, offset=offset)
 
 
-def list_users(db: Session) -> list[UserStorage]:
-    """Return all active users, newest first."""
-    return _list_users(db)
+def list_active_users(db: Session) -> list[UserStorage]:
+    """Return all active users."""
+    return _list_active_users(db)
 
 
-def increment_failed_login(db: Session, user_id: str) -> None:
+def list_recent_users(db: Session, limit: int = 20) -> list[UserStorage]:
+    """Return active users, newest first."""
+    return _list_recent_users(db, limit=limit)
+
+
+def increment_failed_login(db: Session, user: UserStorage) -> None:
     """Increment the failed-login counter. Locks the account at threshold."""
-    _increment_failed(db, user_id)
+    _increment_failed(db, user)
 
 
 def reset_failed_login(db: Session, user_id: str) -> None:
@@ -176,7 +182,7 @@ def verify_user_password(db: Session, user: UserStorage, password: str) -> None:
     """Raise if password does not match.  Tracks failed-login attempts."""
     _, pubkey_bytes = derive_key_pair(password, user.salt)
     if pubkey_bytes.hex() != user.public_key:
-        increment_failed_login(db, user.id)
+        increment_failed_login(db, user)
         raise BadRequestError(code="AUTH_FAILED")
     reset_failed_login(db, user.id)
 

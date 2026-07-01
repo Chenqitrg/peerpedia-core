@@ -293,18 +293,32 @@ def test_storage_db_only_imports_within_db():
             "peerpedia_core.types.entities",
         },
         # CRUD functions read config for defaults/limits
+        "peerpedia_core/storage/db/crud_article.py": {
+            "peerpedia_core.types.status",
+        },
+        "peerpedia_core/storage/db/crud_merge.py": {
+            "peerpedia_core.types.status",
+        },
+        "peerpedia_core/storage/db/crud_review.py": {
+            "peerpedia_core.types.status",
+        },
         "peerpedia_core/storage/db/crud_user.py": {
             "peerpedia_core.config.params",
         },
         "peerpedia_core/storage/db/guards.py": {
             "peerpedia_core.config.params",
             "peerpedia_core.rules.articles",
+            "peerpedia_core.types.status",
         },
         "peerpedia_core/storage/db/ingest.py": {
             "peerpedia_core.types.entities",
         },
         "peerpedia_core/storage/db/models.py": {
             "peerpedia_core.types.entities",
+            "peerpedia_core.types.status",
+        },
+        "peerpedia_core/storage/db/_validators.py": {
+            "peerpedia_core.types.status",
         },
         "peerpedia_core/storage/db/state.py": {
             "peerpedia_core.compute.state",
@@ -322,6 +336,21 @@ def test_storage_db_only_imports_within_db():
                 raise AssertionError(
                     f"{rel}: imports {m} — storage/db/ is a closed layer, "
                     "only import from within storage/db/"
+                )
+
+
+def test_crud_never_imports_guards():
+    """crud_*.py files may not import from guards.py — guards are for the
+    orchestration layer (core/) to call before CRUD."""
+    for f in _all_modules():
+        rel = _rel(f)
+        if "/storage/db/crud_" not in rel:
+            continue
+        for m, _name, _internal in _imports(f):
+            if m.endswith(".guards") or m.endswith("/guards"):
+                raise AssertionError(
+                    f"{rel}: imports {m} — crud modules must not import guards. "
+                    "Move the guard call to the caller in core/."
                 )
 
 

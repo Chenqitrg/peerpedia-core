@@ -20,12 +20,12 @@ CRUD
     set_sink_start            Enter sedimentation + start timer
     delete_article            Hard delete + cascade (reviews, bookmarks, etc.)
     extend_sink               Author extends sink duration
-    get_article_by_fork_and_author  Find fork by (original, author)
+    is_article_forked_by_user    True if user already forked this article
 
 Status validation (G7)
 ----------------------
-``update_article_status`` only accepts ``{"draft", "sedimentation",
-"published"}``.  Any other value raises ``ValueError``.
+``update_article_status`` only accepts ``{ArticleStatus.DRAFT, ArticleStatus.SEDIMENTATION,
+ArticleStatus.PUBLISHED}``.  Any other value raises ``ValueError``.
 
 Reviewer's checklist
 --------------------
@@ -40,13 +40,13 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from peerpedia_core.exceptions import BadRequestError, NotFoundError
 from peerpedia_core.storage.db.models import (
     ArticleMetaStorage, ArticleAuthorStorage, BookmarkStorage, CitationStorage, FollowStorage, MergeProposalStorage,
     ReviewMetaStorage, ScriptMaintainerStorage,
 )
 from peerpedia_core.storage.db.crud_author import add_article_authors
 from peerpedia_core.storage.db.crud_user import create_user_stub
+from peerpedia_core.types.status import ArticleStatus
 
 
 # ── CRUD ──────────────────────────────────────────────────────────────────
@@ -56,7 +56,7 @@ def create_article(
     session: Session,
     authors: list[str],
     title: str,
-    status: str = "draft",
+    status: ArticleStatus = ArticleStatus.DRAFT,
     **kwargs,
 ) -> ArticleMetaStorage:
     """Create a new article record with author rows in the join table."""
@@ -118,10 +118,11 @@ def get_article(session: Session, article_id: str) -> ArticleMetaStorage | None:
 
 def list_articles(
     session: Session,
-    statuses: set[str] | None = None,
+    statuses: set[ArticleStatus] | None = None,
     search_query: str | None = None,
     id_prefix: str | None = None,
     author_ids: set[str] | None = None,
+    maintainer_id: str | None = None,
     viewer_id: str | None = None,
     bookmarked_by: str | None = None,
     limit: int | None = None,
@@ -148,6 +149,10 @@ def list_articles(
         q = q.join(ArticleAuthorStorage, ArticleAuthorStorage.article_id == ArticleMetaStorage.id)\
              .filter(ArticleAuthorStorage.author_id.in_(followed_sub))
         joined = True
+    if maintainer_id:
+        q = q.join(ScriptMaintainerStorage, ArticleMetaStorage.id == ScriptMaintainerStorage.article_id)
+        joined = True
+        q = q.filter(ScriptMaintainerStorage.user_id == maintainer_id)
     if bookmarked_by:
         q = q.join(BookmarkStorage, BookmarkStorage.article_id == ArticleMetaStorage.id)\
              .filter(BookmarkStorage.user_id == bookmarked_by)
@@ -164,7 +169,7 @@ def list_all_article_ids(session: Session) -> list[str]:
     """List every article ID.  Lightweight — only fetches the ``id`` column."""
     return [row[0] for row in session.query(ArticleMetaStorage.id).all()]
 
-def count_articles(session: Session, statuses: set[str] | None = None, author_id: str | None = None) -> int:
+def count_articles(session: Session, statuses: set[ArticleStatus] | None = None, author_id: str | None = None) -> int:
     """Count articles matching optional status and author filters."""
     q = session.query(ArticleMetaStorage)
     if statuses:
@@ -194,26 +199,19 @@ def update_article_compiled(
         {"compiled_format": html_format, "compiled_output": output, "compiled_pages": pages},
         synchronize_session="fetch",
     )
-    if rows == 0:
-        raise NotFoundError(code="ARTICLE_NOT_FOUND", resource_type="article", resource_id=article_id)
     session.expire_all()
 
 
-def update_article_status(session: Session, article_id: str, new_status: str) -> None:
+def update_article_status(session: Session, article_id: str, new_status: ArticleStatus) -> None:
     """Transition *article_id* to *new_status*.  Raises NotFoundError if not found.
 
     Uses targeted UPDATE to avoid loading ``compiled_output`` (which may
     be 100KB+).  Expires the session afterward so subsequent ``get()``
     calls reload from DB.
     """
-    _VALID_STATUSES = {"draft", "sedimentation", "published", "rejected"}
-    if new_status not in _VALID_STATUSES:
-        raise BadRequestError(code="INVALID_ARTICLE_STATUS")
     rows = session.query(ArticleMetaStorage).filter(ArticleMetaStorage.id == article_id).update(
         {"status": new_status}, synchronize_session="fetch"
     )
-    if rows == 0:
-        raise NotFoundError(code="ARTICLE_NOT_FOUND", resource_type="article", resource_id=article_id)
     session.expire_all()
 
 
@@ -222,8 +220,6 @@ def update_article_score(session: Session, article_id: str, score: dict[str, flo
     rows = session.query(ArticleMetaStorage).filter(ArticleMetaStorage.id == article_id).update(
         {"score": score}, synchronize_session="fetch"
     )
-    if rows == 0:
-        raise NotFoundError(code="ARTICLE_NOT_FOUND", resource_type="article", resource_id=article_id)
     session.expire_all()
 
 
@@ -232,8 +228,6 @@ def increment_fork_count(session: Session, article_id: str) -> None:
     rows = session.query(ArticleMetaStorage).filter(ArticleMetaStorage.id == article_id).update(
         {"fork_count": ArticleMetaStorage.fork_count + 1}, synchronize_session="fetch"
     )
-    if rows == 0:
-        raise NotFoundError(code="ARTICLE_NOT_FOUND", resource_type="article", resource_id=article_id)
     session.expire_all()
 
 
@@ -244,8 +238,6 @@ def decrement_fork_count(session: Session, article_id: str) -> None:
         {"fork_count": case((ArticleMetaStorage.fork_count > 0, ArticleMetaStorage.fork_count - 1), else_=0)},
         synchronize_session="fetch",
     )
-    if rows == 0:
-        raise NotFoundError(code="ARTICLE_NOT_FOUND", resource_type="article", resource_id=article_id)
     session.expire_all()
 
 
@@ -257,12 +249,10 @@ def set_sink_start(session: Session, article_id: str, duration_days: int) -> Non
     from datetime import datetime, timezone
 
     rows = session.query(ArticleMetaStorage).filter(ArticleMetaStorage.id == article_id).update(
-        {"status": "sedimentation", "sink_start": datetime.now(timezone.utc),
+        {"status": ArticleStatus.SEDIMENTATION, "sink_start": datetime.now(timezone.utc),
          "sink_duration_days": duration_days},
         synchronize_session="fetch",
     )
-    if rows == 0:
-        raise NotFoundError(code="ARTICLE_NOT_FOUND", resource_type="article", resource_id=article_id)
     session.expire_all()
 
 
@@ -287,8 +277,6 @@ def delete_article(session: Session, article_id: str) -> None:
     ).delete()
 
     rows = session.query(ArticleMetaStorage).filter(ArticleMetaStorage.id == article_id).delete()
-    if rows == 0:
-        raise NotFoundError(code="ARTICLE_NOT_FOUND", resource_type="article", resource_id=article_id)
     session.flush()
     session.expire_all()
 
@@ -296,16 +284,12 @@ def delete_article(session: Session, article_id: str) -> None:
 def extend_sink(session: Session, article_id: str, extra_days: int, max_days: int = 180) -> None:
     """Author extends sink time. Can be called repeatedly up to max_days.
 
-    Raises ValueError if extra_days <= 0.
+    Caller must validate *extra_days* > 0 and article existence.
     Only increments sink_extended_count when the duration actually increases.
     """
-    if extra_days <= 0:
-        raise ValueError("VALIDATION_FAILED")
     row = session.query(ArticleMetaStorage.sink_duration_days, ArticleMetaStorage.sink_extended_count).filter(
         ArticleMetaStorage.id == article_id
     ).first()
-    if row is None:
-        raise NotFoundError(code="ARTICLE_NOT_FOUND", resource_type="article", resource_id=article_id)
     old_total, old_count = row
     new_total = min(old_total + extra_days, max_days)
     extended_count = old_count + 1 if new_total > old_total else old_count
@@ -316,19 +300,19 @@ def extend_sink(session: Session, article_id: str, extra_days: int, max_days: in
     session.expire_all()
 
 
-def get_article_by_fork_and_author(
+def is_article_forked_by_user(
     session: Session,
-    forked_from: str,
-    author_id: str,
-) -> ArticleMetaStorage | None:
-    """Find an article forked from *forked_from* by *author_id*."""
-    return (
+    original_article_id: str,
+    user_id: str,
+) -> bool:
+    """Return True if *user_id* has already forked *original_article_id*."""
+    return session.query(
         session.query(ArticleMetaStorage)
         .join(ArticleAuthorStorage, ArticleMetaStorage.id == ArticleAuthorStorage.article_id)
-        .filter(ArticleMetaStorage.forked_from == forked_from)
-        .filter(ArticleAuthorStorage.author_id == author_id)
-        .first()
-    )
+        .filter(ArticleMetaStorage.forked_from == original_article_id)
+        .filter(ArticleAuthorStorage.author_id == user_id)
+        .exists()
+    ).scalar()
 
 
 def update_witnessed_at(session: Session, article_id: str) -> None:
@@ -346,8 +330,6 @@ def update_witnessed_at(session: Session, article_id: str) -> None:
         {"witnessed_at": datetime.now(timezone.utc)},
         synchronize_session="fetch",
     )
-    if rows == 0:
-        raise NotFoundError(code="ARTICLE_NOT_FOUND", resource_type="article", resource_id=article_id)
     session.expire_all()
 
 

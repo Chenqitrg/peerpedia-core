@@ -5,6 +5,9 @@ r"""Maintainer management — add, remove, consent, and list article maintainers
 
 Call graph::
 
+    list_articles_by_maintainer
+      └► crud_maintainer.list_articles_by_maintainer
+
     add_maintainer_to_article
       ├► policies._is_maintainer               (caller must be maintainer)
       ├► crud_maintainer.add_maintainer         (insert row)
@@ -29,8 +32,7 @@ from peerpedia_core.storage.db import Session
 from peerpedia_core.exceptions import NotFoundError
 from peerpedia_core.storage.db.guards import (
     assert_caller_is_maintainer, guard_not_already_maintainer,
-    guard_not_last_maintainer,
-    require_article, require_user,
+    guard_not_last_maintainer, require_article, require_user,
 )
 from peerpedia_core.storage.db.crud_publish import (
     add_publish_consent, clear_publish_consents, remove_publish_consent,
@@ -94,10 +96,16 @@ def list_maintainers(db: Session, article_id: str) -> list[str]:
     return crud_maintainer.get_maintainer_ids(db, article_id)
 
 
+def list_articles_by_maintainer(db: Session, user_id: str) -> list[ArticleMetaStorage]:
+    """Return all articles where *user_id* is a maintainer."""
+    return crud_maintainer.list_articles_by_maintainer(db, user_id)
+
+
 def consent_to_publish(db: Session, article_id: str, user_id: str) -> dict[str, object]:
     """Record a maintainer's consent to publish/merge the article."""
     assert_caller_is_maintainer(db, article_id, user_id)
-    add_publish_consent(db, article_id, user_id)
+    article = require_article(db, article_id)
+    add_publish_consent(db, article, user_id)
     return {"article_id": article_id, "user_id": user_id, "action": "consented"}
 
 
@@ -107,5 +115,6 @@ def revoke_publish_consent(db: Session, article_id: str, user_id: str) -> dict[s
     Raises NotFoundError if the article is not found.
     """
     assert_caller_is_maintainer(db, article_id, user_id)
-    remove_publish_consent(db, article_id, user_id)
+    article = require_article(db, article_id)
+    remove_publish_consent(db, article, user_id)
     return {"article_id": article_id, "user_id": user_id, "action": "revoked"}

@@ -24,7 +24,7 @@ from peerpedia_core.app.context import read_session
 from peerpedia_core.config.paths import DB_PATH, DB_URL
 from peerpedia_core.core import (
     count_unread_notifications, db_repl_dispose, db_repl_init,
-    db_repl_new_session, list_articles, list_users,
+    db_repl_new_session, list_articles, list_active_users,
 )
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -208,7 +208,7 @@ def _collect_completion_words(db) -> list[str]:
             words.append(a.id)
         if a.title:
             words.extend(w for w in a.title.split() if len(w) > 2)
-    for u in list_users(db):
+    for u in list_active_users(db):
         if u.name:
             words.append(f"@{u.name}")
             words.append(u.id)

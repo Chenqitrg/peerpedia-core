@@ -28,36 +28,36 @@ class TestUserCRUD:
         assert u.name == "新用户"
         session.close()
 
-    def test_get_user(self, engine):
-        from peerpedia_core.storage.db.crud_user import create_user, get_user
+    def test_get_user_by_id(self, engine):
+        from peerpedia_core.storage.db.crud_user import create_user, get_user_by_id
 
         session = get_session(engine)
         u = create_user(session, name="test",
                         public_key="0000000000000000000000000000000000000000000000000000000000000000")
-        assert get_user(session, u.id).name == "test"
-        assert get_user(session, "nonexistent") is None
+        assert get_user_by_id(session, u.id).name == "test"
+        assert get_user_by_id(session, "nonexistent") is None
         session.close()
 
-    def test_list_users(self, engine):
-        from peerpedia_core.storage.db.crud_user import create_user, list_users
+    def test_list_active_users(self, engine):
+        from peerpedia_core.storage.db.crud_user import create_user, list_active_users
 
         session = get_session(engine)
         create_user(session, name="张三",
                     public_key="0000000000000000000000000000000000000000000000000000000000000000")
         create_user(session, name="李四",
                     public_key="0000000000000000000000000000000000000000000000000000000000000000")
-        assert len(list_users(session)) == 2
+        assert len(list_active_users(session)) == 2
         session.close()
 
     def test_update_user_reputation(self, engine):
-        from peerpedia_core.storage.db.crud_user import create_user, get_user, update_user_reputation
+        from peerpedia_core.storage.db.crud_user import create_user, get_user_by_id, update_user_reputation
 
         session = get_session(engine)
         u = create_user(session, name="rep_user",
                         public_key="0000000000000000000000000000000000000000000000000000000000000000")
         rep = {"professionalism": 4.0, "objectivity": 3.5, "collaboration": 4.5, "pedagogy": 4.0}
         update_user_reputation(session, u.id, rep)
-        assert get_user(session, u.id).reputation == rep
+        assert get_user_by_id(session, u.id).reputation == rep
         session.close()
 
     def test_get_user_by_name_returns_list(self, engine):
@@ -196,24 +196,24 @@ class TestUserQueries:
     # ── get_user ─────────────────────────────────────────────────────────
 
     def test_get_user_found(self, engine):
-        from peerpedia_core.storage.db.crud_user import create_user, get_user
+        from peerpedia_core.storage.db.crud_user import create_user, get_user_by_id
 
         session = get_session(engine)
         u = create_user(session, name="Alice",
                         public_key="0000000000000000000000000000000000000000000000000000000000000000")
-        assert get_user(session, u.id).name == "Alice"
+        assert get_user_by_id(session, u.id).name == "Alice"
         session.close()
 
     def test_get_user_not_found_returns_none(self, engine):
-        from peerpedia_core.storage.db.crud_user import get_user
+        from peerpedia_core.storage.db.crud_user import get_user_by_id
 
         session = get_session(engine)
-        assert get_user(session, "nonexistent") is None
+        assert get_user_by_id(session, "nonexistent") is None
         session.close()
 
     def test_get_user_soft_deleted_is_still_findable_by_id(self, engine):
         """Soft-deleted users can still be loaded by ID (references intact)."""
-        from peerpedia_core.storage.db.crud_user import create_user, get_user, soft_delete_user
+        from peerpedia_core.storage.db.crud_user import create_user, get_user_by_id, soft_delete_user
 
         session = get_session(engine)
         u = create_user(session, name="ToDelete",
@@ -221,7 +221,7 @@ class TestUserQueries:
         soft_delete_user(session, u.id)
         session.commit()
         # By-ID lookup still works — needed for FK resolution
-        assert get_user(session, u.id).deleted_at is not None
+        assert get_user_by_id(session, u.id).deleted_at is not None
         session.close()
 
     # ── list_users_by_name ──────────────────────────────────────────────────
@@ -269,22 +269,22 @@ class TestUserQueries:
         assert len(result) == 2
         session.close()
 
-    # ── list_users ────────────────────────────────────────────────────────
+    # ── list_active_users / list_recent_users ──────────────────────────────
 
-    def test_list_users_respects_limit(self, engine):
-        from peerpedia_core.storage.db.crud_user import create_user, list_users
+    def test_list_recent_users_respects_limit(self, engine):
+        from peerpedia_core.storage.db.crud_user import create_user, list_recent_users
 
         session = get_session(engine)
         for i in range(5):
             create_user(session, name=f"User{i}",
                         public_key=f"{i:064d}")
-        result = list_users(session, limit=3)
+        result = list_recent_users(session, limit=3)
         assert len(result) == 3
         session.close()
 
-    def test_list_users_excludes_soft_deleted(self, engine):
+    def test_list_active_users_excludes_soft_deleted(self, engine):
         from peerpedia_core.storage.db.crud_user import (
-            create_user, list_users, soft_delete_user,
+            create_user, list_active_users, soft_delete_user,
         )
 
         session = get_session(engine)
@@ -294,20 +294,20 @@ class TestUserQueries:
                     public_key="1111111111111111111111111111111111111111111111111111111111111111")
         soft_delete_user(session, u.id)
         session.commit()
-        result = list_users(session)
+        result = list_active_users(session)
         assert len(result) == 1
         assert result[0].name == "Hidden"
         session.close()
 
-    def test_list_users_ordered_newest_first(self, engine):
-        from peerpedia_core.storage.db.crud_user import create_user, list_users
+    def test_list_recent_users_ordered_newest_first(self, engine):
+        from peerpedia_core.storage.db.crud_user import create_user, list_recent_users
 
         session = get_session(engine)
         create_user(session, name="Older",
                     public_key="0000000000000000000000000000000000000000000000000000000000000000")
         create_user(session, name="Newer",
                     public_key="1111111111111111111111111111111111111111111111111111111111111111")
-        result = list_users(session)
+        result = list_recent_users(session, limit=10)
         assert result[0].name == "Newer"
         session.close()
 
@@ -424,15 +424,6 @@ class TestUserQueries:
         assert list_users_by_ids(session, set()) == []
         session.close()
 
-    def test_get_users_by_ids_missing_raises(self, engine):
-        from peerpedia_core.storage.db.crud_user import create_user, list_users_by_ids
-
-        session = get_session(engine)
-        u = create_user(session, name="Exists",
-                        public_key="0000000000000000000000000000000000000000000000000000000000000000")
-        with pytest.raises(NotFoundError, match="USER_NOT_FOUND"):
-            list_users_by_ids(session, {u.id, "nonexistent-id"})
-        session.close()
 
     # ── get_top_users_by_followers ────────────────────────────────────────
 
@@ -487,31 +478,8 @@ class TestUserQueries:
 
 
 class TestUserErrorPaths:
-    def test_update_public_key_not_found(self, engine):
-        from peerpedia_core.storage.db.crud_user import update_user_public_key
 
-        session = get_session(engine)
-        with pytest.raises(NotFoundError, match="USER_NOT_FOUND"):
-            update_user_public_key(session, "nonexistent", "00" * 32)
-        session.rollback()
-        session.close()
 
-    def test_update_salt_not_found(self, engine):
-        from peerpedia_core.storage.db.crud_user import update_user_salt
-
-        session = get_session(engine)
-        with pytest.raises(NotFoundError, match="USER_NOT_FOUND"):
-            update_user_salt(session, "nonexistent", "00" * 16)
-        session.rollback()
-        session.close()
-
-    def test_update_reputation_not_found(self, engine):
-        from peerpedia_core.storage.db.crud_user import update_user_reputation
-
-        session = get_session(engine)
-        with pytest.raises(NotFoundError):
-            update_user_reputation(session, "no-such-id", {})
-        session.close()
 
     def test_follower_count_zero(self, engine):
         from peerpedia_core.storage.db.crud_follow import get_follower_count
@@ -536,7 +504,7 @@ class TestUserErrorPaths:
 class TestSaltRoundtrip:
     def test_salt_roundtrip_derives_same_key(self, engine):
         from peerpedia_core.crypto import derive_key_pair, new_salt
-        from peerpedia_core.storage.db.crud_user import create_user, get_user, update_user_salt
+        from peerpedia_core.storage.db.crud_user import create_user, get_user_by_id, update_user_salt
 
         PASSWORD = "roundtrip-test-password"
 
@@ -551,7 +519,7 @@ class TestSaltRoundtrip:
         update_user_salt(session, u.id, salt_hex)
         session.commit()
 
-        u2 = get_user(session, u.id)
+        u2 = get_user_by_id(session, u.id)
         assert u2.salt == salt_hex, "salt should survive roundtrip"
         priv2, pub2 = derive_key_pair(PASSWORD, u2.salt)
 

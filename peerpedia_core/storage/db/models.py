@@ -20,6 +20,7 @@ from peerpedia_core.storage.db.engine import Base, JSONDict, JSONList
 from peerpedia_core.types.entities import (
     ArticleMetaExchange, NotificationExchange, ReviewExchange, ShareExchange, UserExchange,
 )
+from peerpedia_core.types.status import ArticleStatus
 
 
 def _new_id() -> str:
@@ -45,7 +46,7 @@ class ArticleMetaStorage(Base):
     abstract: str | None = Column(String, nullable=True)
     keywords: list[str] | None = Column(JSONList, nullable=True)
     categories: list[str] | None = Column(JSONList, nullable=True)
-    status: str = Column(String, nullable=False, default="draft", index=True)
+    status: ArticleStatus = Column(String, nullable=False, default=ArticleStatus.DRAFT, index=True)
     score: dict[str, float] | None = Column(JSONDict, nullable=True)  # FiveDimScores
     publish_consents: list[str] | None = Column(JSONList, nullable=True)
     compiled_format: str | None = Column(String, nullable=True)
@@ -114,7 +115,7 @@ class ReviewMetaStorage(Base):
     commit_hash: str = Column(String, nullable=False)
     reviewer_id: str = Column(String, ForeignKey("users.id"), nullable=False)
     scope: str = Column(String, nullable=False)
-    status: str = Column(String, nullable=False, default="submitted", server_default="'submitted'")
+    status: ArticleStatus = Column(String, nullable=False, default="submitted", server_default="'submitted'")
     scores: dict[str, float] = Column(JSONDict, nullable=False)  # FiveDimScores
     invited_by: str | None = Column(String, nullable=True)
     invited_at: datetime | None = Column(DateTime, nullable=True)
@@ -333,7 +334,7 @@ class MergeProposalStorage(Base):
     fork_article_id: str = Column(String, ForeignKey("articles.id"), nullable=False, index=True)
     target_article_id: str = Column(String, ForeignKey("articles.id"), nullable=False, index=True)
     proposer_id: str = Column(String, ForeignKey("users.id"), nullable=False)
-    status: str = Column(String, nullable=False, default="open")
+    status: ArticleStatus = Column(String, nullable=False, default="open")
     created_at: datetime = Column(DateTime, nullable=False, default=_utcnow)
     resolved_at: datetime | None = Column(DateTime, nullable=True)
 

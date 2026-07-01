@@ -118,8 +118,8 @@ class TestExtractReputationState:
         session = get_session(engine)
         author = make_user(session, "author")
         # Set a reputation score
-        from peerpedia_core.storage.db.crud_user import get_user
-        u = get_user(session, author.id)
+        from peerpedia_core.storage.db.crud_user import get_user_by_id
+        u = get_user_by_id(session, author.id)
         u.reputation = {"orig": 4.0, "rigor": 3.5}
         session.flush()
 

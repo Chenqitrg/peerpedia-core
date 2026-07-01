@@ -3,6 +3,9 @@
 
 r"""Publish consent CRUD — maintainer co-author consent tracking.
 
+Callers must validate article existence via ``require_article``
+before calling ``add_publish_consent`` or ``remove_publish_consent``.
+
 Functions
 ---------
   add_publish_consent       Record a maintainer's consent to publish/merge
@@ -14,25 +17,14 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from peerpedia_core.exceptions import NotFoundError
 from peerpedia_core.storage.db.models import ArticleMetaStorage
 
 
-def _get_article_or_raise(session: Session, article_id: str) -> ArticleMetaStorage:
-    """Return an article or raise NotFoundError."""
-    article = session.get(ArticleMetaStorage, article_id)
-    if article is None:
-        raise NotFoundError(code="ARTICLE_NOT_FOUND", resource_type="article", resource_id=article_id)
-    return article
-
-
-def add_publish_consent(session: Session, article_id: str, user_id: str) -> None:
+def add_publish_consent(session: Session, article: ArticleMetaStorage, user_id: str) -> None:
     """Record a maintainer's consent to publish/merge.
 
     Appends *user_id* to ``publish_consents`` if not already present.
-    Raises NotFoundError if article not found.
     """
-    article = _get_article_or_raise(session, article_id)
     consents = list(article.publish_consents or [])
     if user_id not in consents:
         consents.append(user_id)
@@ -40,12 +32,11 @@ def add_publish_consent(session: Session, article_id: str, user_id: str) -> None
     session.flush()
 
 
-def remove_publish_consent(session: Session, article_id: str, user_id: str) -> None:
+def remove_publish_consent(session: Session, article: ArticleMetaStorage, user_id: str) -> None:
     """Remove a single maintainer's consent to publish/merge.
 
-    No-op if the consent was not recorded.  Raises NotFoundError if article not found.
+    No-op if the consent was not recorded.
     """
-    article = _get_article_or_raise(session, article_id)
     consents = list(article.publish_consents or [])
     if user_id in consents:
         consents.remove(user_id)
@@ -54,10 +45,8 @@ def remove_publish_consent(session: Session, article_id: str, user_id: str) -> N
 
 
 def clear_publish_consents(session: Session, article_id: str) -> None:
-    """Clear all publish consents (e.g. after content edit or publish).
-
-    Raises NotFoundError if article not found.
-    """
-    article = _get_article_or_raise(session, article_id)
-    article.publish_consents = None
-    session.flush()
+    """Clear all publish consents via targeted UPDATE (no load needed)."""
+    session.query(ArticleMetaStorage).filter(ArticleMetaStorage.id == article_id).update(
+        {"publish_consents": None}, synchronize_session="fetch",
+    )
+    session.expire_all()

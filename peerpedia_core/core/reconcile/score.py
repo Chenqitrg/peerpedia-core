@@ -12,7 +12,7 @@ from peerpedia_core.storage.db.crud_article import update_article_score
 from peerpedia_core.storage.db.crud_author import list_author_ids
 from peerpedia_core.storage.db.crud_review import get_reviews_for_article
 from peerpedia_core.storage.db.crud_user import (
-    get_user, list_users_by_ids, list_users, update_user_reputation,
+    get_user_by_id, list_users_by_ids, list_active_users, update_user_reputation,
 )
 from peerpedia_core.types.scores import ReputationScores
 from peerpedia_core.compute.reputation import (
@@ -21,6 +21,7 @@ from peerpedia_core.compute.reputation import (
 from peerpedia_core.compute.scoring import aggregate_review_scores
 from peerpedia_core.storage.db.guards import require_article
 from peerpedia_core.storage.db.state import extract_reputation_state
+from peerpedia_core.types.status import ArticleStatus
 
 
 def reconcile_score(db: Session, article_id: str) -> dict[str, float] | None:
@@ -53,8 +54,8 @@ def reconcile_score(db: Session, article_id: str) -> dict[str, float] | None:
 
     # ── Compute + write ────────────────────────────────────────────────────
     scope_weights = {
-        "sedimentation": params.score.sedimentation_scope_weight,
-        "published": params.score.published_scope_weight,
+        ArticleStatus.SEDIMENTATION: params.score.sedimentation_scope_weight,
+        ArticleStatus.PUBLISHED: params.score.published_scope_weight,
     }
     score = aggregate_review_scores(review_dicts, reviewer_weights, scope_weights)
     if score is not None:
@@ -73,7 +74,7 @@ def _build_reviewer_weight_map(reviewer_users) -> dict[str, float]:
 def reconcile_reputation(db: Session, user_id: str, *, user: UserStorage | None = None) -> ReputationScores:
     """Compute and persist a blended reputation for *user_id*."""
     if user is None:
-        user = get_user(db, user_id)
+        user = get_user_by_id(db, user_id)
     if user is None:
         raise ValueError(f"USER_NOT_FOUND: {user_id}")
 
@@ -95,7 +96,7 @@ def reconcile_many_reputations(db: Session, user_ids: set[str]) -> None:
 
 def reconcile_all_reputations(db: Session) -> int:
     """Recompute reputation for every user in the system."""
-    users = list_users(db)
+    users = list_active_users(db)
     for u in users:
         reconcile_reputation(db, u.id, user=u)
     return len(users)

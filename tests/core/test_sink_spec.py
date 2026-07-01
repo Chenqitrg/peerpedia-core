@@ -181,8 +181,8 @@ class TestAutoPublishSideEffects:
         publish_ready_articles(db)
 
         # Author's reputation should be updated
-        from peerpedia_core.storage.db.crud_user import get_user
-        u = get_user(db, author.id)
+        from peerpedia_core.storage.db.crud_user import get_user_by_id
+        u = get_user_by_id(db, author.id)
         assert u.reputation is not None
         assert len(u.reputation) > 0
 

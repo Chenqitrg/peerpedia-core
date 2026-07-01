@@ -44,6 +44,7 @@ def list_articles(
     status: str | set[str] | None = None,
     search_query: str | None = None,
     author_id: str | None = None,
+    maintainer_id: str | None = None,
     viewer_id: str | None = None,
     bookmarked_by: str | None = None,
     id_prefix: str | None = None,
@@ -55,9 +56,9 @@ def list_articles(
     author_ids = _to_set(author_id)
     return _list(
         db, statuses=statuses, search_query=search_query,
-        author_ids=author_ids, viewer_id=viewer_id,
-        bookmarked_by=bookmarked_by, id_prefix=id_prefix,
-        limit=limit, offset=offset,
+        author_ids=author_ids, maintainer_id=maintainer_id,
+        viewer_id=viewer_id, bookmarked_by=bookmarked_by,
+        id_prefix=id_prefix, limit=limit, offset=offset,
     )
 
 

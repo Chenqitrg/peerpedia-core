@@ -105,8 +105,3 @@ def write_session(user_id: str, name: str, private_key_hex: str) -> None:
     }))
     import os
     os.chmod(SESSION_FILE, 0o600)
-
-
-def _read_session() -> dict | None:
-    """Backward-compat alias — delegates to ``read_session``."""
-    return read_session()

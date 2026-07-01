@@ -11,7 +11,8 @@ reputation/scoring algorithms in ``workflow/``.
 from __future__ import annotations
 
 from peerpedia_core.storage.db import Session
-from peerpedia_core.storage.db.crud_author import list_articles_by_author, list_author_ids_batch
+from peerpedia_core.storage.db.crud_article import list_articles
+from peerpedia_core.storage.db.crud_author import list_author_ids_batch
 from peerpedia_core.storage.db.crud_review import get_reviews_for_article
 from peerpedia_core.storage.db.crud_user import list_users_by_ids
 from peerpedia_core.storage.db.guards import require_user
@@ -24,7 +25,7 @@ def extract_reputation_state(db: Session, user_id: str) -> ReputationState:
     # ── Setup ──────────────────────────────────────────────────────────────
     require_user(db, user_id)
 
-    articles = list_articles_by_author(db, user_id)
+    articles = list_articles(db, author_ids={user_id})
     author_map = list_author_ids_batch(db, [a.id for a in articles])
 
     # ── Build article + review snapshots ────────────────────────────────────

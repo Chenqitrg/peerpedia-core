@@ -305,6 +305,11 @@ REGISTRY: dict[str, Msg] = {
     "MERGE_PROPOSAL_NOT_FOUND": Msg("Merge proposal not found.", kind=Kind.ERROR),
     "MERGE_PROPOSAL_WRONG_ARTICLE": Msg("Proposal does not belong to this article.", kind=Kind.ERROR),
     "MERGE_PROPOSAL_CLOSED": Msg("Merge proposal {proposal_id} is already {status}.", kind=Kind.ERROR),
+    "MERGE_NOT_FORKED": Msg("Article {fork_id} was not forked from {target_id}. "
+        "Merge proposals can only be created from a fork back to its original.",
+        kind=Kind.ERROR, suggestion="Check that fork_id is actually a fork of target_id."),
+    "MERGE_INVALID_ARTICLES": Msg("Cannot create merge proposal: one of the articles does not exist. "
+        "Check that both the fork and target article IDs are correct.", kind=Kind.ERROR),
     "INVALID_ARTICLE_STATUS": Msg("Invalid article status.", kind=Kind.ERROR),
     "MISSING_SIGNING_KEY": Msg("Signing key and public key are required for non-platform commits.",
         kind=Kind.ERROR),

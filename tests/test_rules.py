@@ -97,13 +97,12 @@ class TestArticleStatusGates:
     def test_fork_draft_requires_maintainer(self):
         a = _article("draft")
         with pytest.raises(NotAuthorizedError):
-            assert_can_fork_article(a, None, _user("u2"), ["u1"])
+            assert_can_fork_article(a, user=_user("u2"), maintainer_ids=["u1"])
 
     def test_fork_already_forked_raises(self):
         a = _article("published")
-        existing_fork = _article("draft", id="f1")
         with pytest.raises(ConflictError, match="ALREADY_FORKED"):
-            assert_can_fork_article(a, existing_fork)
+            assert_can_fork_article(a, already_forked=True)
 
     def test_folded_article_blocks_edit(self):
         a = _article("sedimentation", score={"originality": 0.5, "rigor": 0.5,

@@ -17,24 +17,25 @@ from typing import Optional
 from peerpedia_core.exceptions import BadRequestError, ConflictError, NotAuthorizedError
 from peerpedia_core.types.entities import ArticleMetaExchange, UserExchange
 from peerpedia_core.types.scores import FiveDimScores
+from peerpedia_core.types.status import ArticleStatus
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # Status constants
 # ═══════════════════════════════════════════════════════════════════════════════
 
-PUBLIC_READABLE_STATUSES = {"sedimentation", "published", "rejected"}
-FORKABLE_STATUSES = {"draft", "published", "rejected"}
-PUBLIC_DOWNLOADABLE_STATUSES = {"published", "rejected"}
+PUBLIC_READABLE_STATUSES = {ArticleStatus.SEDIMENTATION, ArticleStatus.PUBLISHED, ArticleStatus.REJECTED}
+FORKABLE_STATUSES = {ArticleStatus.DRAFT, ArticleStatus.PUBLISHED, ArticleStatus.REJECTED}
+PUBLIC_DOWNLOADABLE_STATUSES = {ArticleStatus.PUBLISHED, ArticleStatus.REJECTED}
 
-_WRITABLE_STATUSES = {"draft", "sedimentation", "published"}
-_SYNCABLE_STATUSES = {"draft", "sedimentation", "published", "rejected"}
+_WRITABLE_STATUSES = {ArticleStatus.DRAFT, ArticleStatus.SEDIMENTATION, ArticleStatus.PUBLISHED}
+_SYNCABLE_STATUSES = {ArticleStatus.DRAFT, ArticleStatus.SEDIMENTATION, ArticleStatus.PUBLISHED, ArticleStatus.REJECTED}
 
 
 def visible_statuses_for_user(current_user: UserExchange | None) -> set[str]:
     """Return the set of statuses visible to *current_user*."""
     if current_user is not None:
-        return {"draft", "sedimentation", "published", "rejected"}
-    return {"sedimentation", "published", "rejected"}
+        return {ArticleStatus.DRAFT, ArticleStatus.SEDIMENTATION, ArticleStatus.PUBLISHED, ArticleStatus.REJECTED}
+    return {ArticleStatus.SEDIMENTATION, ArticleStatus.PUBLISHED, ArticleStatus.REJECTED}
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -143,7 +144,7 @@ def assert_can_edit_article(article: ArticleMetaExchange, maintainer_ids: list[s
 
 
 def assert_can_delete_article(article: ArticleMetaExchange, maintainer_ids: list[str], user: UserExchange) -> ArticleMetaExchange:
-    _assert_maintainer(article, maintainer_ids, user, "delete", allowed_statuses={"draft"})
+    _assert_maintainer(article, maintainer_ids, user, "delete", allowed_statuses={ArticleStatus.DRAFT})
     _assert_all_maintainers_consented(article, maintainer_ids)
     return article
 
@@ -166,7 +167,7 @@ def assert_can_accept_merge(article: ArticleMetaExchange, maintainer_ids: list[s
 
 
 def assert_can_submit_review(article: ArticleMetaExchange) -> ArticleMetaExchange:
-    if article.status in ("sedimentation", "published"):
+    if article.status in (ArticleStatus.SEDIMENTATION, ArticleStatus.PUBLISHED):
         return article
     raise NotAuthorizedError(code="CANNOT_REVIEW_DRAFT")
 
@@ -174,7 +175,7 @@ def assert_can_submit_review(article: ArticleMetaExchange) -> ArticleMetaExchang
 def assert_can_reply_to_review(article: ArticleMetaExchange, maintainer_ids: list[str], user: UserExchange, *,
                                fold_threshold: float = 1.0) -> ArticleMetaExchange:
     assert_not_folded(article, threshold=fold_threshold)
-    if article.status not in ("sedimentation", "published"):
+    if article.status not in (ArticleStatus.SEDIMENTATION, ArticleStatus.PUBLISHED):
         raise NotAuthorizedError(code="CANNOT_REPLY_DRAFT")
     if user.id not in maintainer_ids:
         raise NotAuthorizedError(code="NOT_ARTICLE_AUTHOR")
@@ -182,7 +183,7 @@ def assert_can_reply_to_review(article: ArticleMetaExchange, maintainer_ids: lis
 
 
 def assert_can_extend_sink(article: ArticleMetaExchange, maintainer_ids: list[str], user: UserExchange) -> ArticleMetaExchange:
-    _assert_maintainer(article, maintainer_ids, user, "extend sink", allowed_statuses={"sedimentation"})
+    _assert_maintainer(article, maintainer_ids, user, "extend sink", allowed_statuses={ArticleStatus.SEDIMENTATION})
     return article
 
 
@@ -198,11 +199,11 @@ def assert_can_sync_article(article: ArticleMetaExchange, maintainer_ids: list[s
 
 def assert_can_fork_article(
     article: ArticleMetaExchange,
-    existing_fork: ArticleMetaExchange | None,
+    already_forked: bool = False,
     user: UserExchange | None = None,
     maintainer_ids: list[str] | None = None,
 ) -> ArticleMetaExchange:
-    if article.status == "draft":
+    if article.status == ArticleStatus.DRAFT:
         if not maintainer_ids or user is None or not _is_maintainer(maintainer_ids, user):
             raise NotAuthorizedError(
                 "Only maintainers can fork a draft article. "
@@ -214,7 +215,7 @@ def assert_can_fork_article(
             f"Only {', '.join(sorted(FORKABLE_STATUSES))} articles can be forked."
         )
 
-    if existing_fork is not None:
+    if already_forked:
         raise ConflictError(code="ALREADY_FORKED")
 
     return article

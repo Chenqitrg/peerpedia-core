@@ -23,16 +23,17 @@ from peerpedia_core.storage.db.crud_merge import get_merge_proposal
 from peerpedia_core.storage.db.crud_review import (
     get_accepted_invitation, get_pending_invitation, get_reviews_for_article,
 )
-from peerpedia_core.storage.db.crud_user import get_user
+from peerpedia_core.storage.db.crud_user import get_user_by_id
 from peerpedia_core.storage.db.crud_follow import is_following
 from peerpedia_core.storage.db.models import (
     ArticleMetaStorage, MergeProposalStorage, ReviewMetaStorage, UserStorage,
 )
+from peerpedia_core.types.status import ArticleStatus
 
 
 def require_user(db: Session, user_id: str) -> UserStorage:
     """Return the user or raise NotFoundError."""
-    user = get_user(db, user_id)
+    user = get_user_by_id(db, user_id)
     if user is None:
         raise NotFoundError(code="USER_NOT_FOUND",
                             resource_type="user", resource_id=user_id)
@@ -56,7 +57,7 @@ def require_maintainer(db: Session, article_id: str, user_id: str) -> None:
 
 def assert_caller_is_maintainer(db: Session, article_id: str, caller_id: str) -> None:
     """Raise if *caller_id* is not a maintainer of *article_id*."""
-    if get_user(db, caller_id) is None:
+    if get_user_by_id(db, caller_id) is None:
         raise NotFoundError(code="USER_NOT_FOUND",
                             resource_type="user", resource_id=caller_id)
     if get_article(db, article_id) is None:
@@ -106,7 +107,7 @@ def authorize_article_action(
 
 def guard_sedimentation_limit(db: Session, user_id: str) -> None:
     """Raise BadRequestError if *user_id* has too many articles in sedimentation."""
-    in_pool = count_articles(db, statuses={"sedimentation"}, author_id=user_id)
+    in_pool = count_articles(db, statuses={ArticleStatus.SEDIMENTATION}, author_id=user_id)
     if in_pool >= params.sink.max_sedimentation_per_author:
         raise BadRequestError(code="SEDIMENTATION_LIMIT",
                               count=in_pool,

@@ -37,9 +37,9 @@ class TestIngestUsers:
         count = ingest_users(session, entries)
         assert count == 2
         # Verify users were created
-        from peerpedia_core.storage.db.crud_user import get_user
-        assert get_user(session, "peer-alice") is not None
-        assert get_user(session, "peer-bob") is not None
+        from peerpedia_core.storage.db.crud_user import get_user_by_id
+        assert get_user_by_id(session, "peer-alice") is not None
+        assert get_user_by_id(session, "peer-bob") is not None
         session.close()
 
     def test_idempotent_on_duplicate(self, engine):

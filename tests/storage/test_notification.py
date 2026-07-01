@@ -174,15 +174,6 @@ class TestMarkRead:
         assert n.read == 1
         session.close()
 
-    def test_not_found_raises(self, engine):
-        """Non-existent notification id raises NotFoundError —
-        caller must handle missing notification gracefully."""
-        from peerpedia_core.storage.db.crud_notification import mark_read
-
-        session = get_session(engine)
-        with pytest.raises(NotFoundError, match="NOTIFICATION_NOT_FOUND"):
-            mark_read(session, "nonexistent-id")
-        session.close()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

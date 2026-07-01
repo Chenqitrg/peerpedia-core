@@ -17,15 +17,16 @@ from peerpedia_core.presentation.rich.components import (
     greeting_banner, guest_hint,
 )
 from peerpedia_core.repl.state import console, theme
+from peerpedia_core.types.status import ArticleStatus
 
 logger = logging.getLogger(__name__)
 
 def _format_user_article_stats(db, user_id: str) -> str:
     """Return a formatted article stats line for one user."""
     try:
-        drafts = count_articles(db, statuses={"draft"}, author_id=user_id)
-        in_review = count_articles(db, statuses={"sedimentation"}, author_id=user_id)
-        published = count_articles(db, statuses={"published"}, author_id=user_id)
+        drafts = count_articles(db, statuses={ArticleStatus.DRAFT}, author_id=user_id)
+        in_review = count_articles(db, statuses={ArticleStatus.SEDIMENTATION}, author_id=user_id)
+        published = count_articles(db, statuses={ArticleStatus.PUBLISHED}, author_id=user_id)
     except Exception:
         logger.warning("Failed to load REPL dashboard stats", exc_info=True)
         return "?"

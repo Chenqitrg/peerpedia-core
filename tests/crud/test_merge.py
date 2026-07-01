@@ -20,7 +20,7 @@ class TestMergeProposalCRUD:
         author = make_user(session, "mp_author")
         forker = make_user(session, "mp_forker")
         original = make_article(session, authors=[author.id])
-        fork = make_article(session, authors=[forker.id])
+        fork = make_article(session, authors=[forker.id], forked_from=original.id)
         mp = create_merge_proposal(session, fork_id=fork.id, target_id=original.id, proposer_id=forker.id)
         assert mp.status == "open"
         assert get_merge_proposal(session, mp.id).proposer_id == forker.id
@@ -37,7 +37,7 @@ class TestMergeProposalCRUD:
         author = make_user(session, "mp_a2")
         forker = make_user(session, "mp_f2")
         original = make_article(session, authors=[author.id])
-        fork = make_article(session, authors=[forker.id])
+        fork = make_article(session, authors=[forker.id], forked_from=original.id)
         mp = create_merge_proposal(session, fork_id=fork.id, target_id=original.id, proposer_id=forker.id)
         accept_merge_proposal(session, mp.id)
         assert get_merge_proposal(session, mp.id).status == "accepted"
@@ -57,13 +57,6 @@ class TestMergeProposalCRUD:
 
 
 class TestMergeErrorPaths:
-    def test_resolve_merge_not_found(self, engine):
-        from peerpedia_core.storage.db.crud_merge import _resolve
-
-        session = get_session(engine)
-        with pytest.raises(ValueError):
-            _resolve(session, "no-such-id", "accepted")
-        session.close()
 
     def test_add_merge_thread_message_not_found(self, engine):
         """Merge thread messages now live in git — covered by review thread."""

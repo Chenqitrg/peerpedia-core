@@ -176,9 +176,9 @@ class TestDiscoverFollowing:
         assert count == 2
 
         # Both users should now exist in DB
-        from peerpedia_core.storage.db.crud_user import get_user
-        assert get_user(db, "peer-bob") is not None
-        assert get_user(db, "peer-carol") is not None
+        from peerpedia_core.storage.db.crud_user import get_user_by_id
+        assert get_user_by_id(db, "peer-bob") is not None
+        assert get_user_by_id(db, "peer-carol") is not None
 
     def test_empty_response_does_not_crash(self, db, articles_dir):
         """Empty following list returns 0 — no users ingested, no error."""

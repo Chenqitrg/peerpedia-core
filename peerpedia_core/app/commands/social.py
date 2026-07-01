@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from peerpedia_core.app.context import AppContext
 from peerpedia_core.app.refs import require_article, require_user, require_user_by_ref
+from peerpedia_core.storage.db.guards import require_following_for_alias
 from peerpedia_core.app.result import AppNotice, AppResult
 from peerpedia_core.core import (
     add_bookmark, add_share, create_user_stub,
@@ -136,6 +137,7 @@ def alias(ctx: AppContext, *, user_ref: str, alias: str) -> AppResult:
     user_id = require_user(ctx)
     target = require_user_by_ref(ctx.db, user_ref)
     # ── Execute ──
+    require_following_for_alias(ctx.db, user_id, target.id)
     set_alias(ctx.db, user_id, target.id, alias)
     ctx.db.commit()
     return AppResult("ALIAS_SET", params={"alias": alias, "target_id": target.id})

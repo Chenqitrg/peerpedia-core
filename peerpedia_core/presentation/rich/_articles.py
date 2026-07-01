@@ -11,11 +11,12 @@ from rich.text import Text
 from peerpedia_core.presentation.rich._common import abbrev_commit, print_panel
 from peerpedia_core.presentation.rich._scores import score_stars
 from peerpedia_core.types.entities import ArticleMetaExchange
+from peerpedia_core.types.status import ArticleStatus
 
 
-def status_badge(status: str) -> str:
+def status_badge(status: ArticleStatus) -> str:
     """Colored status label: draft=white, sedimentation=yellow, published=green."""
-    colors = {"draft": "white", "sedimentation": "yellow", "published": "green"}
+    colors = {ArticleStatus.DRAFT: "white", ArticleStatus.SEDIMENTATION: "yellow", ArticleStatus.PUBLISHED: "green"}
     return f"[{colors.get(status, 'white')}]{status}[/]"
 
 

@@ -18,6 +18,7 @@ from peerpedia_core.core.articles._helpers import reset_sink
 from peerpedia_core.core.reconcile import reconcile_authors, reconcile_score
 from peerpedia_core.storage.db.guards import authorize_article_action, require_signing_key
 from peerpedia_core.storage.git.guards import require_article_repo
+from peerpedia_core.types.status import ArticleStatus
 
 
 def rollback_article(
@@ -60,7 +61,7 @@ def rollback_article(
 
     # ── Post-rollback effects ──────────────────────────────────────────────
     clear_publish_consents(db, article_id)
-    if article.status == "published":
+    if article.status == ArticleStatus.PUBLISHED:
         reset_sink(db, article_id, rp, params.sink.edit_article_default_days)
     reconcile_authors(db, article_id)
     reconcile_score(db, article_id)

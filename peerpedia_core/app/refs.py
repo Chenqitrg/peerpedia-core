@@ -16,7 +16,7 @@ from __future__ import annotations
 from peerpedia_core.app.context import AppContext
 from peerpedia_core.core import (
     find_users, get_user as _get_user, list_users_by_name,
-    resolve_username_or_alias, search_articles,
+    search_users_by_name_or_alias, search_articles,
 )
 from peerpedia_core.exceptions import BadRequestError, NotFoundError, NotAuthorizedError
 from peerpedia_core.storage.db import Session
@@ -48,8 +48,16 @@ def require_user_by_ref(db: Session, ref: str) -> UserStorage:
     """
     if ref.startswith("@"):
         name = ref[1:]
+        by_name = search_users_by_name_or_alias(db, name=name)
+        by_alias = search_users_by_name_or_alias(db, alias=name)
+        seen: set[str] = set()
+        candidates: list[UserStorage] = []
+        for u in by_name + by_alias:
+            if u.id not in seen:
+                seen.add(u.id)
+                candidates.append(u)
         return _resolve_ref(
-            db, resolve_username_or_alias(db, "", name), name,
+            db, candidates, name,
             _lower_require_user, format_user_candidates_multiline,
         )
     return _resolve_ref(

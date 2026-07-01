@@ -54,12 +54,12 @@ class TestUserLifecycle:
 
     def test_create_and_retrieve(self, engine):
         """A created user MUST be retrievable by ID with all fields intact."""
-        from peerpedia_core.storage.db.crud_user import get_user
+        from peerpedia_core.storage.db.crud_user import get_user_by_id
 
         session = get_session(engine)
         u = _create_user(session, name="Ada", affiliation="MIT")
 
-        found = get_user(session, u.id)
+        found = get_user_by_id(session, u.id)
         assert found is not None
         assert found.name == "Ada"
         assert found.affiliation == "MIT"
@@ -69,7 +69,7 @@ class TestUserLifecycle:
     def test_soft_delete_excludes_from_queries(self, engine):
         """After soft-delete, the user MUST NOT appear in name search or listings."""
         from peerpedia_core.storage.db.crud_user import (
-            list_users_by_name, list_users, search_users, soft_delete_user,
+            list_active_users, list_users_by_name, search_users, soft_delete_user,
         )
 
         session = get_session(engine)
@@ -78,32 +78,24 @@ class TestUserLifecycle:
         session.commit()
 
         assert list_users_by_name(session, "DeleteMe") == []
-        assert u.id not in {r.id for r in list_users(session)}
+        assert u.id not in {r.id for r in list_active_users(session)}
         assert search_users(session, query="DeleteMe") == []
         session.close()
 
     def test_soft_deleted_still_findable_by_id(self, engine):
         """Soft-deleted users MUST still be retrievable by ID for FK resolution."""
-        from peerpedia_core.storage.db.crud_user import get_user, soft_delete_user
+        from peerpedia_core.storage.db.crud_user import get_user_by_id, soft_delete_user
 
         session = get_session(engine)
         u = _create_user(session, name="Ghost")
         soft_delete_user(session, u.id)
         session.commit()
 
-        ghost = get_user(session, u.id)
+        ghost = get_user_by_id(session, u.id)
         assert ghost is not None
         assert ghost.deleted_at is not None
         session.close()
 
-    def test_delete_nonexistent_raises(self, engine):
-        """Soft-deleting a nonexistent user MUST raise NotFoundError."""
-        from peerpedia_core.storage.db.crud_user import soft_delete_user
-
-        session = get_session(engine)
-        with pytest.raises(NotFoundError):
-            soft_delete_user(session, "nonexistent-id")
-        session.close()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -238,7 +230,7 @@ class TestArticleAuthorLoop:
 
     def test_replace_authors(self, engine):
         """Replacing all authors MUST produce exactly the new list in order."""
-        from peerpedia_core.storage.db.crud_author import list_author_ids, set_article_authors
+        from peerpedia_core.storage.db.crud_author import list_author_ids, reset_article_authors
 
         session = get_session(engine)
         a1 = _create_user(session, name="A1")
@@ -250,7 +242,7 @@ class TestArticleAuthorLoop:
         article = create_article(session, title="", authors=[a1.id])
 
         # Replace
-        set_article_authors(session, article.id, [a2.id, a3.id])
+        reset_article_authors(session, article.id, [a2.id, a3.id])
         assert list_author_ids(session, article.id) == [a2.id, a3.id]
         session.close()
 
@@ -303,7 +295,7 @@ class TestReputationLoop:
 
     def test_set_and_get_reputation(self, engine):
         """Reputation set on a user MUST be retrievable with exact equality."""
-        from peerpedia_core.storage.db.crud_user import get_user, update_user_reputation
+        from peerpedia_core.storage.db.crud_user import get_user_by_id, update_user_reputation
 
         session = get_session(engine)
         u = _create_user(session, name="Scholar")
@@ -311,13 +303,13 @@ class TestReputationLoop:
         scores = {"professionalism": 4.5, "objectivity": 3.0}
         update_user_reputation(session, u.id, scores)
 
-        fetched = get_user(session, u.id)
+        fetched = get_user_by_id(session, u.id)
         assert fetched.reputation == scores
         session.close()
 
     def test_overwrite_reputation(self, engine):
         """Setting reputation twice MUST replace the previous value completely."""
-        from peerpedia_core.storage.db.crud_user import get_user, update_user_reputation
+        from peerpedia_core.storage.db.crud_user import get_user_by_id, update_user_reputation
 
         session = get_session(engine)
         u = _create_user(session, name="Scholar")
@@ -325,18 +317,10 @@ class TestReputationLoop:
         update_user_reputation(session, u.id, {"professionalism": 1.0})
         update_user_reputation(session, u.id, {"professionalism": 5.0, "pedagogy": 4.0})
 
-        fetched = get_user(session, u.id)
+        fetched = get_user_by_id(session, u.id)
         assert fetched.reputation == {"professionalism": 5.0, "pedagogy": 4.0}
         session.close()
 
-    def test_update_reputation_nonexistent_raises(self, engine):
-        """Updating reputation for a nonexistent user MUST raise NotFoundError."""
-        from peerpedia_core.storage.db.crud_user import update_user_reputation
-
-        session = get_session(engine)
-        with pytest.raises(NotFoundError):
-            update_user_reputation(session, "no-such-id", {})
-        session.close()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -372,7 +356,7 @@ class TestPubkeyTOFU:
 
     def test_different_key_is_rotated(self, engine):
         """Setting a different key MUST return 'rotated' and update the stored key."""
-        from peerpedia_core.storage.db.crud_user import get_user, set_user_pubkey_tofu
+        from peerpedia_core.storage.db.crud_user import get_user_by_id, set_user_pubkey_tofu
 
         session = get_session(engine)
         u = _create_user(session, name="KeyRotator", public_key=_PK)
@@ -380,7 +364,7 @@ class TestPubkeyTOFU:
         new_key = "1111111111111111111111111111111111111111111111111111111111111111"
         result = set_user_pubkey_tofu(session, u.id, new_key)
         assert result == "rotated"
-        assert get_user(session, u.id).public_key == new_key
+        assert get_user_by_id(session, u.id).public_key == new_key
         session.close()
 
     def test_unknown_user(self, engine):

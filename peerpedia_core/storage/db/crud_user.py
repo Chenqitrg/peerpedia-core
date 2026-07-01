@@ -11,9 +11,10 @@ Functions
   ensure_user              Upsert — create if not exists, verify address consistency
 
 **User queries**
-  get_user                 By ID, or None
+  get_user_by_id           By ID, or None
+  list_active_users        Active users (no ordering guarantee)
+  list_recent_users        Active users, newest first, with optional limit
   list_users_by_name       Exact name match (active users only)
-  list_users               Active users, newest first
   search_users             By name (ILIKE) or UUID prefix
   list_users_by_ids        Bulk fetch; raises if any missing
 
@@ -51,7 +52,6 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from peerpedia_core.config.params import params
-from peerpedia_core.exceptions import ConflictError, NotFoundError
 from peerpedia_core.storage.db._validators import require_not_same
 from peerpedia_core.storage.db.models import FollowStorage, UserStorage
 
@@ -59,6 +59,14 @@ from peerpedia_core.storage.db.models import FollowStorage, UserStorage
 # ═══════════════════════════════════════════════════════════════════════════════
 # User creation
 # ═══════════════════════════════════════════════════════════════════════════════
+
+
+def _insert_user(session: Session, **fields) -> UserStorage:
+    """Insert a UserStorage row and flush.  All field validation is the caller's job."""
+    u = UserStorage(**fields)
+    session.add(u)
+    session.flush()
+    return u
 
 
 def create_user(
@@ -69,15 +77,13 @@ def create_user(
     affiliation: str = "",
 ) -> UserStorage:
     """Create a new user with a random UUID and an anonymous display name."""
-    u = UserStorage(
+    return _insert_user(
+        session,
         id=str(uuid.uuid4()),
         name=name,
         public_key=public_key,
         affiliation=affiliation,
     )
-    session.add(u)
-    session.flush()
-    return u
 
 
 def create_user_stub(
@@ -97,35 +103,17 @@ def create_user_stub(
     existing = session.get(UserStorage, user_id)
     if existing is not None:
         return existing
-    u = UserStorage(
-        id=user_id,
-        name=name,
-        public_key=public_key,
-        salt=salt,
-    )
-    session.add(u)
-    session.flush()
-    return u
+    return _insert_user(session, id=user_id, name=name, public_key=public_key, salt=salt)
 
 
 def ensure_user(
     session: Session, user_id: str, name: str, *, address: str = "",
 ) -> UserStorage:
-    """Return the user, creating it if it doesn't exist.
-
-    If *user_id* already exists and both the local and incoming *address*
-    are non-empty but differ, raises ``ValueError`` — two peers disagree
-    on where this user's server lives.
-    """
+    """Return the user, creating it if it doesn't exist."""
     existing = session.get(UserStorage, user_id)
     if existing is not None:
-        if existing.address and address and existing.address != address:
-            raise ConflictError(code="ADDRESS_CONFLICT", conflicting_entity="user_address")
         return existing
-    u = UserStorage(id=user_id, name=name, address=address)
-    session.add(u)
-    session.flush()
-    return u
+    return _insert_user(session, id=user_id, name=name, address=address)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -133,7 +121,7 @@ def ensure_user(
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-def get_user(session: Session, user_id: str) -> UserStorage | None:
+def get_user_by_id(session: Session, user_id: str) -> UserStorage | None:
     """Return a user by ID, or None."""
     return session.get(UserStorage, user_id)
 
@@ -145,14 +133,19 @@ def list_users_by_name(session: Session, name: str) -> list[UserStorage]:
     ).all()
 
 
-def list_users(session: Session, limit: int | None = 100) -> list[UserStorage]:
-    """Return active users, newest first.  Capped at *limit* (default 100)."""
-    q = session.query(UserStorage).filter(
+def list_active_users(session: Session) -> list[UserStorage]:
+    """Return all active users.  No ordering guarantee — use
+    ``list_recent_users`` when newest-first ordering matters."""
+    return session.query(UserStorage).filter(
         UserStorage.deleted_at.is_(None)
-    ).order_by(UserStorage.created_at.desc())
-    if limit is not None:
-        q = q.limit(limit)
-    return q.all()
+    ).all()
+
+
+def list_recent_users(session: Session, limit: int = 20) -> list[UserStorage]:
+    """Return active users, newest first, capped at *limit*."""
+    return session.query(UserStorage).filter(
+        UserStorage.deleted_at.is_(None)
+    ).order_by(UserStorage.created_at.desc()).limit(limit).all()
 
 
 def search_users(session: Session, query: str = "", *,
@@ -171,19 +164,20 @@ def search_users(session: Session, query: str = "", *,
 
 
 def list_users_by_ids(session: Session, user_ids: set[str]) -> list[UserStorage]:
-    """List UserStorage records for the given IDs.
-
-    Raises NotFoundError if any *user_ids* are not found — missing users
-    at this point means data corruption (review from nonexistent user).
-    """
+    """List UserStorage records for the given IDs.  Returns only those found."""
     if not user_ids:
         return []
-    users = session.query(UserStorage).filter(UserStorage.id.in_(user_ids)).all()
-    found = {u.id for u in users}
-    missing = user_ids - found
-    if missing:
-        raise NotFoundError(code="USER_NOT_FOUND", resource_type="user")
-    return users
+    return session.query(UserStorage).filter(UserStorage.id.in_(user_ids)).all()
+
+
+def map_user_ids_to_names(session: Session, user_ids: set[str]) -> dict[str, str]:
+    """Return ``{user_id: display_name}`` for a set of user IDs.
+
+    Raises NotFoundError if any *user_ids* are not found.
+    """
+    if not user_ids:
+        return {}
+    return {u.id: u.name for u in list_users_by_ids(session, user_ids)}
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -196,8 +190,6 @@ def update_user_public_key(session: Session, user_id: str, pubkey_hex: str) -> N
     rows = session.query(UserStorage).filter(UserStorage.id == user_id).update(
         {"public_key": pubkey_hex}, synchronize_session="fetch"
     )
-    if rows == 0:
-        raise NotFoundError(code="USER_NOT_FOUND", resource_type="user", resource_id=user_id)
     session.expire_all()
 
 
@@ -229,8 +221,6 @@ def update_user_salt(session: Session, user_id: str, salt_hex: str) -> None:
     rows = session.query(UserStorage).filter(UserStorage.id == user_id).update(
         {"salt": salt_hex}, synchronize_session="fetch"
     )
-    if rows == 0:
-        raise NotFoundError(code="USER_NOT_FOUND", resource_type="user", resource_id=user_id)
     session.expire_all()
 
 
@@ -239,8 +229,6 @@ def update_user_reputation(session: Session, user_id: str, reputation: dict[str,
     rows = session.query(UserStorage).filter(UserStorage.id == user_id).update(
         {"reputation": reputation}, synchronize_session="fetch"
     )
-    if rows == 0:
-        raise NotFoundError(code="USER_NOT_FOUND", resource_type="user", resource_id=user_id)
     session.expire_all()
 
 
@@ -249,15 +237,12 @@ def update_user_reputation(session: Session, user_id: str, reputation: dict[str,
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
-def increment_failed_login(session: Session, user_id: str) -> None:
+def increment_failed_login(session: Session, user: UserStorage) -> None:
     """Increment the failed-login counter.  Locks the account if the
     threshold is reached.
 
-    Raises NotFoundError if the user does not exist.
+    Caller must have loaded *user* via ``require_user``.
     """
-    user = session.get(UserStorage, user_id)
-    if user is None:
-        raise NotFoundError(code="USER_NOT_FOUND", resource_type="user", resource_id=user_id)
     user.failed_login_attempts += 1
     if user.failed_login_attempts >= params.server.max_failed_login_attempts:
         user.locked_until = datetime.now(timezone.utc) + timedelta(
@@ -277,8 +262,6 @@ def reset_failed_login(session: Session, user_id: str) -> None:
         {"failed_login_attempts": 0, "locked_until": None},
         synchronize_session="fetch",
     )
-    if rows == 0:
-        raise NotFoundError(code="USER_NOT_FOUND", resource_type="user", resource_id=user_id)
     session.expire_all()
 
 
@@ -300,8 +283,5 @@ def soft_delete_user(session: Session, user_id: str) -> None:
     ).update(
         {"deleted_at": datetime.now(timezone.utc)}, synchronize_session="fetch"
     )
-    if rows == 0:
-        raise NotFoundError(code="USER_NOT_FOUND",
-                            resource_type="user", resource_id=user_id)
     session.expire_all()
 

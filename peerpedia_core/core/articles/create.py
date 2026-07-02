@@ -17,6 +17,7 @@ from peerpedia_core.frontmatter import make_article_frontmatter
 from peerpedia_core.storage.db.crud_article import create_article
 from peerpedia_core.storage.db.crud_maintainer import add_maintainer
 from peerpedia_core.storage.git import commit_article, init_article_repo
+from peerpedia_core.storage.git.guards import require_commit_signing_key, require_signing_key_for_pubkey
 from peerpedia_core.crypto import temp_signing_key
 from peerpedia_core.storage.db.guards import require_authors_exist, require_title_nonempty, require_user
 from peerpedia_core.types.status import ArticleStatus
@@ -65,6 +66,8 @@ def create_article_with_content(
     # ── Commit ──────────────────────────────────────────────────────────────
     user = require_user(db, author_ids[0])
     with (temp_signing_key(signing_key_bytes) if signing_key_bytes else nullcontext()) as key_path:
+        require_commit_signing_key(key_path, pubkey_hex, make_peerpedia_email(user.id))
+        require_signing_key_for_pubkey(key_path, pubkey_hex)
         commit_hash = commit_article(
             rp, "Initial submission", user.name, make_peerpedia_email(user.id),
             signing_key=key_path, pubkey_hex=pubkey_hex,

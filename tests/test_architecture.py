@@ -354,6 +354,52 @@ def test_crud_never_imports_guards():
                 )
 
 
+def test_git_ops_never_imports_guards():
+    """git/*.py files (except guards.py) may not import from git/guards.py."""
+    for f in _all_modules():
+        rel = _rel(f)
+        if "/storage/git/" not in rel or rel.endswith("/guards.py") or rel.endswith("/__init__.py"):
+            continue
+        for m, _name, _internal in _imports(f):
+            if m == "peerpedia_core.storage.git.guards":
+                raise AssertionError(
+                    f"{rel}: imports {m} — git ops must not import guards. "
+                    "Move the guard call to the caller in core/."
+                )
+
+
+_DOMAIN_EXCEPTIONS = frozenset({
+    "peerpedia_core.exceptions.NotFoundError",
+    "peerpedia_core.exceptions.BadRequestError",
+    "peerpedia_core.exceptions.ConflictError",
+    "peerpedia_core.exceptions.NotAuthorizedError",
+})
+_GIT_DOMAIN_OK = frozenset({
+    "peerpedia_core.exceptions.MergeConflictError",
+})
+
+
+def test_crud_and_git_ops_never_raise_domain_errors():
+    """CRUD and git ops files must not import domain exception classes —
+    validation and error raising belongs in the orchestration layer (core/)
+    or guards."""
+    for f in _all_modules():
+        rel = _rel(f)
+        is_crud = "/storage/db/crud_" in rel
+        is_git_op = "/storage/git/" in rel and not rel.endswith("/guards.py") and not rel.endswith("/__init__.py")
+        if not is_crud and not is_git_op:
+            continue
+        for m, name, _internal in _imports(f):
+            full = f"{m}.{name}"
+            if full in _DOMAIN_EXCEPTIONS:
+                if is_git_op and full in _GIT_DOMAIN_OK:
+                    continue
+                raise AssertionError(
+                    f"{rel}: imports {name} from {m} — CRUD/ops must not raise domain errors. "
+                    "Move validation to the caller or guards."
+                )
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # D. Facade — external code imports from commands.__init__, not submodules
 # ═══════════════════════════════════════════════════════════════════════════════

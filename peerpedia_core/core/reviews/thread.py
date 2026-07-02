@@ -15,7 +15,9 @@ from peerpedia_core.exceptions import ConflictError
 from peerpedia_core.rules.articles import assert_can_reply_to_review
 from peerpedia_core.rules.reviews import require_signing_key_not_none
 from peerpedia_core.storage.db.guards import require_article, require_user
-from peerpedia_core.storage.git.guards import require_article_repo
+from peerpedia_core.storage.git.guards import (
+    require_article_repo, require_commit_signing_key, require_signing_key_for_pubkey,
+)
 from peerpedia_core.storage.db.crud_maintainer import get_maintainer_ids
 from peerpedia_core.names import derive_anonymous_name
 from peerpedia_core.crypto import temp_signing_key
@@ -152,6 +154,8 @@ def _write_thread_message(
 
         # ── Git commit ─────────────────────────────────────────────────────
         with (temp_signing_key(signing_key_bytes) if signing_key_bytes else nullcontext()) as key_path:
+            require_commit_signing_key(key_path, pubkey_hex, email)
+            require_signing_key_for_pubkey(key_path, pubkey_hex)
             return commit_article(
                 rp, f"{commit_marker} {display_name}", display_name, email,
                 signing_key=key_path, pubkey_hex=pubkey_hex,

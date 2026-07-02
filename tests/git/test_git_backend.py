@@ -239,33 +239,16 @@ class TestBundleSync:
         assert len(bundle) < 10000
 
     def test_create_bundle_bad_since_raises(self, articles_dir):
-        """create_bundle with non-ancestor since_hash raises ValueError."""
-        from peerpedia_core.storage.git.bundle import create_bundle
+        """is_ancestor rejects a nonexistent hash — caller must check before create_bundle."""
         from peerpedia_core.storage.git import (
-            commit_article,
-            init_article_repo,
+            commit_article, init_article_repo, is_ancestor,
         )
 
         rp = init_article_repo(articles_dir / "bad-since")
         (rp / "article.md").write_text("v1")
         commit_article_signed(rp, "first", "Author", "author@test.com")
 
-        with pytest.raises(ValueError, match="INVALID_SINCE_HASH"):
-            create_bundle(rp, "0" * 40)  # nonexistent hash
-
-    def test_create_bundle_bad_repo_raises(self, articles_dir):
-        """create_bundle on non-existent repo raises FileNotFoundError."""
-        from peerpedia_core.storage.git.bundle import create_bundle
-
-        with pytest.raises(FileNotFoundError):
-            create_bundle(articles_dir / "nonexistent", "0" * 40)
-
-    def test_ingest_bundle_bad_repo_raises(self, articles_dir):
-        """ingest_bundle on non-existent repo raises FileNotFoundError."""
-        from peerpedia_core.storage.git.bundle import ingest_bundle
-
-        with pytest.raises(FileNotFoundError):
-            ingest_bundle(articles_dir / "nonexistent", b"garbage")
+        assert is_ancestor(rp, "0" * 40) is False
 
     def test_ingest_bundle_corrupt_raises(self, repo):
         """ingest_bundle with corrupt bytes raises ValueError."""
@@ -755,17 +738,11 @@ class TestCommitStatusMarker:
         assert "PeerPedia" in top["author"]
 
     def test_rejects_invalid_status(self, articles_dir):
-        from peerpedia_core.storage.git import (
-            commit_status_marker, init_article_repo,
-        )
-
-        rp = init_article_repo(articles_dir / "test-status-bad")
-        (rp / "article.md").write_text("content")
-        commit_article_signed(rp, "initial", "Author", "a@b.com")
+        from peerpedia_core.storage.git.guards import require_valid_article_status
 
         from peerpedia_core.exceptions import BadRequestError
         with pytest.raises(BadRequestError, match="INVALID_ARTICLE_STATUS"):
-            commit_status_marker(rp, "garbaggio")
+            require_valid_article_status("garbaggio")
 
 
 # ── Branch Protection ───────────────────────────────────────────────────────

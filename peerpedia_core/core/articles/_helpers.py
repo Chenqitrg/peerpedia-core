@@ -10,10 +10,12 @@ from pathlib import Path
 from peerpedia_core.storage.db import Session
 from peerpedia_core.storage.db.crud_article import set_sink_start
 from peerpedia_core.storage.git import commit_status_marker
+from peerpedia_core.storage.git.guards import require_valid_article_status
 from peerpedia_core.types.status import ArticleStatus
 
 
 def reset_sink(db: Session, article_id: str, rp: Path, extra_days: int) -> None:
     """Write status marker to git and reset sink timer."""
+    require_valid_article_status(ArticleStatus.SEDIMENTATION)
     commit_status_marker(rp, ArticleStatus.SEDIMENTATION)
     set_sink_start(db, article_id, extra_days)

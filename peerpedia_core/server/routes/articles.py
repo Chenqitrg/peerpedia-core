@@ -20,6 +20,7 @@ Route summary (see ``http_server.py`` docstring for the full table)::
     GET  /api/v1/search?q=&status=          → _search         article search
 """
 
+from git.exc import NoSuchPathError as _NoSuchPathError
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
@@ -28,11 +29,11 @@ from peerpedia_core.config.params import params
 from peerpedia_core.config.paths import ARTICLES_DIR
 from peerpedia_core.core import get_article_view, list_article_views
 from peerpedia_core.core.sync_article import apply_sync
-from peerpedia_core.exceptions import BadRequestError, NotFoundError
+from peerpedia_core.exceptions import BadRequestError, ConflictError, NotFoundError
 from peerpedia_core.server.shared import _parse_pagination, _require_field, _validate_id
 from peerpedia_core.storage.git import (
-    create_bundle, get_commit_history, get_head_or_none, ingest_article,
-    is_ancestor, pack_article_repo, read_article_source,
+    create_bundle, get_commit_history, get_head_or_none,
+    ingest_article_repo, is_ancestor, pack_article_repo, read_article_source,
 )
 
 
@@ -52,7 +53,11 @@ async def _bundle(request: Request) -> Response:
     article_id = request.path_params["article_id"]
     _validate_id(article_id, "article_id")
     since_hash = request.query_params.get("since")
-    result = create_bundle(ARTICLES_DIR / article_id, since_hash)
+    try:
+        result = create_bundle(ARTICLES_DIR / article_id, since_hash)
+    except _NoSuchPathError:
+        raise NotFoundError(code="ARTICLE_NOT_FOUND",
+                            resource_type="article", resource_id=article_id)
     if result is None:
         raise NotFoundError(f"Bundle not available for '{article_id}'")
     return Response(content=result, media_type="application/octet-stream")
@@ -90,7 +95,10 @@ async def _push_article_repo(request: Request) -> JSONResponse:
         raise BadRequestError("Missing required field: 'repo_bundle'")
     if not payload["repo_bundle"]:
         raise BadRequestError("Field 'repo_bundle' must not be empty")
-    new_head = ingest_article(ARTICLES_DIR / article_id, payload)
+    rp = ARTICLES_DIR / article_id
+    if (rp / ".git").is_dir():
+        raise ConflictError(code="ARTICLE_ALREADY_EXISTS")
+    new_head = ingest_article_repo(rp, payload)
     return JSONResponse({"head": new_head}, status_code=201)
 
 

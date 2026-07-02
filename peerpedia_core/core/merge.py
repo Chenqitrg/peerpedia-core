@@ -49,7 +49,7 @@ from peerpedia_core.config.params import params
 from peerpedia_core.exceptions import BadRequestError, NotFoundError
 from peerpedia_core.rules.articles import assert_can_accept_merge
 from peerpedia_core.rules.reviews import guard_proposal_owner
-from peerpedia_core.storage.db.guards import authorize_article_action, require_open_proposal, require_user
+from peerpedia_core.storage.db.guards import authorize_article_action, require_article, require_open_proposal, require_user
 from peerpedia_core.storage.db.crud_merge import (
     accept_merge_proposal, get_merge_proposal, withdraw_merge_proposal as _withdraw,
 )
@@ -123,6 +123,11 @@ def accept_merge(db: Session, article_id: str, proposal_id: str, user_id: str) -
 def create_merge_proposal(db: Session, fork_id: str, target_id: str, proposer_id: str) -> MergeProposalStorage:
     """Create a merge proposal and notify target article maintainers."""
     proposer = require_user(db, proposer_id)
+    fork = require_article(db, fork_id)
+    if fork.forked_from != target_id:
+        raise BadRequestError(
+            code="MERGE_NOT_FORKED", fork_id=fork_id, target_id=target_id,
+        )
     mp = _create(db, fork_id, target_id, proposer_id)
     _notify_maintainers_except(db, target_id, proposer_id, proposer.name)
     return mp

@@ -23,6 +23,7 @@ from peerpedia_core.storage.db.crud_publish import clear_publish_consents
 from peerpedia_core.storage.db.crud_review import get_reviews_for_article, upsert_review
 from peerpedia_core.storage.db.crud_follow import get_followers
 from peerpedia_core.storage.git import commit_status_marker
+from peerpedia_core.storage.git.guards import require_valid_article_status
 from peerpedia_core.core.reviews import write_review_to_git
 from peerpedia_core.core.notifications import create_notifications_batch
 from peerpedia_core.types.status import ArticleStatus
@@ -79,6 +80,7 @@ def publish_article(
         article_id, user_id, self_review, comment, user.name, make_peerpedia_email(user_id),
         signing_key_bytes=signing_key_bytes, pubkey_hex=pubkey_hex,
     )
+    require_valid_article_status(ArticleStatus.SEDIMENTATION)
     commit_hash = commit_status_marker(article_repo_path(article_id), ArticleStatus.SEDIMENTATION)
 
     # ── Update DB ──────────────────────────────────────────────────────────

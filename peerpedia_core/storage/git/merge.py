@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 from peerpedia_core.config.params import PLATFORM_EMAIL
 from peerpedia_core.exceptions import MergeConflictError
-from peerpedia_core.storage.git.guards import assert_on_main
+from peerpedia_core.storage.git.read import assert_on_main
 
 
 # ── Merge ──────────────────────────────────────────────────────────────────

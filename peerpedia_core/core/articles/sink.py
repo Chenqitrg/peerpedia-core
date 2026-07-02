@@ -15,6 +15,7 @@ from peerpedia_core.storage.db.crud_article import (
 from peerpedia_core.storage.db.crud_author import list_author_ids
 from peerpedia_core.storage.db.crud_review import get_reviews_for_article
 from peerpedia_core.storage.git import DEFAULT_ARTICLES_DIR, commit_status_marker
+from peerpedia_core.storage.git.guards import require_valid_article_status
 from peerpedia_core.types.scores import FiveDimScores
 from peerpedia_core.compute.sedimentation import apply_no_review_penalty, is_ready_to_publish
 from peerpedia_core.core.reconcile import reconcile_many_reputations, reconcile_score
@@ -104,6 +105,7 @@ def _publish(db: Session, article) -> None:
     """Graduate article to published — write git marker, compute score, update DB."""
     rp = DEFAULT_ARTICLES_DIR / article.id
     if (rp / ".git").is_dir():
+        require_valid_article_status(ArticleStatus.PUBLISHED)
         commit_status_marker(rp, ArticleStatus.PUBLISHED)
     score = reconcile_score(db, article.id)
     if score is None:
@@ -130,6 +132,7 @@ def _reject(db: Session, article) -> None:
     """Reject the article — write git marker, update DB status."""
     rp = DEFAULT_ARTICLES_DIR / article.id
     if (rp / ".git").is_dir():
+        require_valid_article_status(ArticleStatus.REJECTED)
         commit_status_marker(rp, ArticleStatus.REJECTED)
     update_article_status(db, article.id, ArticleStatus.REJECTED)
 

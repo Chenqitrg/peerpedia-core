@@ -23,14 +23,16 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from git.exc import NoSuchPathError as _NoSuchPathError
+
 from peerpedia_core.config.paths import ARTICLES_DIR as DEFAULT_ARTICLES_DIR
 from peerpedia_core.core import publish_ready_articles
 from peerpedia_core.core.reconcile import reconcile_after_sync
-from peerpedia_core.exceptions import MergeConflictError, ProtocolError, TransportError
+from peerpedia_core.exceptions import ConflictError, MergeConflictError, ProtocolError, TransportError
 from peerpedia_core.storage.db import Session
 from peerpedia_core.storage.git import (
     create_bundle, find_common_ancestor, get_head,
-    ingest_article, ingest_bundle, pack_article_repo,
+    ingest_article_repo, ingest_bundle, pack_article_repo,
 )
 from peerpedia_core.time import validate_clock_skew
 
@@ -48,7 +50,7 @@ def sync_article(db: Session, transport: Transport, server: str, article_id: str
     rp = DEFAULT_ARTICLES_DIR / article_id
     try:
         local_head: str = get_head(rp)
-    except (FileNotFoundError, ValueError):
+    except (FileNotFoundError, ValueError, _NoSuchPathError):
         return {"synced": False, "head": None}
 
     # ── Pre-flight checks ──────────────────────────────────────────────────
@@ -131,11 +133,13 @@ def pull_incremental(
 
 def pull_new_article(db: Session, transport: Transport, server: str, article_id: str) -> str | None:
     """Download a full repo when the article is new locally."""
+    rp = DEFAULT_ARTICLES_DIR / article_id
+    if (rp / ".git").is_dir():
+        raise ConflictError(code="ARTICLE_ALREADY_EXISTS")
     repo_b64 = transport.fetch_repo(server, article_id)
     if not repo_b64:
         return None
-    return ingest_article(DEFAULT_ARTICLES_DIR / article_id,
-                          {"id": article_id, "repo_bundle": repo_b64})
+    return ingest_article_repo(rp, {"id": article_id, "repo_bundle": repo_b64})
 
 
 def push_incremental(

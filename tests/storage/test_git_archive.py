@@ -49,23 +49,6 @@ class TestIngestArticleRepo:
         assert (dst_repo / "article.md").read_text() == "# My Article\n\nContent here."
         assert (dst_repo / ".git").is_dir()
 
-    def test_already_exists_raises(self, tmp_path):
-        """Existing .git directory raises FileExistsError — prevents overwriting."""
-        from peerpedia_core.storage.git.archive import ingest_article_repo, pack_article_repo
-
-        src_dir = tmp_path / "source" / "article-1"
-        _make_repo_with_content(str(src_dir), "article.md", "content")
-        payload = pack_article_repo(src_dir)
-
-        dst_parent = tmp_path / "dest"
-        dst_parent.mkdir()
-        dst_repo = dst_parent / "article-1"
-        ingest_article_repo(dst_repo, {"repo_bundle": payload})
-
-        # Second ingest to same location raises
-        with pytest.raises(FileExistsError):
-            ingest_article_repo(dst_repo, {"repo_bundle": payload})
-
     def test_missing_bundle_key_raises(self, tmp_path):
         """Payload without 'repo_bundle' key raises KeyError."""
         from peerpedia_core.storage.git.archive import ingest_article_repo
@@ -78,29 +61,6 @@ class TestIngestArticleRepo:
 # ═══════════════════════════════════════════════════════════════════════════════
 # ingest_article
 # ═══════════════════════════════════════════════════════════════════════════════
-
-
-class TestIngestArticle:
-    def test_wraps_file_exists_as_conflict(self, tmp_path):
-        """FileExistsError is converted to ConflictError —
-        caller receives a domain error, not a raw OS error."""
-        from peerpedia_core.storage.git.archive import ingest_article, pack_article_repo
-
-        src_dir = tmp_path / "source" / "article-x"
-        _make_repo_with_content(str(src_dir), "article.md", "content")
-        payload = pack_article_repo(src_dir)
-
-        dst_parent = tmp_path / "dest"
-        dst_parent.mkdir()
-        dst_repo = dst_parent / "article-x"
-
-        # First ingest succeeds
-        from peerpedia_core.storage.git.archive import ingest_article_repo
-        ingest_article_repo(dst_repo, {"repo_bundle": payload})
-
-        # ingest_article converts FileExistsError to ConflictError
-        with pytest.raises(ConflictError, match="ARTICLE_ALREADY_EXISTS"):
-            ingest_article(dst_repo, {"repo_bundle": payload})
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

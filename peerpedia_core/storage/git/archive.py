@@ -1,24 +1,15 @@
 # SPDX-FileCopyrightText: 2024-2026 Chenqi Meng and PeerPedia contributors
 # SPDX-License-Identifier: CC-BY-NC-SA-4.0
 
-"""Full-repo pack/unpack — tar.gz archive transfer."""
+"""Full-repo pack/unpack — tar.gz archive transfer.
+
+Caller must validate that *repo_path* does not already exist
+before calling ``ingest_article_repo``.
+"""
 
 from pathlib import Path
 
-from peerpedia_core.exceptions import ConflictError
 from peerpedia_core.storage.git.bundle import get_head
-
-
-def ingest_article(repo_path: Path, payload: dict[str, str]) -> str:
-    """Receive and unpack a full article repo upload.
-
-    Thin wrapper around ``ingest_article_repo`` that converts
-    ``FileExistsError`` to ``ConflictError`` for the caller.
-    """
-    try:
-        return ingest_article_repo(repo_path, payload)
-    except FileExistsError:
-        raise ConflictError(code="ARTICLE_ALREADY_EXISTS") from None
 
 
 def ingest_article_repo(repo_path: Path, payload: dict[str, str]) -> str:
@@ -30,9 +21,6 @@ def ingest_article_repo(repo_path: Path, payload: dict[str, str]) -> str:
     import base64 as _b64
     import io as _io
     import tarfile as _tarfile
-
-    if (repo_path / ".git").is_dir():
-        raise FileExistsError(f"Article already exists locally: {repo_path.name}")
 
     bundle_bytes = _b64.b64decode(payload["repo_bundle"])
     with _tarfile.open(fileobj=_io.BytesIO(bundle_bytes), mode="r:gz") as tar:

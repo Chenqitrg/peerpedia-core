@@ -17,7 +17,9 @@ from peerpedia_core.crypto import temp_signing_key
 from peerpedia_core.core.articles._helpers import reset_sink
 from peerpedia_core.core.reconcile import reconcile_authors, reconcile_score
 from peerpedia_core.storage.db.guards import authorize_article_action, require_signing_key
-from peerpedia_core.storage.git.guards import require_article_repo
+from peerpedia_core.storage.git.guards import (
+    require_article_repo, require_commit_signing_key, require_signing_key_for_pubkey,
+)
 from peerpedia_core.types.status import ArticleStatus
 
 

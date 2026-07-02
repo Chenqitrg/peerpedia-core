@@ -18,7 +18,8 @@ from peerpedia_core.storage.db.crud_notification import ensure_notification
 from peerpedia_core.storage.db.crud_follow import (
     add_followers, follow_users, set_followers, set_following,
 )
-from peerpedia_core.storage.db.crud_user import ensure_user
+from peerpedia_core.exceptions import ConflictError
+from peerpedia_core.storage.db.crud_user import ensure_user, get_user_by_id
 from peerpedia_core.storage.db.models import (
     ArticleMetaStorage, NotificationStorage, ShareStorage, UserStorage,
 )
@@ -31,7 +32,12 @@ from peerpedia_core.types.entities import (
 def ingest_users(db: Session, entries: list[UserExchange]) -> int:
     """Insert new users discovered from a peer — lazy social discovery."""
     for e in entries:
-        ensure_user(db, e.id, e.name, address=e.address)
+        existing = get_user_by_id(db, e.id)
+        if existing is not None:
+            if existing.address and e.address and existing.address != e.address:
+                raise ConflictError(code="ADDRESS_CONFLICT", conflicting_entity="user_address")
+        else:
+            ensure_user(db, e.id, e.name, address=e.address)
     return len(entries)
 
 

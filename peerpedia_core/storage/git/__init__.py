@@ -48,7 +48,6 @@ from peerpedia_core.storage.git.bundle import (
 )
 
 from peerpedia_core.storage.git.archive import (
-    ingest_article,
     ingest_article_repo,
     pack_article_repo,
 )

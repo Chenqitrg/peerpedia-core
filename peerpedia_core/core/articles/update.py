@@ -17,6 +17,7 @@ from peerpedia_core.rules.articles import assert_can_edit_article
 from peerpedia_core.core.reconcile import reconcile_integrity
 from peerpedia_core.storage.db.crud_publish import clear_publish_consents
 from peerpedia_core.storage.git import commit_article, resolve_article_format
+from peerpedia_core.storage.git.guards import require_commit_signing_key, require_signing_key_for_pubkey
 from peerpedia_core.crypto import temp_signing_key
 from peerpedia_core.core.articles._helpers import reset_sink
 from peerpedia_core.core.reconcile import reconcile_authors
@@ -77,11 +78,15 @@ def update_article_content(
     author_email = make_peerpedia_email(user_id)
     if signing_key_bytes:
         with temp_signing_key(signing_key_bytes) as key_path:
+            require_commit_signing_key(key_path, pubkey_hex, author_email)
+            require_signing_key_for_pubkey(key_path, pubkey_hex)
             commit_hash = commit_article(
                 rp, message, user.name, author_email,
                 signing_key=key_path, pubkey_hex=pubkey_hex,
             )
     else:
+        require_commit_signing_key(None, pubkey_hex, author_email)
+        require_signing_key_for_pubkey(None, pubkey_hex)
         commit_hash = commit_article(
             rp, message, user.name, author_email,
             signing_key=None, pubkey_hex=pubkey_hex,

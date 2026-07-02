@@ -7,7 +7,6 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
-from peerpedia_core.exceptions import BadRequestError
 from peerpedia_core.storage.db._validators import require_merge_proposal_open, require_not_same
 from peerpedia_core.storage.db.models import ArticleMetaStorage, MergeProposalStorage
 from peerpedia_core.types.status import ArticleStatus
